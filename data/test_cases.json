@@ -1,0 +1,7 @@
+[
+  {
+    "text": "It's watery and melts fast",
+    "imagePaths": ["./data/test_images/runny_01.jpg"],
+    "expectedLabel": "too_runny"
+  }
+]
