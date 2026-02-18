@@ -1,0 +1,48 @@
+{
+  "name": "ai-rag-saas",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio",
+    "db:init": "npx tsx scripts/init-vector-extension.ts",
+    "eval": "npx tsx scripts/eval.ts",
+    "db:seed": "npx tsx scripts/setup-db.ts"
+  },
+  "dependencies": {
+    "@mozilla/readability": "^0.6.0",
+    "drizzle-orm": "^0.36.0",
+    "exceljs": "^4.4.0",
+    "jsdom": "^28.1.0",
+    "next": "^15.0.0",
+    "openai": "^4.0.0",
+    "pdfjs-dist": "^5.4.624",
+    "playwright": "^1.58.2",
+    "postgres": "^3.4.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "sharp": "^0.33.0",
+    "turndown": "^7.2.2"
+  },
+  "devDependencies": {
+    "@types/jsdom": "^27.0.0",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@types/turndown": "^5.0.6",
+    "dotenv": "^16.6.1",
+    "drizzle-kit": "^0.28.0",
+    "eslint": "^9.0.0",
+    "eslint-config-next": "^15.0.0",
+    "postcss": "^8.4.0",
+    "tailwindcss": "^3.4.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  }
+}
