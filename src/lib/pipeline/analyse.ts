@@ -3,6 +3,7 @@ import { labels, machineSpecs, playbooks } from "@/lib/db/schema";
 import { eq, or } from "drizzle-orm";
 import { toCanonicalModel } from "@/lib/ingestion/extract-machine-model";
 import { clipEmbedder } from "@/lib/embeddings/clip";
+import { getConfiguredClipProvider } from "@/lib/embeddings/clip";
 import { openaiTextEmbedder } from "@/lib/embeddings/openai-text";
 import { CONFIDENCE_CONFIG, RETRIEVAL_CONFIG } from "@/lib/config";
 import {
@@ -58,18 +59,20 @@ export type AnalyseResult = {
 
 export async function runAnalysis(input: AnalyseInput): Promise<AnalyseResult> {
   const { userText, imageBuffers, machineModel, onStage } = input;
+  const hasImages = imageBuffers.length > 0;
 
-  onStage?.("analysing_photos");
+  if (hasImages) onStage?.("analysing_photos");
   const imageEmbeddings: number[][] = [];
   for (const buf of imageBuffers) {
     const emb = await clipEmbedder.embed(buf);
     imageEmbeddings.push(emb);
   }
 
-  onStage?.("finding_similar");
+  if (hasImages) onStage?.("finding_similar");
   const allMatches: ImageMatch[] = [];
+  const clipProvider = getConfiguredClipProvider();
   for (const emb of imageEmbeddings) {
-    const matches = await searchReferenceImages(emb);
+    const matches = await searchReferenceImages(emb, undefined, clipProvider ?? undefined);
     allMatches.push(...matches);
   }
   const labelScores = aggregateLabelScores(allMatches);
@@ -79,16 +82,18 @@ export async function runAnalysis(input: AnalyseInput): Promise<AnalyseResult> {
   const baseCount = RETRIEVAL_CONFIG.candidateLabelsCount;
   const margin = RETRIEVAL_CONFIG.candidateScoreMargin;
   const cutoff = topScore - margin;
-  const candidateLabels = labelScores.filter(
-    (ls, i) => i < baseCount || ls.score >= cutoff
-  );
+  const allLabels = await db.select().from(labels);
+  const candidateLabels = hasImages
+    ? labelScores.filter((ls, i) => i < baseCount || ls.score >= cutoff)
+    : allLabels.map((l) => ({ labelId: l.id, score: 0, matchCount: 0 }));
 
   const shouldBeUnknown =
-    topScore < CONFIDENCE_CONFIG.unknownThreshold ||
-    (topScore < CONFIDENCE_CONFIG.lowThreshold && labelGap < CONFIDENCE_CONFIG.labelGapMinimum);
+    hasImages &&
+    (topScore < CONFIDENCE_CONFIG.unknownThreshold ||
+      (topScore < CONFIDENCE_CONFIG.lowThreshold &&
+        labelGap < CONFIDENCE_CONFIG.labelGapMinimum));
 
   if (shouldBeUnknown) {
-    const labelList = await db.select().from(labels);
     const earlyTop3Mean =
       labelScores.length > 0
         ? labelScores
@@ -128,18 +133,28 @@ export async function runAnalysis(input: AnalyseInput): Promise<AnalyseResult> {
   const modelContext = machineModel ? ` machine model ${machineModel}` : "";
   const queryText = `${userText}${modelContext} ${candidateLabels.map((c) => c.labelId).join(" ")} troubleshooting steps checks causes`;
   const queryEmbedding = await openaiTextEmbedder.embed(queryText);
-  const textChunks = await searchDocChunks(queryEmbedding, undefined, machineModel);
+  const scopedLabelForRetrieval = candidateLabels[0]?.labelId;
+  const textChunks = await searchDocChunks(
+    queryEmbedding,
+    undefined,
+    machineModel,
+    scopedLabelForRetrieval,
+    userText
+  );
   const chunkTitles = textChunks.map((c) => c.content.slice(0, 80));
 
-  const labelList = await db.select().from(labels);
   const candidateWithNames = candidateLabels.map((c) => {
-    const l = labelList.find((x) => x.id === c.labelId);
-    return { labelId: c.labelId, displayName: l?.displayName ?? c.labelId };
+    const l = allLabels.find((x) => x.id === c.labelId);
+    return {
+      labelId: c.labelId,
+      displayName: l?.displayName ?? c.labelId,
+      description: l?.description,
+    };
   });
 
-  const imageMatchSummary = candidateLabels
-    .map((c) => `${c.labelId}: score ${c.score.toFixed(3)}`)
-    .join("; ");
+  const imageMatchSummary = hasImages
+    ? candidateLabels.map((c) => `${c.labelId}: score ${c.score.toFixed(3)}`).join("; ")
+    : "No images provided";
 
   let classifyResult: ClassifyResult = await classifyLabel({
     userText,
@@ -168,13 +183,34 @@ export async function runAnalysis(input: AnalyseInput): Promise<AnalyseResult> {
 
   const validLabelIds = new Set(candidateWithNames.map((c) => c.labelId));
   const rawFinal = classifyResult.finalLabel;
+  const topChunkSimilarity = textChunks[0]?.similarity ?? 0;
+  const evidenceBackedConfidence = Math.max(
+    hasImages ? topScore : 0,
+    Math.min(1, Math.max(0, topChunkSimilarity))
+  );
+  const calibratedConfidence = Math.min(
+    classifyResult.confidence,
+    evidenceBackedConfidence
+  );
+  const weakTextEvidence =
+    textChunks.length === 0 ||
+    topChunkSimilarity < CONFIDENCE_CONFIG.minTextChunkSimilarityForConfident;
+  const weakImageEvidence =
+    !hasImages ||
+    topScore < CONFIDENCE_CONFIG.lowThreshold ||
+    labelGap < CONFIDENCE_CONFIG.labelGapMinimum;
+  const abstainOnWeakEvidence =
+    calibratedConfidence < CONFIDENCE_CONFIG.minFinalConfidence &&
+    weakTextEvidence &&
+    weakImageEvidence;
   const isInvalidLabel =
     rawFinal === "unknown" ||
-    classifyResult.confidence < CONFIDENCE_CONFIG.lowThreshold ||
+    calibratedConfidence < CONFIDENCE_CONFIG.lowThreshold ||
+    abstainOnWeakEvidence ||
     !validLabelIds.has(rawFinal);
 
   let finalLabel = isInvalidLabel ? "unknown" : rawFinal;
-  let confidence = classifyResult.confidence;
+  const confidence = calibratedConfidence;
 
   const top3Mean =
     labelScores.length > 0
@@ -182,25 +218,8 @@ export async function runAnalysis(input: AnalyseInput): Promise<AnalyseResult> {
           .slice(0, 3)
           .reduce((s, ls) => s + ls.score, 0) / Math.min(3, labelScores.length)
       : 0;
-  if (process.env.NODE_ENV !== "test") {
-    console.log("[analyse] similarity", {
-      topScore,
-      secondScore,
-      labelGap,
-      top3Mean,
-    });
-  }
 
-  // When image evidence is strong and clearly ahead, trust it over the LLM's "unknown"
-  if (
-    finalLabel === "unknown" &&
-    topScore >= CONFIDENCE_CONFIG.imageOverrideMinScore &&
-    labelGap >= CONFIDENCE_CONFIG.imageOverrideMinGap &&
-    candidateLabels[0]
-  ) {
-    finalLabel = candidateLabels[0].labelId;
-    confidence = topScore;
-  }
+  // Safety: do not force labels when LLM selected "unknown".
 
   if (finalLabel === "unknown") {
     return {
@@ -225,11 +244,21 @@ export async function runAnalysis(input: AnalyseInput): Promise<AnalyseResult> {
     };
   }
 
-  const labelRow = labelList.find((l) => l.id === finalLabel);
+  const labelRow = allLabels.find((l) => l.id === finalLabel);
   const playbookRow = await db.query.playbooks.findFirst({
     where: eq(playbooks.labelId, finalLabel),
   });
-  const playbookSteps = (playbookRow?.steps as PlaybookStep[]) ?? [];
+  const lowerUserText = userText.toLowerCase();
+  const hasPowerOffConfirmation =
+    lowerUserText.includes("power off") ||
+    lowerUserText.includes("powered off") ||
+    lowerUserText.includes("turned off");
+  const playbookSteps = ((playbookRow?.steps as PlaybookStep[]) ?? []).filter((s) => {
+    const level = s.safetyLevel ?? "safe";
+    if (level === "technician_only") return false;
+    if (level === "caution" && !hasPowerOffConfirmation) return false;
+    return true;
+  });
 
   onStage?.("generating_steps");
   let machineSpecsRecord: Record<string, unknown> | undefined;

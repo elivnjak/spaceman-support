@@ -1,3 +1,10 @@
+function getNumberEnv(key: string, fallback: number): number {
+  const raw = process.env[key];
+  if (!raw) return fallback;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
 export const CONFIDENCE_CONFIG = {
   topM: 3,
   highThreshold: 0.4,
@@ -11,6 +18,10 @@ export const CONFIDENCE_CONFIG = {
   /** When LLM returns "unknown", override to top label only if both conditions hold. */
   imageOverrideMinScore: 0.45,
   imageOverrideMinGap: 0.1,
+  /** Abstain when classifier confidence is below this and evidence is weak. */
+  minFinalConfidence: 0.55,
+  /** Minimum top text chunk similarity required for confident text-grounded answer. */
+  minTextChunkSimilarityForConfident: 0.35,
 } as const;
 
 export const RETRIEVAL_CONFIG = {
@@ -19,6 +30,10 @@ export const RETRIEVAL_CONFIG = {
   candidateLabelsCount: 3,
   /** Include labels whose score is within this delta of top score (catches near-ties). */
   candidateScoreMargin: 0.05,
+  /** Hybrid retrieval: weight applied to PostgreSQL FTS rank in text chunk ordering. */
+  textKeywordRankWeight: getNumberEnv("RETRIEVAL_TEXT_KEYWORD_RANK_WEIGHT", 0.4),
+  /** Small bonus for direct literal keyword match in chunk text. */
+  textExactMatchBoost: getNumberEnv("RETRIEVAL_TEXT_EXACT_MATCH_BOOST", 0.2),
 } as const;
 
 export const EMBEDDING_CONFIG = {

@@ -26,6 +26,13 @@ Visual + text RAG support assistant: upload photos and describe an issue to get 
 
    Set in `.env`:
    - `OPENAI_API_KEY` (required)
+   - Optional retrieval tuning:
+     - `RETRIEVAL_TEXT_KEYWORD_RANK_WEIGHT` (default `0.4`)
+     - `RETRIEVAL_TEXT_EXACT_MATCH_BOOST` (default `0.2`)
+   - Optional eval gates:
+     - `EVAL_MAX_WRONG_CONFIDENT` (default `0.02`)
+     - `EVAL_MAX_UNSAFE_NON_ESCALATION` (default `0`)
+     - `EVAL_CASE_LIMIT` (default unset; run full dataset)
    - **Image embeddings** — use one of:
      - `REPLICATE_API_TOKEN` (recommended; get it at [replicate.com/account/api](https://replicate.com/account/api)), or
      - `HUGGINGFACE_API_KEY` and optionally `HUGGINGFACE_CLIP_URL` (your Inference Endpoint URL if the default serverless API returns 410)
@@ -67,13 +74,24 @@ Visual + text RAG support assistant: upload photos and describe an issue to get 
 
 ## Evaluation
 
-Holdout test set in `data/test_cases.json`. Test images must live under `data/test_images/` and **must not** be ingested as reference images.
+Holdout test set is loaded from `data/eval_cases.json` (fallback: `data/test_cases.json`). Test images must live under `data/test_images/` and **must not** be ingested as reference images.
 
 ```bash
 npm run eval
 ```
 
-Reports label accuracy, unknown rate, and average time per run.
+Reports:
+- Label accuracy
+- Unknown rate
+- Wrong-confident rate
+- Escalation miss rate
+- Unsafe non-escalation labels (dataset count)
+- Resolved incorrect labels (dataset count)
+- Average time per run
+
+Quality gates fail the command when:
+- wrong-confident rate exceeds `EVAL_MAX_WRONG_CONFIDENT` (default `0.02`)
+- unsafe non-escalation rate exceeds `EVAL_MAX_UNSAFE_NON_ESCALATION` (default `0`)
 
 ## Scripts
 

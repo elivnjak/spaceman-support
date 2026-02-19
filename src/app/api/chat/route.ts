@@ -4,9 +4,11 @@ import {
   diagnosticSessions,
   playbooks,
   actions,
+  sessionEvents,
+  sessionOutcomes,
 } from "@/lib/db/schema";
 import { eq, inArray } from "drizzle-orm";
-import { clipEmbedder } from "@/lib/embeddings/clip";
+import { clipEmbedder, getConfiguredClipProvider } from "@/lib/embeddings/clip";
 import { openaiTextEmbedder } from "@/lib/embeddings/openai-text";
 import {
   searchReferenceImages,
@@ -17,7 +19,6 @@ import {
   runDiagnosticPlanner,
   runFollowUpAnswer,
   validateAndSanitizePlannerOutput,
-  checkEscalationTriggers,
   type DiagnosticPlaybook,
   type ChatMessage,
   type EvidenceRecord,
@@ -25,11 +26,21 @@ import {
   type PlannerOutput,
   type ActionRecord,
 } from "@/lib/pipeline/diagnostic-planner";
+import { replaceWithCanonicalAndSort } from "@/lib/pipeline/validate-grounding";
 import { DIAGNOSTIC_CONFIG } from "@/lib/config";
 import {
   writeStorageFile,
   diagnosticSessionImagePath,
 } from "@/lib/storage";
+import { createHash } from "crypto";
+import {
+  hasSufficientEvidence,
+  suggestNextActions,
+} from "@/lib/diagnostics/controller";
+import {
+  evaluatePrePlannerEscalation,
+  evaluatePostPlannerEscalation,
+} from "@/lib/diagnostics/escalation-policy";
 
 const STAGE_MESSAGES: Record<string, string> = {
   analysing_photos: "Analysing your photos…",
@@ -38,6 +49,34 @@ const STAGE_MESSAGES: Record<string, string> = {
   searching_manuals: "Searching knowledge base…",
   thinking: "Thinking…",
 };
+
+async function writeSessionEvent(params: {
+  sessionId: string;
+  turn: number;
+  eventType: string;
+  modelVersion?: string;
+  inputSnapshot?: unknown;
+  outputSnapshot?: unknown;
+  evidenceDelta?: unknown;
+  hypothesisDelta?: unknown;
+  citations?: unknown;
+}) {
+  const promptHash = createHash("sha256")
+    .update(JSON.stringify(params.inputSnapshot ?? {}))
+    .digest("hex");
+  await db.insert(sessionEvents).values({
+    sessionId: params.sessionId,
+    turn: params.turn,
+    eventType: params.eventType,
+    promptHash,
+    modelVersion: params.modelVersion,
+    inputSnapshot: (params.inputSnapshot ?? null) as Record<string, unknown> | null,
+    outputSnapshot: (params.outputSnapshot ?? null) as Record<string, unknown> | null,
+    evidenceDelta: (params.evidenceDelta ?? null) as Record<string, unknown> | null,
+    hypothesisDelta: (params.hypothesisDelta ?? null) as Record<string, unknown> | null,
+    citations: (params.citations ?? null) as Record<string, unknown> | null,
+  });
+}
 
 function send(controller: ReadableStreamDefaultController<Uint8Array>, event: string, data: string) {
   const encoder = new TextEncoder();
@@ -119,6 +158,7 @@ export async function POST(request: Request) {
           if (imageBuffers.length > 0) {
             send(controller, "stage", JSON.stringify({ message: STAGE_MESSAGES.analysing_photos }));
             const imageEmbeddings: number[][] = [];
+            const provider = getConfiguredClipProvider();
             for (const buf of imageBuffers) {
               const emb = await clipEmbedder.embed(buf);
               imageEmbeddings.push(emb);
@@ -126,7 +166,11 @@ export async function POST(request: Request) {
             send(controller, "stage", JSON.stringify({ message: STAGE_MESSAGES.finding_similar }));
             const allMatches = [];
             for (const emb of imageEmbeddings) {
-              const matches = await searchReferenceImages(emb);
+              const matches = await searchReferenceImages(
+                emb,
+                undefined,
+                provider ?? undefined
+              );
               allMatches.push(...matches);
             }
             const labelScores = aggregateLabelScores(allMatches);
@@ -140,8 +184,25 @@ export async function POST(request: Request) {
             }
           }
           if (!playbookId) {
-            const [firstPlaybook] = await db.select().from(playbooks).limit(1);
-            if (firstPlaybook) playbookId = firstPlaybook.id;
+            const allPlaybooks = await db.select().from(playbooks);
+            const text = message.toLowerCase();
+            let best: { id: string; score: number } | null = null;
+            for (const pb of allPlaybooks) {
+              const symptoms = (pb.symptoms as { description?: string }[] | null) ?? [];
+              const score = symptoms.reduce((acc, s) => {
+                const desc = (s.description ?? "").toLowerCase();
+                if (!desc) return acc;
+                const tokens = desc.split(/\W+/).filter((t) => t.length >= 4);
+                const matched = tokens.some((t) => text.includes(t));
+                return matched ? acc + 1 : acc;
+              }, 0);
+              if (!best || score > best.score) best = { id: pb.id, score };
+            }
+            if (best) playbookId = best.id;
+            if (!playbookId) {
+              const [firstPlaybook] = await db.select().from(playbooks).limit(1);
+              if (firstPlaybook) playbookId = firstPlaybook.id;
+            }
           }
 
           const [created] = await db
@@ -170,6 +231,7 @@ export async function POST(request: Request) {
 
         const messages = (session!.messages as ChatMessage[]) ?? [];
         const imagePaths: string[] = [];
+        let newImageEvidenceSummary: string | undefined;
         if (imageBuffers.length > 0 && sessionId) {
           for (let i = 0; i < imageBuffers.length; i++) {
             const relPath = diagnosticSessionImagePath(
@@ -178,6 +240,24 @@ export async function POST(request: Request) {
             );
             await writeStorageFile(relPath, imageBuffers[i]);
             imagePaths.push(relPath);
+          }
+          const provider = getConfiguredClipProvider();
+          if (provider) {
+            const allMatches = [];
+            for (const buf of imageBuffers) {
+              const emb = await clipEmbedder.embed(buf);
+              const matches = await searchReferenceImages(
+                emb,
+                5,
+                provider
+              );
+              allMatches.push(...matches);
+            }
+            const scores = aggregateLabelScores(allMatches);
+            newImageEvidenceSummary = scores
+              .slice(0, 3)
+              .map((s) => `${s.labelId}: ${s.score.toFixed(3)}`)
+              .join("; ");
           }
         }
 
@@ -262,32 +342,28 @@ export async function POST(request: Request) {
             evidence_extracted: [],
           };
         } else {
-          const escalationFromTrigger = checkEscalationTriggers(
-            message,
-            playbook.escalationTriggers
-          );
-          /** Only enforce turn cap as a safety net; normal end is resolve or planner/stall escalation. */
-          const overSafetyTurnCap = turnCount > DIAGNOSTIC_CONFIG.maxTurns;
+          const sufficiency = hasSufficientEvidence(playbook, evidence, 0.6);
+          const preEscalation = evaluatePrePlannerEscalation({
+            userMessage: message,
+            triggers: playbook.escalationTriggers,
+            turnCount,
+            maxTurns: DIAGNOSTIC_CONFIG.maxTurns,
+            evidence: {
+              ratio: sufficiency.ratio,
+              requiredCount: sufficiency.requiredCount,
+              collectedRequired: sufficiency.collectedRequired,
+            },
+          });
 
-          if (escalationFromTrigger.triggered) {
+          if (preEscalation) {
             phase = "escalated";
             plannerOutput = {
-              message: `For your safety we're connecting you with a technician. ${escalationFromTrigger.matched?.reason ?? "Please describe what you're seeing to support."}`,
+              message: preEscalation.assistantMessage,
               phase: "escalated",
               requests: [],
               hypotheses_update: hypotheses,
               evidence_extracted: [],
-              escalation_reason: escalationFromTrigger.matched?.reason ?? "Safety trigger detected",
-            };
-          } else if (overSafetyTurnCap) {
-            phase = "escalated";
-            plannerOutput = {
-              message: "This session has reached its maximum length. Connecting you with a technician who can help further.",
-              phase: "escalated",
-              requests: [],
-              hypotheses_update: hypotheses,
-              evidence_extracted: [],
-              escalation_reason: "Session length limit reached",
+              escalation_reason: preEscalation.escalationReason,
             };
           } else {
             const actionIds = new Set<string>();
@@ -310,10 +386,18 @@ export async function POST(request: Request) {
             send(controller, "stage", JSON.stringify({ message: STAGE_MESSAGES.searching_manuals }));
             const queryText = `${message} ${playbook.labelId} troubleshooting steps causes`;
             const queryEmbedding = await openaiTextEmbedder.embed(queryText);
+            const suggestedNextActions = suggestNextActions({
+              playbook,
+              evidence,
+              hypotheses,
+              limit: 5,
+            });
             const chunks = await searchDocChunks(
               queryEmbedding,
               8,
-              session.machineModel ?? undefined
+              session.machineModel ?? undefined,
+              playbook.labelId,
+              message
             );
             chunksForTurn = chunks.map((c) => ({
               id: c.id,
@@ -335,13 +419,16 @@ export async function POST(request: Request) {
               lastUserMessage: message,
               machineModel: session.machineModel ?? undefined,
               outstandingRequestIds,
+              suggestedNextActions,
+              newImageEvidenceSummary,
             });
 
             const { output: sanitized } = validateAndSanitizePlannerOutput(
               plannerOutput,
               playbook,
               actionsById,
-              true
+              true,
+              evidence
             );
             plannerOutput = sanitized;
           }
@@ -363,6 +450,25 @@ export async function POST(request: Request) {
         }
         phase = plannerOutput.phase;
 
+        // Serve canonical step text and sort by playbook order (steps run in order)
+        if (
+          phase === "resolving" &&
+          plannerOutput.resolution?.steps?.length &&
+          (playbook.steps?.length ?? 0) > 0
+        ) {
+          plannerOutput.resolution = {
+            ...plannerOutput.resolution,
+            steps: replaceWithCanonicalAndSort(
+              plannerOutput.resolution.steps.map((s) => ({
+                step_id: s.step_id,
+                instruction: s.instruction ?? "",
+                check: s.check,
+              })),
+              playbook.steps
+            ),
+          };
+        }
+
         const assistantMessage: ChatMessage & {
           requests?: PlannerOutput["requests"];
           resolution?: PlannerOutput["resolution"];
@@ -377,6 +483,16 @@ export async function POST(request: Request) {
         };
         messages.push(assistantMessage);
 
+        const sufficiency = hasSufficientEvidence(playbook, evidence, 0.6);
+        if (phase === "resolving" && !sufficiency.sufficient) {
+          phase = "gathering_info";
+          plannerOutput.phase = "gathering_info";
+          plannerOutput.resolution = undefined;
+          plannerOutput.message =
+            `I need a bit more information before I can make a reliable diagnosis (${sufficiency.collectedRequired}/${sufficiency.requiredCount} required checks complete). ` +
+            plannerOutput.message;
+        }
+
         let status = session.status;
         let resolvedCauseId: string | null = null;
         let escalationReason: string | null = null;
@@ -390,55 +506,43 @@ export async function POST(request: Request) {
 
         let responseToSend = plannerOutput;
 
-        // If planner left us in "diagnosing" with no requests and we have substantial evidence, force escalation so the user gets a clear outcome instead of being stuck
-        const evidenceCount = Object.keys(evidence).length;
-        const diagnosingWithNoNextStep =
-          phase === "diagnosing" &&
-          plannerOutput.requests.length === 0 &&
-          evidenceCount >= 5;
-        if (diagnosingWithNoNextStep && status === "active") {
-          phase = "escalated";
-          status = "escalated";
-          escalationReason =
-            "We weren't able to pinpoint the cause from the information provided. Connecting you with a technician who can help further.";
-          responseToSend = {
-            ...plannerOutput,
-            message: escalationReason,
-            phase: "escalated",
-            requests: [],
-            escalation_reason: escalationReason,
-          };
-          messages[messages.length - 1] = {
-            ...messages[messages.length - 1],
-            content: escalationReason,
-          } as ChatMessage & { requests?: PlannerOutput["requests"] };
-        }
-
         const lastEvidenceTurn = Math.max(
           0,
           ...Object.values(evidence).map((r) => r.turn)
         );
-        const stallEscalation =
-          turnCount >= 2 &&
-          plannerOutput.evidence_extracted.length === 0 &&
-          turnCount - lastEvidenceTurn >= DIAGNOSTIC_CONFIG.stallTurnsWithoutNewEvidence;
-        if (stallEscalation && status === "active") {
+        const sufficiencyForPolicy = hasSufficientEvidence(playbook, evidence, 0.6);
+        const postEscalation = evaluatePostPlannerEscalation({
+          turnCount,
+          evidence: {
+            ratio: sufficiencyForPolicy.ratio,
+            requiredCount: sufficiencyForPolicy.requiredCount,
+            collectedRequired: sufficiencyForPolicy.collectedRequired,
+          },
+          plannerPhase: phase,
+          plannerRequestsCount: plannerOutput.requests.length,
+          newEvidenceCount: plannerOutput.evidence_extracted.length,
+          lastEvidenceTurn,
+          stallTurnsWithoutNewEvidence: DIAGNOSTIC_CONFIG.stallTurnsWithoutNewEvidence,
+          requiredEvidenceTurnsBeforeEscalation:
+            DIAGNOSTIC_CONFIG.requiredEvidenceTurnsBeforeEscalation,
+        });
+        if (postEscalation && status === "active") {
           status = "escalated";
           phase = "escalated";
-          escalationReason = "No new evidence for several turns; connecting you with support.";
+          escalationReason = postEscalation.escalationReason;
           responseToSend = {
             ...plannerOutput,
-            message: escalationReason,
+            message: postEscalation.assistantMessage,
             phase: "escalated",
             requests: [],
             escalation_reason: escalationReason,
           };
-          const stallMessage: ChatMessage = {
+          const updatedEscalationMessage: ChatMessage = {
             role: "assistant",
-            content: escalationReason,
+            content: postEscalation.assistantMessage,
             timestamp: new Date().toISOString(),
           };
-          messages[messages.length - 1] = stallMessage;
+          messages[messages.length - 1] = updatedEscalationMessage;
         }
 
         await db
@@ -456,6 +560,19 @@ export async function POST(request: Request) {
           })
           .where(eq(diagnosticSessions.id, sessionId));
 
+        if (
+          phase === "resolved_followup" &&
+          /^(yes|no|fixed|not fixed|resolved|unresolved)$/i.test(message.trim())
+        ) {
+          await db.insert(sessionOutcomes).values({
+            sessionId,
+            outcomeType: /^(yes|fixed|resolved)$/i.test(message.trim())
+              ? "resolved_correct"
+              : "resolved_incorrect",
+            userFeedback: message.trim(),
+          });
+        }
+
         const citations = buildCitations(responseToSend.message, chunksForTurn);
 
         send(
@@ -471,6 +588,21 @@ export async function POST(request: Request) {
             citations: citations.length > 0 ? citations : undefined,
           })
         );
+        await writeSessionEvent({
+          sessionId,
+          turn: turnCount,
+          eventType: "assistant_response",
+          modelVersion: "gpt-4o",
+          inputSnapshot: {
+            message,
+            phaseBefore: session.phase,
+            machineModel: session.machineModel,
+          },
+          outputSnapshot: responseToSend,
+          evidenceDelta: plannerOutput.evidence_extracted,
+          hypothesisDelta: plannerOutput.hypotheses_update,
+          citations,
+        });
         controller.close();
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
