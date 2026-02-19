@@ -35,6 +35,7 @@ export async function PATCH(
   const pastedContent = body.pastedContent as string | undefined;
   const machineModel = body.machineModel as string | undefined;
   const cssSelector = body.cssSelector as string | undefined;
+  const labelIds = body.labelIds as unknown;
 
   const updates: Partial<{
     title: string;
@@ -42,6 +43,7 @@ export async function PATCH(
     rawTextPreview: string;
     machineModel: string | null;
     cssSelector: string | null;
+    labelIds: string[] | null;
   }> = {};
 
   if (title !== undefined) {
@@ -77,6 +79,21 @@ export async function PATCH(
       cssSelector === null || (typeof cssSelector === "string" && !cssSelector.trim())
         ? null
         : String(cssSelector).trim();
+  }
+
+  if (labelIds !== undefined) {
+    if (labelIds === null) {
+      updates.labelIds = null;
+    } else if (Array.isArray(labelIds)) {
+      updates.labelIds = labelIds
+        .map((v) => String(v).trim())
+        .filter((v) => v.length > 0);
+    } else {
+      return NextResponse.json(
+        { error: "labelIds must be an array of strings or null" },
+        { status: 400 }
+      );
+    }
   }
 
   if (Object.keys(updates).length === 0) {

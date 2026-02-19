@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { playbooks } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { randomUUID } from "crypto";
+import { z } from "zod";
 
 type Step = {
   step_id: string;
@@ -10,6 +11,7 @@ type Step = {
   instruction: string;
   check?: string;
   if_failed?: string;
+  safetyLevel?: "safe" | "caution" | "technician_only";
 };
 
 function ensureStepIds(steps: Step[]): Step[] {
@@ -51,8 +53,80 @@ type QuestionItem = {
 };
 type TriggerItem = { trigger: string; reason: string };
 
+const StepSchema = z.object({
+  step_id: z.string().optional().default(""),
+  title: z.string().optional().default(""),
+  instruction: z.string().optional().default(""),
+  check: z.string().optional(),
+  if_failed: z.string().optional(),
+  safetyLevel: z.enum(["safe", "caution", "technician_only"]).optional(),
+});
+
+const PlaybookSchema = z.object({
+  id: z.string().uuid().optional(),
+  labelId: z.string().min(1),
+  title: z.string().min(1),
+  steps: z.array(StepSchema).default([]),
+  schemaVersion: z.number().int().optional(),
+  symptoms: z
+    .array(
+      z.object({
+        id: z.string().min(1),
+        description: z.string().min(1),
+      })
+    )
+    .optional(),
+  evidenceChecklist: z
+    .array(
+      z.object({
+        id: z.string().min(1),
+        description: z.string().min(1),
+        actionId: z.string().optional(),
+        type: z.enum(["photo", "reading", "observation", "action", "confirmation"]),
+        required: z.boolean(),
+      })
+    )
+    .optional(),
+  candidateCauses: z
+    .array(
+      z.object({
+        id: z.string().min(1),
+        cause: z.string().min(1),
+        likelihood: z.enum(["high", "medium", "low"]),
+        rulingEvidence: z.array(z.string()),
+      })
+    )
+    .optional(),
+  diagnosticQuestions: z
+    .array(
+      z.object({
+        id: z.string().min(1),
+        question: z.string().min(1),
+        purpose: z.string().min(1),
+        whenToAsk: z.string().optional(),
+        actionId: z.string().optional(),
+      })
+    )
+    .optional(),
+  escalationTriggers: z
+    .array(
+      z.object({
+        trigger: z.string().min(1),
+        reason: z.string().min(1),
+      })
+    )
+    .optional(),
+});
+
 export async function POST(request: Request) {
   const body = await request.json();
+  const parsed = PlaybookSchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: "Invalid playbook payload", details: parsed.error.flatten() },
+      { status: 400 }
+    );
+  }
   const {
     id,
     labelId,
@@ -64,24 +138,7 @@ export async function POST(request: Request) {
     candidateCauses,
     diagnosticQuestions,
     escalationTriggers,
-  } = body as {
-    id?: string;
-    labelId: string;
-    title: string;
-    steps: Step[];
-    schemaVersion?: number;
-    symptoms?: SymptomItem[];
-    evidenceChecklist?: EvidenceItem[];
-    candidateCauses?: CauseItem[];
-    diagnosticQuestions?: QuestionItem[];
-    escalationTriggers?: TriggerItem[];
-  };
-  if (!labelId || !title) {
-    return NextResponse.json(
-      { error: "labelId and title required" },
-      { status: 400 }
-    );
-  }
+  } = parsed.data;
   const stepsWithIds = ensureStepIds(steps || []);
 
   const payload = {

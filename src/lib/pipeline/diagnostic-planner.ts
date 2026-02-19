@@ -124,6 +124,15 @@ export type DiagnosticPlannerInput = {
   machineModel?: string | null;
   /** Outstanding request IDs from previous turn (so LLM can map user reply to evidence) */
   outstandingRequestIds?: string[];
+  /** Pre-computed next best actions/evidence prompts ranked by information gain. */
+  suggestedNextActions?: {
+    id: string;
+    type: string;
+    description: string;
+    actionId?: string;
+  }[];
+  /** Mid-session image evidence summary from CLIP label matches. */
+  newImageEvidenceSummary?: string;
 };
 
 function buildStateSummary(input: DiagnosticPlannerInput): string {
@@ -262,6 +271,8 @@ ${input.lastUserMessage}
 ${input.machineModel ? `\nMachine model: ${input.machineModel}` : ""}
 
 ${input.outstandingRequestIds?.length ? `Outstanding request IDs from your previous turn: ${input.outstandingRequestIds.join(", ")}. Map the user's reply to evidence_extracted using these IDs.` : ""}
+${input.suggestedNextActions?.length ? `\nSuggested next actions (ranked):\n${input.suggestedNextActions.map((a) => `- ${a.id} (${a.type}): ${a.description}${a.actionId ? ` [actionId=${a.actionId}]` : ""}`).join("\n")}\nPrefer these unless there is a clear safety reason not to.` : ""}
+${input.newImageEvidenceSummary ? `\nNew image evidence this turn: ${input.newImageEvidenceSummary}` : ""}
 
 Respond with JSON only.`;
 
@@ -272,6 +283,7 @@ Respond with JSON only.`;
       { role: "user", content: userPrompt },
     ],
     response_format: { type: "json_object" },
+    temperature: 0,
   });
   const text = res.choices[0]?.message?.content;
   if (!text) throw new Error("Empty diagnostic planner response");
@@ -334,6 +346,7 @@ Answer the user's question in one or two short paragraphs. Use only the document
       { role: "system", content: systemPrompt },
       { role: "user", content: userPrompt },
     ],
+    temperature: 0,
   });
   const text = res.choices[0]?.message?.content?.trim();
   return text ?? "I don't have specific information on that in the documentation. If you need more detail, please contact support.";
@@ -344,7 +357,8 @@ export function validateAndSanitizePlannerOutput(
   output: PlannerOutput,
   playbook: DiagnosticPlaybook,
   actionsById: Map<string, ActionRecord>,
-  forEndUser: boolean
+  forEndUser: boolean,
+  currentEvidence?: Record<string, EvidenceRecord>
 ): { output: PlannerOutput; errors: string[] } {
   const errors: string[] = [];
   const sanitized = { ...output, requests: [...output.requests] };
@@ -358,12 +372,24 @@ export function validateAndSanitizePlannerOutput(
   playbook.evidenceChecklist?.forEach((e) => e.actionId && allowedIds.add(e.actionId));
 
   const filtered: PlannerRequest[] = [];
+  const hasPowerOffConfirmation = Boolean(
+    currentEvidence &&
+      Object.keys(currentEvidence).some((k) =>
+        k.toLowerCase().includes("power_off")
+      )
+  );
   for (const req of sanitized.requests) {
     const action = actionsById.get(req.id);
     const isEvidenceId = playbook.evidenceChecklist?.some((e) => e.id === req.id);
     if (action) {
       if (forEndUser && action.safetyLevel === "technician_only") {
         errors.push(`Action ${req.id} is technician_only; skipped for end user`);
+        continue;
+      }
+      if (forEndUser && action.safetyLevel === "caution" && !hasPowerOffConfirmation) {
+        errors.push(
+          `Action ${req.id} is caution and requires power_off confirmation; skipped`
+        );
         continue;
       }
     } else if (!isEvidenceId && !allowedIds.has(req.id)) {
@@ -390,15 +416,3 @@ export function validateAndSanitizePlannerOutput(
   return { output: sanitized, errors };
 }
 
-/** Check if user message contains any escalation trigger text (case-insensitive substring). */
-export function checkEscalationTriggers(
-  userMessage: string,
-  triggers: EscalationTriggerItem[] | null | undefined
-): { triggered: boolean; matched?: EscalationTriggerItem } {
-  if (!triggers?.length) return { triggered: false };
-  const lower = userMessage.toLowerCase();
-  for (const t of triggers) {
-    if (lower.includes(t.trigger.toLowerCase())) return { triggered: true, matched: t };
-  }
-  return { triggered: false };
-}

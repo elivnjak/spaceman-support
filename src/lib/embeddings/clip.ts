@@ -125,14 +125,34 @@ async function embedViaReplicate(imageBuffer: Buffer): Promise<number[]> {
 
 export const clipEmbedder: ImageEmbedder = {
   async embed(imageBuffer: Buffer): Promise<number[]> {
-    if (hasReplicate()) {
-      return withRetry(() => embedViaReplicate(imageBuffer));
-    }
-    if (hasHuggingFace()) {
-      return withRetry(() => embedViaHuggingFace(imageBuffer));
-    }
-    throw new Error(
-      "Set either HUGGINGFACE_API_KEY (and optionally HUGGINGFACE_CLIP_URL) or REPLICATE_API_TOKEN for image embeddings."
-    );
+    const result = await embedWithProvider(imageBuffer);
+    return result.embedding;
   },
 };
+
+export async function embedWithProvider(imageBuffer: Buffer): Promise<{
+  embedding: number[];
+  provider: "replicate" | "huggingface";
+}> {
+  if (hasReplicate()) {
+    const embedding = await withRetry(() => embedViaReplicate(imageBuffer));
+    return { embedding, provider: "replicate" };
+  }
+  if (hasHuggingFace()) {
+    const embedding = await withRetry(() => embedViaHuggingFace(imageBuffer));
+    return { embedding, provider: "huggingface" };
+  }
+  throw new Error(
+    "Set either HUGGINGFACE_API_KEY (and optionally HUGGINGFACE_CLIP_URL) or REPLICATE_API_TOKEN for image embeddings."
+  );
+}
+
+export function getConfiguredClipProvider(): "replicate" | "huggingface" | null {
+  if (hasReplicate()) {
+    return "replicate";
+  }
+  if (hasHuggingFace()) {
+    return "huggingface";
+  }
+  return null;
+}

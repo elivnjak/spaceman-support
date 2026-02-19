@@ -10,7 +10,7 @@ function getOpenAI() {
 export type ClassifyInput = {
   userText: string;
   imageMatchSummary: string;
-  candidateLabels: { labelId: string; displayName: string }[];
+  candidateLabels: { labelId: string; displayName: string; description?: string | null }[];
   chunkTitles: string[];
   machineModel?: string;
 };
@@ -57,7 +57,13 @@ Image similarity summary (top matches by label):
     `
 
 Candidate labels (from image retrieval): ` +
-    input.candidateLabels.map((l) => l.displayName).join(", ") +
+    input.candidateLabels
+      .map((l) =>
+        l.description
+          ? `${l.displayName} (${l.labelId}): ${l.description}`
+          : `${l.displayName} (${l.labelId})`
+      )
+      .join("; ") +
     `
 
 Retrieved document sections (titles): ` +
@@ -79,12 +85,34 @@ function parseClassifyResponse(text: string): ClassifyResult {
   };
 }
 
+const CLASSIFY_JSON_SCHEMA = {
+  name: "classify_response",
+  schema: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      final_label: { type: "string" },
+      confidence: { type: "number", minimum: 0, maximum: 1 },
+      clarifying_questions: {
+        type: "array",
+        items: { type: "string" },
+      },
+    },
+    required: ["final_label", "confidence", "clarifying_questions"],
+  },
+  strict: true,
+} as const;
+
 export async function classifyLabel(input: ClassifyInput): Promise<ClassifyResult> {
   const prompt = buildClassifyPrompt(input);
   const res = await getOpenAI().chat.completions.create({
     model: LLM_CONFIG.classificationModel,
     messages: [{ role: "user", content: prompt }],
-    response_format: { type: "json_object" },
+    response_format: {
+      type: "json_schema",
+      json_schema: CLASSIFY_JSON_SCHEMA,
+    } as never,
+    temperature: 0,
   });
   const text = res.choices[0]?.message?.content;
   if (!text) throw new Error("Empty classification response");
@@ -110,7 +138,13 @@ Image similarity summary (top matches by label):
     `
 
 Candidate labels (from image retrieval): ` +
-    input.candidateLabels.map((l) => l.displayName).join(", ") +
+    input.candidateLabels
+      .map((l) =>
+        l.description
+          ? `${l.displayName} (${l.labelId}): ${l.description}`
+          : `${l.displayName} (${l.labelId})`
+      )
+      .join("; ") +
     `
 
 Retrieved document sections (titles): ` +
@@ -132,7 +166,11 @@ Look at the user's photo(s) above and pick the label that best matches what you 
   const res = await getOpenAI().chat.completions.create({
     model: LLM_CONFIG.classificationModel,
     messages: [{ role: "user", content }],
-    response_format: { type: "json_object" },
+    response_format: {
+      type: "json_schema",
+      json_schema: CLASSIFY_JSON_SCHEMA,
+    } as never,
+    temperature: 0,
   });
   const text = res.choices[0]?.message?.content;
   if (!text) throw new Error("Empty classification response");

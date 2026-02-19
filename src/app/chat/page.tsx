@@ -44,6 +44,11 @@ type MessagePayload = {
   requests: RequestItem[];
   resolution?: ChatMessage["resolution"];
   escalation_reason?: string;
+  evidence_progress?: {
+    collected_required: number;
+    required_total: number;
+    ratio: number;
+  };
   citations?: CitationItem[];
 };
 
@@ -90,6 +95,12 @@ export default function ChatPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [expandedCitations, setExpandedCitations] = useState<Set<string>>(new Set());
   const [openCitation, setOpenCitation] = useState<CitationItem | null>(null);
+  const [requestDrafts, setRequestDrafts] = useState<Record<string, string>>({});
+  const [evidenceProgress, setEvidenceProgress] = useState<{
+    collected_required: number;
+    required_total: number;
+    ratio: number;
+  } | null>(null);
   const SNIPPET_LENGTH = 280;
 
   const toggleCitation = (key: string) => {
@@ -113,10 +124,14 @@ export default function ChatPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const sendMessage = async (e: React.FormEvent) => {
+  const sendMessage = async (e: React.FormEvent, inputOverride?: string) => {
     e.preventDefault();
-    const text = input.trim();
+    const text = (inputOverride ?? input).trim();
     if (!text && files.length === 0) return;
+    if (!sessionId && !machineModel.trim()) {
+      setError("Machine model is required to start troubleshooting.");
+      return;
+    }
     setLoading(true);
     setStage("");
     setError("");
@@ -164,6 +179,7 @@ export default function ChatPage() {
       }
       if (payload) {
         setSessionId(payload.sessionId);
+        setEvidenceProgress(payload.evidence_progress ?? null);
         setMessages((prev) => [
           ...prev,
           {
@@ -186,6 +202,10 @@ export default function ChatPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const sendQuickReply = async (text: string) => {
+    await sendMessage({ preventDefault: () => {} } as React.FormEvent, text);
   };
 
   return (
@@ -211,6 +231,25 @@ export default function ChatPage() {
             value={machineModel}
             onChange={(e) => setMachineModel(e.target.value)}
           />
+          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            Include model if known. Better model context improves diagnosis quality.
+          </p>
+          {evidenceProgress && evidenceProgress.required_total > 0 && (
+            <div className="mt-2 rounded border border-gray-200 bg-gray-50 p-2 dark:border-gray-700 dark:bg-gray-900">
+              <div className="mb-1 flex items-center justify-between text-xs text-gray-600 dark:text-gray-300">
+                <span>Evidence progress</span>
+                <span>
+                  {evidenceProgress.collected_required}/{evidenceProgress.required_total} required
+                </span>
+              </div>
+              <div className="h-2 w-full overflow-hidden rounded bg-gray-200 dark:bg-gray-700">
+                <div
+                  className="h-2 bg-blue-600"
+                  style={{ width: `${Math.max(0, Math.min(100, evidenceProgress.ratio * 100))}%` }}
+                />
+              </div>
+            </div>
+          )}
         </div>
       </header>
 
@@ -270,11 +309,62 @@ export default function ChatPage() {
                           {req.prompt}
                         </p>
                         {req.type === "reading" && req.expectedInput && (
-                          <p className="mt-1 text-xs text-gray-500">
-                            {req.expectedInput.unit && `Unit: ${req.expectedInput.unit}`}
-                            {req.expectedInput.range &&
-                              ` Range: ${req.expectedInput.range.min}–${req.expectedInput.range.max}`}
-                          </p>
+                          <div className="mt-2 space-y-2">
+                            <p className="text-xs text-gray-500">
+                              {req.expectedInput.unit && `Unit: ${req.expectedInput.unit}`}
+                              {req.expectedInput.range &&
+                                ` Range: ${req.expectedInput.range.min}–${req.expectedInput.range.max}`}
+                            </p>
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="number"
+                                className="w-28 rounded border border-gray-300 px-2 py-1 text-xs dark:border-gray-600 dark:bg-gray-800"
+                                placeholder={req.expectedInput.unit ?? "value"}
+                                min={req.expectedInput.range?.min}
+                                max={req.expectedInput.range?.max}
+                                value={requestDrafts[req.id] ?? ""}
+                                onChange={(e) =>
+                                  setRequestDrafts((prev) => ({
+                                    ...prev,
+                                    [req.id]: e.target.value,
+                                  }))
+                                }
+                              />
+                              <button
+                                type="button"
+                                className="rounded bg-blue-600 px-2 py-1 text-xs text-white hover:bg-blue-700"
+                                onClick={() =>
+                                  sendQuickReply(
+                                    requestDrafts[req.id]
+                                      ? `${req.id}: ${requestDrafts[req.id]}${req.expectedInput?.unit ? ` ${req.expectedInput.unit}` : ""}`
+                                      : req.prompt
+                                  )
+                                }
+                              >
+                                Send value
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                        {req.expectedInput?.options && req.expectedInput.options.length > 0 && (
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {req.expectedInput.options.map((opt) => (
+                              <button
+                                key={`${req.id}-${opt}`}
+                                type="button"
+                                className="rounded border border-gray-300 px-2 py-1 text-xs hover:bg-gray-100 dark:border-gray-500 dark:hover:bg-gray-800"
+                                onClick={() => sendQuickReply(`${req.id}: ${opt}`)}
+                              >
+                                {opt}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                        {req.type === "photo" && (
+                          <div className="mt-2 rounded border border-blue-200 bg-blue-50 p-2 text-xs text-blue-800 dark:border-blue-900/40 dark:bg-blue-950/20 dark:text-blue-200">
+                            Photo tips: use good lighting, keep the target area in focus, and upload
+                            at least two angles.
+                          </div>
                         )}
                       </div>
                     ))}
@@ -297,6 +387,25 @@ export default function ChatPage() {
                         Why: {m.resolution.why}
                       </p>
                     )}
+                    <div className="mt-2 flex items-center gap-2">
+                      <span className="text-xs text-gray-500 dark:text-gray-400">
+                        Did this solve your issue?
+                      </span>
+                      <button
+                        type="button"
+                        className="rounded bg-green-600 px-2 py-1 text-xs text-white hover:bg-green-700"
+                        onClick={() => sendQuickReply("resolved")}
+                      >
+                        Yes
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded bg-amber-600 px-2 py-1 text-xs text-white hover:bg-amber-700"
+                        onClick={() => sendQuickReply("not fixed")}
+                      >
+                        No
+                      </button>
+                    </div>
                   </div>
                 )}
                 {m.role === "assistant" && m.escalation_reason && (

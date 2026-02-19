@@ -13,9 +13,15 @@ type Doc = {
   rawTextPreview: string | null;
   pastedContent: string | null;
   machineModel: string | null;
+  labelIds: string[] | null;
   sourceUrl: string | null;
   cssSelector: string | null;
   createdAt: string;
+};
+
+type Label = {
+  id: string;
+  displayName: string;
 };
 
 type Chunk = {
@@ -80,6 +86,7 @@ export default function AdminDocDetailPage() {
   const params = useParams();
   const id = params?.id as string | undefined;
   const [doc, setDoc] = useState<Doc | null>(null);
+  const [labels, setLabels] = useState<Label[]>([]);
   const [chunks, setChunks] = useState<Chunk[]>([]);
   const [loading, setLoading] = useState(true);
   const [chunkSearch, setChunkSearch] = useState("");
@@ -89,6 +96,7 @@ export default function AdminDocDetailPage() {
   const [editMachineModel, setEditMachineModel] = useState("");
   const [editPastedContent, setEditPastedContent] = useState("");
   const [editCssSelector, setEditCssSelector] = useState("");
+  const [editLabelIds, setEditLabelIds] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -103,6 +111,13 @@ export default function AdminDocDetailPage() {
       .catch(() => setDoc(null))
       .finally(() => setLoading(false));
   }, [id]);
+
+  useEffect(() => {
+    fetch("/api/admin/labels")
+      .then((r) => r.json())
+      .then(setLabels)
+      .catch(() => setLabels([]));
+  }, []);
 
   useEffect(() => {
     if (!id) return;
@@ -155,6 +170,7 @@ export default function AdminDocDetailPage() {
     setEditMachineModel(doc.machineModel ?? "");
     setEditPastedContent(doc.pastedContent ?? "");
     setEditCssSelector(doc.cssSelector ?? "");
+    setEditLabelIds(doc.labelIds ?? []);
   };
 
   const cancelEdit = () => {
@@ -170,10 +186,12 @@ export default function AdminDocDetailPage() {
         pastedContent?: string;
         machineModel?: string | null;
         cssSelector?: string | null;
+        labelIds?: string[] | null;
       } = {
         title: editTitle,
         machineModel: editMachineModel.trim() || null,
         cssSelector: editCssSelector.trim() || null,
+        labelIds: editLabelIds,
       };
       if (doc.filePath === "_pasted") body.pastedContent = editPastedContent;
       const res = await fetch(`/api/admin/docs/${doc.id}`, {
@@ -245,6 +263,11 @@ export default function AdminDocDetailPage() {
               Machine: {doc.machineModel}
             </span>
           )}
+          {doc.labelIds && doc.labelIds.length > 0 && (
+            <span className="text-sm text-gray-500 dark:text-gray-400">
+              Labels: {doc.labelIds.join(", ")}
+            </span>
+          )}
           <span className="text-sm text-gray-500 dark:text-gray-400">
             Created {formatDate(doc.createdAt)}
           </span>
@@ -299,6 +322,38 @@ export default function AdminDocDetailPage() {
               value={editMachineModel}
               onChange={(e) => setEditMachineModel(e.target.value)}
             />
+            <div className="rounded border border-gray-200 bg-white p-3 dark:border-gray-600 dark:bg-gray-800/50">
+              <p className="mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+                Labels for retrieval scope
+              </p>
+              {labels.length === 0 ? (
+                <p className="text-sm text-amber-600 dark:text-amber-400">
+                  No labels yet. Add labels in Admin → Labels first.
+                </p>
+              ) : (
+                <div className="flex flex-wrap gap-3">
+                  {labels.map((l) => (
+                    <label key={l.id} className="flex cursor-pointer items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={editLabelIds.includes(l.id)}
+                        onChange={(e) =>
+                          setEditLabelIds((prev) =>
+                            e.target.checked
+                              ? [...prev, l.id]
+                              : prev.filter((id) => id !== l.id)
+                          )
+                        }
+                        className="rounded border-gray-300 dark:border-gray-600"
+                      />
+                      <span className="text-sm text-gray-700 dark:text-gray-300">
+                        {l.displayName} ({l.id})
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
             {doc.filePath === "_url" && (
               <input
                 type="text"

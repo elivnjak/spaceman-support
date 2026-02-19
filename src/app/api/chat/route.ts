@@ -16,7 +16,6 @@ import {
 } from "@/lib/pipeline/image-retrieval";
 import { searchDocChunks } from "@/lib/pipeline/text-retrieval";
 import {
-  runDiagnosticPlanner,
   runFollowUpAnswer,
   validateAndSanitizePlannerOutput,
   type DiagnosticPlaybook,
@@ -35,6 +34,7 @@ import {
 import { createHash } from "crypto";
 import {
   hasSufficientEvidence,
+  runDeterministicPlanner,
   suggestNextActions,
 } from "@/lib/diagnostics/controller";
 import {
@@ -386,12 +386,6 @@ export async function POST(request: Request) {
             send(controller, "stage", JSON.stringify({ message: STAGE_MESSAGES.searching_manuals }));
             const queryText = `${message} ${playbook.labelId} troubleshooting steps causes`;
             const queryEmbedding = await openaiTextEmbedder.embed(queryText);
-            const suggestedNextActions = suggestNextActions({
-              playbook,
-              evidence,
-              hypotheses,
-              limit: 5,
-            });
             const chunks = await searchDocChunks(
               queryEmbedding,
               8,
@@ -407,20 +401,13 @@ export async function POST(request: Request) {
             }));
 
             send(controller, "stage", JSON.stringify({ message: STAGE_MESSAGES.thinking }));
-            plannerOutput = await runDiagnosticPlanner({
+            plannerOutput = runDeterministicPlanner({
               playbook,
               evidence,
               hypotheses,
-              phase,
-              turnCount,
-              recentMessages: messages.slice(0, -1),
-              docChunks: chunksForTurn,
-              actions: Array.from(actionsById.values()),
               lastUserMessage: message,
-              machineModel: session.machineModel ?? undefined,
               outstandingRequestIds,
-              suggestedNextActions,
-              newImageEvidenceSummary,
+              actionsById,
             });
 
             const { output: sanitized } = validateAndSanitizePlannerOutput(
@@ -585,6 +572,11 @@ export async function POST(request: Request) {
             requests: responseToSend.requests,
             resolution: responseToSend.resolution,
             escalation_reason: responseToSend.escalation_reason,
+            evidence_progress: {
+              collected_required: sufficiencyForPolicy.collectedRequired,
+              required_total: sufficiencyForPolicy.requiredCount,
+              ratio: sufficiencyForPolicy.ratio,
+            },
             citations: citations.length > 0 ? citations : undefined,
           })
         );

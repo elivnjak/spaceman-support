@@ -1,6 +1,8 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { db } from "@/lib/db";
 import { labels, referenceImages, documents, playbooks, actions } from "@/lib/db/schema";
+import { AdminLoginForm } from "./AdminLoginForm";
 
 async function getCounts() {
   try {
@@ -24,12 +26,24 @@ async function getCounts() {
   }
 }
 
-export default async function AdminDashboardPage() {
+type Props = { searchParams: Promise<{ unauthorized?: string; next?: string }> };
+
+export default async function AdminDashboardPage({ searchParams }: Props) {
   const counts = await getCounts();
+  const params = await searchParams;
+  const requiredToken = process.env.ADMIN_API_KEY?.trim();
+  const cookieStore = await cookies();
+  const cookieToken = cookieStore.get("admin_api_key")?.value?.trim() ?? "";
+  const isAuthenticated = !!requiredToken && cookieToken === requiredToken;
+  const showLogin =
+    !!requiredToken && (!isAuthenticated || params.unauthorized === "1");
 
   return (
     <div>
       <h1 className="mb-8 text-2xl font-bold">Admin dashboard</h1>
+      {showLogin && (
+        <AdminLoginForm next={params.next} />
+      )}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-lg border border-gray-200 bg-white p-6 shadow dark:border-gray-700 dark:bg-gray-800">
           <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400">

@@ -12,11 +12,17 @@ type Doc = {
   rawTextPreview: string | null;
   pastedContent: string | null;
   machineModel: string | null;
+  labelIds: string[] | null;
   sourceUrl: string | null;
   cssSelector: string | null;
   renderJs: boolean | null;
   createdAt: string;
   chunkCount?: number;
+};
+
+type Label = {
+  id: string;
+  displayName: string;
 };
 
 type DocType = "pdf" | "txt" | "md" | "pasted" | "html";
@@ -78,6 +84,7 @@ function formatDate(iso: string): string {
 
 export default function AdminDocsPage() {
   const [docs, setDocs] = useState<Doc[]>([]);
+  const [labels, setLabels] = useState<Label[]>([]);
   const [loading, setLoading] = useState(true);
   const [title, setTitle] = useState("");
   const [machineModel, setMachineModel] = useState("");
@@ -88,6 +95,7 @@ export default function AdminDocsPage() {
   const [cssSelector, setCssSelector] = useState('.KbDetailLtContainer__articleContent');
   const [renderJs, setRenderJs] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [selectedLabelIds, setSelectedLabelIds] = useState<string[]>([]);
   const [ingestingId, setIngestingId] = useState<string | null>(null);
   type BulkItemStatus = "pending" | "uploading" | "ingesting" | "done" | "failed";
   const [bulkProgress, setBulkProgress] = useState<
@@ -98,6 +106,7 @@ export default function AdminDocsPage() {
   const [editPastedContent, setEditPastedContent] = useState("");
   const [editMachineModel, setEditMachineModel] = useState("");
   const [editCssSelector, setEditCssSelector] = useState("");
+  const [editLabelIds, setEditLabelIds] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
@@ -106,6 +115,10 @@ export default function AdminDocsPage() {
       .then((r) => r.json())
       .then(setDocs)
       .finally(() => setLoading(false));
+    fetch("/api/admin/labels")
+      .then((r) => r.json())
+      .then(setLabels)
+      .catch(() => setLabels([]));
   }, []);
 
   const handleUpload = async (e: React.FormEvent) => {
@@ -137,6 +150,7 @@ export default function AdminDocsPage() {
               cssSelector: cssSelector.trim() || undefined,
               renderJs,
               machineModel: machineModel.trim() || undefined,
+              labelIds: selectedLabelIds.length > 0 ? selectedLabelIds : undefined,
             }),
           });
           const data = await res.json();
@@ -188,6 +202,7 @@ export default function AdminDocsPage() {
       setBulkProgress(null);
       setUrlsText("");
       setMachineModel("");
+      setSelectedLabelIds([]);
       if (failed.length > 0) {
         const summary = failed.map((f) => `${f.url}: ${f.error}`).join("\n");
         alert(`${failed.length} URL(s) failed:\n\n${summary}`);
@@ -202,6 +217,9 @@ export default function AdminDocsPage() {
         form.set("title", title);
         form.set("pastedText", pastedText);
         if (machineModel.trim()) form.set("machineModel", machineModel.trim());
+        if (selectedLabelIds.length > 0) {
+          form.set("labelIds", JSON.stringify(selectedLabelIds));
+        }
         const res = await fetch("/api/admin/docs", {
           method: "POST",
           body: form,
@@ -212,6 +230,7 @@ export default function AdminDocsPage() {
           setTitle("");
           setPastedText("");
           setMachineModel("");
+          setSelectedLabelIds([]);
         }
       } finally {
         setUploading(false);
@@ -239,6 +258,9 @@ export default function AdminDocsPage() {
           if (title.trim()) form.set("title", title.trim());
           form.set("file", file);
           if (machineModel.trim()) form.set("machineModel", machineModel.trim());
+          if (selectedLabelIds.length > 0) {
+            form.set("labelIds", JSON.stringify(selectedLabelIds));
+          }
           const uploadRes = await fetch("/api/admin/docs", {
             method: "POST",
             body: form,
@@ -321,6 +343,7 @@ export default function AdminDocsPage() {
       setTitle("");
       setFiles([]);
       setMachineModel("");
+      setSelectedLabelIds([]);
       if (failed.length > 0) {
         const summary = failed.map((f) => `${f.label}: ${f.error}`).join("\n");
         alert(`${failed.length} file(s) failed:\n\n${summary}`);
@@ -361,6 +384,7 @@ export default function AdminDocsPage() {
     setEditPastedContent(d.pastedContent ?? "");
     setEditMachineModel(d.machineModel ?? "");
     setEditCssSelector(d.cssSelector ?? "");
+    setEditLabelIds(d.labelIds ?? []);
   };
 
   const cancelEdit = () => {
@@ -369,6 +393,7 @@ export default function AdminDocsPage() {
     setEditPastedContent("");
     setEditMachineModel("");
     setEditCssSelector("");
+    setEditLabelIds([]);
   };
 
   const saveEdit = async () => {
@@ -380,10 +405,12 @@ export default function AdminDocsPage() {
         pastedContent?: string;
         machineModel?: string | null;
         cssSelector?: string | null;
+        labelIds?: string[] | null;
       } = {
         title: editTitle,
         machineModel: editMachineModel.trim() || null,
         cssSelector: editCssSelector.trim() || null,
+        labelIds: editLabelIds,
       };
       const doc = docs.find((d) => d.id === editingId);
       if (doc?.filePath === "_pasted") body.pastedContent = editPastedContent;
@@ -469,6 +496,41 @@ export default function AdminDocsPage() {
           value={machineModel}
           onChange={(e) => setMachineModel(e.target.value)}
         />
+        <div className="mb-4 rounded border border-gray-200 bg-gray-50 p-3 dark:border-gray-600 dark:bg-gray-800/50">
+          <p className="mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+            Labels for retrieval scope (optional)
+          </p>
+          <p className="mb-2 text-xs text-gray-500 dark:text-gray-400">
+            Tag this document with one or more labels so retrieval prefers it when diagnosing that issue.
+          </p>
+          {labels.length === 0 ? (
+            <p className="text-sm text-amber-600 dark:text-amber-400">
+              No labels yet. Add labels in Admin → Labels first.
+            </p>
+          ) : (
+            <div className="flex flex-wrap gap-3">
+              {labels.map((l) => (
+                <label key={l.id} className="flex cursor-pointer items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={selectedLabelIds.includes(l.id)}
+                    onChange={(e) =>
+                      setSelectedLabelIds((prev) =>
+                        e.target.checked
+                          ? [...prev, l.id]
+                          : prev.filter((id) => id !== l.id)
+                      )
+                    }
+                    className="rounded border-gray-300 dark:border-gray-600"
+                  />
+                  <span className="text-sm text-gray-700 dark:text-gray-300">
+                    {l.displayName} ({l.id})
+                  </span>
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
         {uploadMode === "file" && (
           <input
             type="file"
@@ -580,6 +642,9 @@ export default function AdminDocsPage() {
                   Machine model
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                  Labels
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
                   Status
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
@@ -626,6 +691,18 @@ export default function AdminDocsPage() {
                           title={d.machineModel}
                         >
                           {d.machineModel}
+                        </span>
+                      ) : (
+                        <span className="text-sm text-gray-500 dark:text-gray-400">—</span>
+                      )}
+                    </td>
+                    <td className="max-w-[14rem] px-4 py-3">
+                      {d.labelIds && d.labelIds.length > 0 ? (
+                        <span
+                          className="block truncate text-sm text-gray-500 dark:text-gray-400"
+                          title={d.labelIds.join(", ")}
+                        >
+                          {d.labelIds.join(", ")}
                         </span>
                       ) : (
                         <span className="text-sm text-gray-500 dark:text-gray-400">—</span>
@@ -704,6 +781,38 @@ export default function AdminDocsPage() {
                 value={editMachineModel}
                 onChange={(e) => setEditMachineModel(e.target.value)}
               />
+              <div className="rounded border border-gray-200 bg-white p-3 dark:border-gray-600 dark:bg-gray-800/50">
+                <p className="mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Labels for retrieval scope
+                </p>
+                {labels.length === 0 ? (
+                  <p className="text-sm text-amber-600 dark:text-amber-400">
+                    No labels yet. Add labels in Admin → Labels first.
+                  </p>
+                ) : (
+                  <div className="flex flex-wrap gap-3">
+                    {labels.map((l) => (
+                      <label key={l.id} className="flex cursor-pointer items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={editLabelIds.includes(l.id)}
+                          onChange={(e) =>
+                            setEditLabelIds((prev) =>
+                              e.target.checked
+                                ? [...prev, l.id]
+                                : prev.filter((id) => id !== l.id)
+                            )
+                          }
+                          className="rounded border-gray-300 dark:border-gray-600"
+                        />
+                        <span className="text-sm text-gray-700 dark:text-gray-300">
+                          {l.displayName} ({l.id})
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
               {docs.find((d) => d.id === editingId)?.filePath === "_url" && (
                 <input
                   type="text"

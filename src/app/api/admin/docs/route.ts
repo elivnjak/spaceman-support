@@ -37,6 +37,21 @@ export async function POST(request: Request) {
   const cssSelector = (formData.get("cssSelector") as string)?.trim() || null;
   const renderJs = Boolean(formData.get("renderJs"));
   const machineModel = (formData.get("machineModel") as string)?.trim() || null;
+  const labelIdsRaw = (formData.get("labelIds") as string)?.trim() || "";
+  let labelIds: string[] | null = null;
+  if (labelIdsRaw) {
+    try {
+      const parsed = JSON.parse(labelIdsRaw);
+      if (Array.isArray(parsed)) {
+        labelIds = parsed.filter((v): v is string => typeof v === "string");
+      }
+    } catch {
+      labelIds = labelIdsRaw
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+    }
+  }
 
   if (pastedText) {
     if (!title?.trim()) {
@@ -54,6 +69,7 @@ export async function POST(request: Request) {
         rawTextPreview: pastedText.slice(0, 1000),
         pastedContent: pastedText,
         machineModel,
+        labelIds,
       })
       .returning();
     return NextResponse.json(doc);
@@ -77,6 +93,7 @@ export async function POST(request: Request) {
         cssSelector: cssSelector || null,
         renderJs,
         machineModel,
+        labelIds,
       })
       .returning();
     return NextResponse.json(doc);
@@ -111,6 +128,7 @@ export async function POST(request: Request) {
       status: "UPLOADED",
       rawTextPreview: preview,
       machineModel,
+      labelIds,
     })
     .returning();
 

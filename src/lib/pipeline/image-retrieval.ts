@@ -34,14 +34,18 @@ export function aggregateLabelScores(
 
 export async function searchReferenceImages(
   queryEmbedding: number[],
-  limit: number = RETRIEVAL_CONFIG.imageTopK
+  limit: number = RETRIEVAL_CONFIG.imageTopK,
+  provider?: "replicate" | "huggingface"
 ): Promise<ImageMatch[]> {
   const vectorStr = `[${queryEmbedding.join(",")}]`;
+  const minScore = 0.1;
   const raw = await db.execute(sql`
     SELECT id, label_id,
            1 - (embedding <=> ${vectorStr}::vector) AS similarity
     FROM reference_images
     WHERE embedding IS NOT NULL
+      ${provider ? sql`AND embedding_provider = ${provider}` : sql``}
+      AND (1 - (embedding <=> ${vectorStr}::vector)) >= ${minScore}
     ORDER BY embedding <=> ${vectorStr}::vector
     LIMIT ${limit}
   `);
