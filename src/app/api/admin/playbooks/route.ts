@@ -75,6 +75,7 @@ const PlaybookSchema = z.object({
         description: z.string().min(1),
       })
     )
+    .nullable()
     .optional(),
   evidenceChecklist: z
     .array(
@@ -86,6 +87,7 @@ const PlaybookSchema = z.object({
         required: z.boolean(),
       })
     )
+    .nullable()
     .optional(),
   candidateCauses: z
     .array(
@@ -96,6 +98,7 @@ const PlaybookSchema = z.object({
         rulingEvidence: z.array(z.string()),
       })
     )
+    .nullable()
     .optional(),
   diagnosticQuestions: z
     .array(
@@ -107,6 +110,7 @@ const PlaybookSchema = z.object({
         actionId: z.string().optional(),
       })
     )
+    .nullable()
     .optional(),
   escalationTriggers: z
     .array(
@@ -115,6 +119,7 @@ const PlaybookSchema = z.object({
         reason: z.string().min(1),
       })
     )
+    .nullable()
     .optional(),
 });
 

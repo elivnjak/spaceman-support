@@ -22,6 +22,38 @@ export type CandidateCause = {
   cause: string;
   likelihood: "high" | "medium" | "low";
   rulingEvidence: string[];
+  supportRules?: {
+    evidenceId: string;
+    operator:
+      | ">"
+      | ">="
+      | "<"
+      | "<="
+      | "="
+      | "!="
+      | "in"
+      | "not_in"
+      | "contains"
+      | "not_contains";
+    value: string | number | boolean | Array<string | number | boolean>;
+    weight?: number;
+  }[];
+  contradictionRules?: {
+    evidenceId: string;
+    operator:
+      | ">"
+      | ">="
+      | "<"
+      | "<="
+      | "="
+      | "!="
+      | "in"
+      | "not_in"
+      | "contains"
+      | "not_contains";
+    value: string | number | boolean | Array<string | number | boolean>;
+    weight?: number;
+  }[];
 };
 export type DiagnosticQuestionItem = {
   id: string;

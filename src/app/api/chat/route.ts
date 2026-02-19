@@ -7,7 +7,7 @@ import {
   sessionEvents,
   sessionOutcomes,
 } from "@/lib/db/schema";
-import { eq, inArray } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { clipEmbedder, getConfiguredClipProvider } from "@/lib/embeddings/clip";
 import { openaiTextEmbedder } from "@/lib/embeddings/openai-text";
 import {
@@ -49,6 +49,22 @@ const STAGE_MESSAGES: Record<string, string> = {
   searching_manuals: "Searching knowledge base…",
   thinking: "Thinking…",
 };
+
+function tokenizeForRouting(text: string): string[] {
+  return text
+    .toLowerCase()
+    .split(/[^a-z0-9]+/g)
+    .filter((t) => t.length >= 3);
+}
+
+function tokenMatchesRouteToken(userToken: string, candidateToken: string): boolean {
+  if (userToken === candidateToken) return true;
+  if (userToken.length >= 4 && candidateToken.length >= 4) {
+    // Lightweight stemming by 4-char prefix handles runny/running and similar variants.
+    return userToken.slice(0, 4) === candidateToken.slice(0, 4);
+  }
+  return false;
+}
 
 async function writeSessionEvent(params: {
   sessionId: string;
@@ -186,14 +202,17 @@ export async function POST(request: Request) {
           if (!playbookId) {
             const allPlaybooks = await db.select().from(playbooks);
             const text = message.toLowerCase();
+            const userTokens = tokenizeForRouting(text);
             let best: { id: string; score: number } | null = null;
             for (const pb of allPlaybooks) {
               const symptoms = (pb.symptoms as { description?: string }[] | null) ?? [];
               const score = symptoms.reduce((acc, s) => {
                 const desc = (s.description ?? "").toLowerCase();
                 if (!desc) return acc;
-                const tokens = desc.split(/\W+/).filter((t) => t.length >= 4);
-                const matched = tokens.some((t) => text.includes(t));
+                const tokens = tokenizeForRouting(desc);
+                const matched = tokens.some((candidate) =>
+                  userTokens.some((u) => tokenMatchesRouteToken(u, candidate))
+                );
                 return matched ? acc + 1 : acc;
               }, 0);
               if (!best || score > best.score) best = { id: pb.id, score };
@@ -293,6 +312,26 @@ export async function POST(request: Request) {
         let hypotheses = (session.hypotheses as HypothesisState[]) ?? [];
         let phase = session.phase;
         let turnCount = session.turnCount + 1;
+        const canonicalMachineModel = machineModel ?? session.machineModel ?? null;
+
+        // If model is known from the dedicated header field, satisfy machine model evidence up front.
+        if (canonicalMachineModel) {
+          const modelEvidenceItem = (playbook.evidenceChecklist ?? []).find(
+            (item) =>
+              item.id === "machine_model" ||
+              /machine model/i.test(item.id) ||
+              /machine model/i.test(item.description ?? "")
+          );
+          if (modelEvidenceItem && !(modelEvidenceItem.id in evidence)) {
+            evidence[modelEvidenceItem.id] = {
+              value: canonicalMachineModel,
+              type: "string",
+              confidence: "exact",
+              collectedAt: new Date().toISOString(),
+              turn: turnCount,
+            };
+          }
+        }
 
         const lastAssistantMessage = messages.filter((m) => m.role === "assistant").pop();
         const outstandingRequestIds =
@@ -366,12 +405,7 @@ export async function POST(request: Request) {
               escalation_reason: preEscalation.escalationReason,
             };
           } else {
-            const actionIds = new Set<string>();
-            playbook.evidenceChecklist?.forEach((e) => e.actionId && actionIds.add(e.actionId));
-            const actionIdsArr = Array.from(actionIds);
-            const relevantActions = actionIdsArr.length
-              ? await db.select().from(actions).where(inArray(actions.id, actionIdsArr))
-              : [];
+            const relevantActions = await db.select().from(actions);
             const actionsById = new Map<string, ActionRecord>();
             relevantActions.forEach((a) =>
               actionsById.set(a.id, {
@@ -541,6 +575,7 @@ export async function POST(request: Request) {
             phase,
             turnCount,
             status,
+            machineModel: canonicalMachineModel,
             resolvedCauseId,
             escalationReason,
             updatedAt: new Date(),

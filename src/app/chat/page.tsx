@@ -96,6 +96,8 @@ export default function ChatPage() {
   const [expandedCitations, setExpandedCitations] = useState<Set<string>>(new Set());
   const [openCitation, setOpenCitation] = useState<CitationItem | null>(null);
   const [requestDrafts, setRequestDrafts] = useState<Record<string, string>>({});
+  const [answeredRequestIds, setAnsweredRequestIds] = useState<Set<string>>(new Set());
+  const inputFieldRef = useRef<HTMLInputElement>(null);
   const [evidenceProgress, setEvidenceProgress] = useState<{
     collected_required: number;
     required_total: number;
@@ -123,6 +125,10 @@ export default function ChatPage() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  useEffect(() => {
+    if (!loading) inputFieldRef.current?.focus();
+  }, [loading]);
 
   const sendMessage = async (e: React.FormEvent, inputOverride?: string) => {
     e.preventDefault();
@@ -204,9 +210,17 @@ export default function ChatPage() {
     }
   };
 
-  const sendQuickReply = async (text: string) => {
+  const sendQuickReply = async (text: string, requestId?: string) => {
+    if (requestId) {
+      setAnsweredRequestIds((prev) => new Set(prev).add(requestId));
+    }
     await sendMessage({ preventDefault: () => {} } as React.FormEvent, text);
   };
+
+  const lastAssistantIndex = messages.reduce(
+    (acc, m, idx) => (m.role === "assistant" ? idx : acc),
+    -1
+  );
 
   return (
     <main className="flex min-h-screen flex-col bg-gray-50 dark:bg-gray-900">
@@ -299,75 +313,134 @@ export default function ChatPage() {
                   <p className="whitespace-pre-wrap">{m.content}</p>
                 )}
                 {m.role === "assistant" && m.requests && m.requests.length > 0 && (
-                  <div className="mt-3 space-y-2 border-t border-gray-200 pt-2 dark:border-gray-600">
-                    {m.requests.map((req, j) => (
-                      <div
-                        key={j}
-                        className="rounded-lg border border-gray-200 bg-gray-50 p-2 text-sm dark:border-gray-600 dark:bg-gray-700/50"
-                      >
-                        <p className="font-medium text-gray-700 dark:text-gray-300">
-                          {req.prompt}
-                        </p>
-                        {req.type === "reading" && req.expectedInput && (
-                          <div className="mt-2 space-y-2">
-                            <p className="text-xs text-gray-500">
-                              {req.expectedInput.unit && `Unit: ${req.expectedInput.unit}`}
-                              {req.expectedInput.range &&
-                                ` Range: ${req.expectedInput.range.min}–${req.expectedInput.range.max}`}
+                  <div className="mt-3 space-y-2">
+                    {m.requests.map((req) => {
+                      const isAnswered = answeredRequestIds.has(req.id);
+                      const isLatest = i === lastAssistantIndex && !loading;
+                      const isInteractive = isLatest && !isAnswered;
+
+                      if (!isInteractive) {
+                        return (
+                          <div key={req.id} className="flex items-center gap-2 text-sm text-gray-400 dark:text-gray-500">
+                            <svg className="h-4 w-4 shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                            </svg>
+                            <span className="line-through">{req.prompt}</span>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div key={req.id}>
+                          {req.type === "reading" && (
+                            <div className="mt-1">
+                              {req.expectedInput && (
+                                <p className="mb-1.5 text-xs text-gray-500 dark:text-gray-400">
+                                  {req.expectedInput.unit && `Unit: ${req.expectedInput.unit}`}
+                                  {req.expectedInput.range &&
+                                    ` · Range: ${req.expectedInput.range.min}–${req.expectedInput.range.max}`}
+                                </p>
+                              )}
+                              <div className="flex items-center gap-1.5">
+                                <input
+                                  type="number"
+                                  className="w-32 rounded-full border border-gray-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700"
+                                  placeholder={req.expectedInput?.unit ?? "value"}
+                                  min={req.expectedInput?.range?.min}
+                                  max={req.expectedInput?.range?.max}
+                                  value={requestDrafts[req.id] ?? ""}
+                                  onChange={(e) =>
+                                    setRequestDrafts((prev) => ({
+                                      ...prev,
+                                      [req.id]: e.target.value,
+                                    }))
+                                  }
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter" && requestDrafts[req.id]) {
+                                      e.preventDefault();
+                                      sendQuickReply(
+                                        `${req.id}: ${requestDrafts[req.id]}${req.expectedInput?.unit ? ` ${req.expectedInput.unit}` : ""}`,
+                                        req.id
+                                      );
+                                    }
+                                  }}
+                                />
+                                <button
+                                  type="button"
+                                  disabled={!requestDrafts[req.id]}
+                                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white transition-colors hover:bg-blue-700 disabled:opacity-30"
+                                  onClick={() =>
+                                    sendQuickReply(
+                                      requestDrafts[req.id]
+                                        ? `${req.id}: ${requestDrafts[req.id]}${req.expectedInput?.unit ? ` ${req.expectedInput.unit}` : ""}`
+                                        : req.prompt,
+                                      req.id
+                                    )
+                                  }
+                                >
+                                  <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fillRule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clipRule="evenodd" />
+                                  </svg>
+                                </button>
+                              </div>
+                            </div>
+                          )}
+
+                          {req.expectedInput?.options && req.expectedInput.options.length > 0 && (
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {req.expectedInput.options.map((opt) => (
+                                <button
+                                  key={`${req.id}-${opt}`}
+                                  type="button"
+                                  className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-sm font-medium text-blue-700 transition-colors hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-900/30 dark:text-blue-300 dark:hover:bg-blue-900/50"
+                                  onClick={() => sendQuickReply(`${req.id}: ${opt}`, req.id)}
+                                >
+                                  {opt}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+
+                          {req.type === "question" && !req.expectedInput?.options && (
+                            <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                              Reply in the message box below.
                             </p>
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="number"
-                                className="w-28 rounded border border-gray-300 px-2 py-1 text-xs dark:border-gray-600 dark:bg-gray-800"
-                                placeholder={req.expectedInput.unit ?? "value"}
-                                min={req.expectedInput.range?.min}
-                                max={req.expectedInput.range?.max}
-                                value={requestDrafts[req.id] ?? ""}
-                                onChange={(e) =>
-                                  setRequestDrafts((prev) => ({
-                                    ...prev,
-                                    [req.id]: e.target.value,
-                                  }))
-                                }
-                              />
+                          )}
+
+                          {req.type === "photo" && (
+                            <button
+                              type="button"
+                              onClick={() => fileInputRef.current?.click()}
+                              className="mt-2 inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700 transition-colors hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-900/30 dark:text-blue-300 dark:hover:bg-blue-900/50"
+                            >
+                              <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                <path fillRule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd" />
+                              </svg>
+                              Upload photo
+                            </button>
+                          )}
+
+                          {req.type === "action" && !(req.expectedInput?.options && req.expectedInput.options.length > 0) && (
+                            <div className="mt-2 flex flex-wrap gap-2">
                               <button
                                 type="button"
-                                className="rounded bg-blue-600 px-2 py-1 text-xs text-white hover:bg-blue-700"
-                                onClick={() =>
-                                  sendQuickReply(
-                                    requestDrafts[req.id]
-                                      ? `${req.id}: ${requestDrafts[req.id]}${req.expectedInput?.unit ? ` ${req.expectedInput.unit}` : ""}`
-                                      : req.prompt
-                                  )
-                                }
+                                className="rounded-full border border-green-200 bg-green-50 px-3 py-1.5 text-sm font-medium text-green-700 transition-colors hover:bg-green-100 dark:border-green-800 dark:bg-green-900/30 dark:text-green-300 dark:hover:bg-green-900/50"
+                                onClick={() => sendQuickReply(`${req.id}: done`, req.id)}
                               >
-                                Send value
+                                Done
+                              </button>
+                              <button
+                                type="button"
+                                className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100 dark:border-gray-600 dark:bg-gray-700/50 dark:text-gray-300 dark:hover:bg-gray-700"
+                                onClick={() => sendQuickReply(`${req.id}: unable`, req.id)}
+                              >
+                                Can&apos;t do this
                               </button>
                             </div>
-                          </div>
-                        )}
-                        {req.expectedInput?.options && req.expectedInput.options.length > 0 && (
-                          <div className="mt-2 flex flex-wrap gap-2">
-                            {req.expectedInput.options.map((opt) => (
-                              <button
-                                key={`${req.id}-${opt}`}
-                                type="button"
-                                className="rounded border border-gray-300 px-2 py-1 text-xs hover:bg-gray-100 dark:border-gray-500 dark:hover:bg-gray-800"
-                                onClick={() => sendQuickReply(`${req.id}: ${opt}`)}
-                              >
-                                {opt}
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                        {req.type === "photo" && (
-                          <div className="mt-2 rounded border border-blue-200 bg-blue-50 p-2 text-xs text-blue-800 dark:border-blue-900/40 dark:bg-blue-950/20 dark:text-blue-200">
-                            Photo tips: use good lighting, keep the target area in focus, and upload
-                            at least two angles.
-                          </div>
-                        )}
-                      </div>
-                    ))}
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
                 {m.role === "assistant" && m.resolution && (
@@ -509,6 +582,7 @@ export default function ChatPage() {
             </span>
           )}
           <input
+            ref={inputFieldRef}
             type="text"
             placeholder="Type your message..."
             className="flex-1 rounded-lg border border-gray-300 px-4 py-2 dark:border-gray-600 dark:bg-gray-800"
