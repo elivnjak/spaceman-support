@@ -77,22 +77,23 @@ async function main() {
   addSheet(
     wb,
     "Evidence",
-    "Evidence the assistant should collect during diagnosis.",
+    'Evidence the assistant should collect during diagnosis. "action_id" is optional and should match an ID in Admin -> Actions.',
     [
       { header: "id", key: "id", width: 25 },
       { header: "description", key: "description", width: 50 },
+      { header: "action_id", key: "action_id", width: 25 },
       { header: "type", key: "type", width: 18 },
       { header: "required", key: "required", width: 12 },
     ],
     [
-      { id: "machine_model", description: "Machine model", type: "observation", required: "yes" },
-      { id: "dispense_photo", description: "Photo of product dispense showing thickness", type: "photo", required: "yes" },
-      { id: "hopper_temp", description: "Hopper temperature reading (normal range -8°C to -4°C; below this can cause thick product)", type: "reading", required: "yes" },
-      { id: "cylinder_temp", description: "Cylinder temperature reading if available", type: "reading", required: "no" },
-      { id: "mix_ratio", description: "Current mix-to-water ratio being used", type: "observation", required: "yes" },
-      { id: "last_defrost", description: "When the machine was last defrosted", type: "observation", required: "no" },
-      { id: "scraper_condition", description: "Condition of scraper blades", type: "action", required: "no" },
-      { id: "overrun_level", description: "Air overrun / aeration level setting", type: "reading", required: "no" },
+      { id: "machine_model", description: "Machine model", action_id: "identify_machine_model", type: "observation", required: "yes" },
+      { id: "dispense_photo", description: "Photo of product dispense showing thickness", action_id: "photo_dispense_front", type: "photo", required: "yes" },
+      { id: "hopper_temp", description: "Hopper temperature reading (normal range -8°C to -4°C; below this can cause thick product)", action_id: "read_hopper_temp", type: "reading", required: "yes" },
+      { id: "cylinder_temp", description: "Cylinder temperature reading if available", action_id: "read_cylinder_temp", type: "reading", required: "no" },
+      { id: "mix_ratio", description: "Current mix-to-water ratio being used", action_id: "check_mix_ratio", type: "observation", required: "yes" },
+      { id: "last_defrost", description: "When the machine was last defrosted", action_id: "report_last_defrost", type: "observation", required: "no" },
+      { id: "scraper_condition", description: "Condition of scraper blades", action_id: "inspect_scraper_blades", type: "action", required: "no" },
+      { id: "overrun_level", description: "Air overrun / aeration level setting", action_id: "check_overrun_setting", type: "reading", required: "no" },
     ],
   );
 
@@ -119,19 +120,20 @@ async function main() {
   addSheet(
     wb,
     "Questions",
-    "Diagnostic questions the assistant can ask the user.",
+    'Diagnostic questions the assistant can ask the user. "action_id" is optional and should match an ID in Admin -> Actions.',
     [
       { header: "id", key: "id", width: 25 },
       { header: "question", key: "question", width: 50 },
       { header: "purpose", key: "purpose", width: 40 },
       { header: "when_to_ask", key: "when_to_ask", width: 30 },
+      { header: "action_id", key: "action_id", width: 25 },
     ],
     [
-      { id: "ask_temp", question: "What temperature does the hopper display show?", purpose: "Check if hopper is running too cold", when_to_ask: "Always ask first" },
-      { id: "ask_mix", question: "What mix-to-water ratio are you using?", purpose: "Rule out incorrect mix concentration", when_to_ask: "After temperature check" },
-      { id: "ask_defrost", question: "When was the last time the machine was defrosted?", purpose: "Check for ice buildup on cylinder", when_to_ask: "If temperature is in range but product still thick" },
-      { id: "ask_usage", question: "How often is product being dispensed? Roughly how many servings per hour?", purpose: "Determine if product sits too long between pulls", when_to_ask: "If other causes ruled out" },
-      { id: "ask_overrun", question: "What is the air pump or overrun setting on the machine?", purpose: "Check if aeration is too low", when_to_ask: "If mix ratio and temperature are normal" },
+      { id: "ask_temp", question: "What temperature does the hopper display show?", purpose: "Check if hopper is running too cold", when_to_ask: "Always ask first", action_id: "read_hopper_temp" },
+      { id: "ask_mix", question: "What mix-to-water ratio are you using?", purpose: "Rule out incorrect mix concentration", when_to_ask: "After temperature check", action_id: "check_mix_ratio" },
+      { id: "ask_defrost", question: "When was the last time the machine was defrosted?", purpose: "Check for ice buildup on cylinder", when_to_ask: "If temperature is in range but product still thick", action_id: "report_last_defrost" },
+      { id: "ask_usage", question: "How often is product being dispensed? Roughly how many servings per hour?", purpose: "Determine if product sits too long between pulls", when_to_ask: "If other causes ruled out", action_id: "count_pulls_hour" },
+      { id: "ask_overrun", question: "What is the air pump or overrun setting on the machine?", purpose: "Check if aeration is too low", when_to_ask: "If mix ratio and temperature are normal", action_id: "check_overrun_setting" },
     ],
   );
 

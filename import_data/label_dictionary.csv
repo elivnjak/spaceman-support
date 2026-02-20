@@ -1,0 +1,31 @@
+label_id,label_name,description
+ss_product_too_soft_runny,Soft serve too soft / runny,Troubleshooting playbook for soft serve issue.
+ss_product_too_icy,Soft serve icy / too hard,Troubleshooting playbook for soft serve issue.
+ss_product_too_stiff_freeze_up_risk,Soft serve too stiff (starved cylinder / freeze-up risk),Troubleshooting playbook for soft serve issue.
+ss_insufficient_overrun_flat,Soft serve not fluffy (insufficient overrun),Troubleshooting playbook for soft serve issue.
+ss_excessive_overrun_foamy,Soft serve too airy/foamy (excess overrun),Troubleshooting playbook for soft serve issue.
+ss_first_pull_runny_after_idle,First dispense runny after idle (hot-gas release / idle effects),Troubleshooting playbook for soft serve issue.
+ss_machine_freeze_up_stop1_stop2,Machine freeze-up (STOP 1 / STOP 2),Troubleshooting playbook for soft serve issue.
+ss_machine_not_cooling,Machine not cooling / won’t freeze product,Troubleshooting playbook for soft serve issue.
+ss_stop4_temperature_sensor_error,STOP 4 temperature sensor error,Troubleshooting playbook for soft serve issue.
+ss_hopper_too_warm_or_too_cold,Hopper temperature too warm/too cold,Troubleshooting playbook for soft serve issue.
+ss_beater_not_turning,Beater/motor not turning (no agitation),Troubleshooting playbook for soft serve issue.
+ss_leak_from_door_or_spout,Leak from dispensing door/spout,Troubleshooting playbook for soft serve issue.
+ss_excessive_internal_leak_drip_tray,Excessive leak into drip tray / under machine,Troubleshooting playbook for soft serve issue.
+ss_off_taste_contamination,Off taste / suspected contamination,Troubleshooting playbook for soft serve issue.
+ss_no_power_or_trips_breaker,No power / trips breaker or RCD,Troubleshooting playbook for soft serve issue.
+fb_product_not_freezing,Frozen beverage not freezing (soupy),Troubleshooting playbook for frozen beverage issue.
+fb_product_freeze_up_thick,Frozen beverage over-freezing / too thick,Troubleshooting playbook for frozen beverage issue.
+fb_freeze_up_thermal_overload_trip,Freeze-up causes motor/thermal overload trip,Troubleshooting playbook for frozen beverage issue.
+fb_low_mix_light_with_full_hopper,Low-mix light with hopper full (sensor false trip),Troubleshooting playbook for frozen beverage issue.
+fb_product_leaking_from_door,Product leaking from door / draw valve,Troubleshooting playbook for frozen beverage issue.
+fb_product_leaking_inside_machine,Product leaking inside machine / internal drip tray,Troubleshooting playbook for frozen beverage issue.
+fb_machine_not_cooling,Machine not cooling (FB),Troubleshooting playbook for frozen beverage issue.
+fb_compressor_runs_no_frost,Compressor runs but cylinder not frosting (possible refrigeration issue),Troubleshooting playbook for frozen beverage issue.
+fb_auger_not_turning,Auger/motor not turning (no agitation),Troubleshooting playbook for frozen beverage issue.
+fb_inconsistent_texture_between_sides,Inconsistent texture between sides/bowls,Troubleshooting playbook for frozen beverage issue.
+fb_brix_out_of_range,Mix brix out of range / recipe issue,Troubleshooting playbook for frozen beverage issue.
+fb_chunks_or_particles_in_product,Chunks/particles in product (clogging / performance issues),Troubleshooting playbook for frozen beverage issue.
+fb_draw_handle_stuck,Draw handle stuck / hard to pull,Troubleshooting playbook for frozen beverage issue.
+fb_display_alarm_or_error,Display alarm/error (unknown),Troubleshooting playbook for frozen beverage issue.
+fb_auto_fill_not_refilling,Auto-fill not refilling (if installed),Troubleshooting playbook for frozen beverage issue.

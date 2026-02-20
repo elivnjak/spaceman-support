@@ -102,16 +102,18 @@ async function main() {
   addSheet(
     wb,
     "Evidence",
-    'Evidence the assistant should collect during diagnosis. "type" must be one of the dropdown values. Set "required" to yes or no.',
+    'Evidence the assistant should collect during diagnosis. "type" must be one of the dropdown values. Set "required" to yes or no. "action_id" is optional and should match an ID in Admin -> Actions.',
     [
       { header: "id", key: "id", width: 25 },
       { header: "description", key: "description", width: 50 },
+      { header: "action_id", key: "action_id", width: 25 },
       { header: "type", key: "type", width: 18 },
       { header: "required", key: "required", width: 12 },
     ],
     {
       id: "hopper_temp",
       description: "Current hopper temperature reading",
+      action_id: "read_hopper_temp",
       type: "reading",
       required: "yes",
     },
@@ -145,18 +147,20 @@ async function main() {
   addSheet(
     wb,
     "Questions",
-    'Diagnostic questions the assistant can ask the user. "when_to_ask" is optional — describe when this question is relevant.',
+    'Diagnostic questions the assistant can ask the user. "when_to_ask" and "action_id" are optional. If set, "action_id" must match an ID in Admin -> Actions.',
     [
       { header: "id", key: "id", width: 25 },
       { header: "question", key: "question", width: 50 },
       { header: "purpose", key: "purpose", width: 40 },
       { header: "when_to_ask", key: "when_to_ask", width: 30 },
+      { header: "action_id", key: "action_id", width: 25 },
     ],
     {
       id: "ask_temp",
       question: "What temperature does the hopper display show?",
       purpose: "Determine if hopper is within operating range",
       when_to_ask: "When user reports runny product",
+      action_id: "read_hopper_temp",
     },
   );
 

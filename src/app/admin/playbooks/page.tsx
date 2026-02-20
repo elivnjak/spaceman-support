@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 type Label = { id: string; displayName: string };
 type Step = {
@@ -49,6 +50,17 @@ type Playbook = {
   updatedAt: string;
 };
 
+type PlaybookFormState = {
+  labelId: string;
+  title: string;
+  steps: Step[];
+  symptoms: SymptomItem[];
+  evidenceChecklist: EvidenceItem[];
+  candidateCauses: CauseItem[];
+  diagnosticQuestions: QuestionItem[];
+  escalationTriggers: TriggerItem[];
+};
+
 const EVIDENCE_TYPES: EvidenceItem["type"][] = [
   "photo",
   "reading",
@@ -67,11 +79,32 @@ const TABS = [
   "steps",
 ] as const;
 
-export default function AdminPlaybooksPage() {
+function toFormState(p: Playbook): PlaybookFormState {
+  return {
+    labelId: p.labelId,
+    title: p.title,
+    steps: Array.isArray(p.steps) ? p.steps : [],
+    symptoms: Array.isArray(p.symptoms) ? p.symptoms : [],
+    evidenceChecklist: Array.isArray(p.evidenceChecklist) ? p.evidenceChecklist : [],
+    candidateCauses: Array.isArray(p.candidateCauses) ? p.candidateCauses : [],
+    diagnosticQuestions: Array.isArray(p.diagnosticQuestions) ? p.diagnosticQuestions : [],
+    escalationTriggers: Array.isArray(p.escalationTriggers) ? p.escalationTriggers : [],
+  };
+}
+
+export default function AdminPlaybooksPage({
+  focusPlaybookId,
+  dedicatedMode = false,
+}: {
+  focusPlaybookId?: string;
+  dedicatedMode?: boolean;
+} = {}) {
+  const router = useRouter();
   const [labels, setLabels] = useState<Label[]>([]);
   const [actionsList, setActionsList] = useState<Action[]>([]);
   const [playbooks, setPlaybooks] = useState<Playbook[]>([]);
   const [loading, setLoading] = useState(true);
+  const [targetMissing, setTargetMissing] = useState(false);
   const [editing, setEditing] = useState<Playbook | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [activeTab, setActiveTab] = useState<(typeof TABS)[number]>("overview");
@@ -88,6 +121,8 @@ export default function AdminPlaybooksPage() {
   const [saving, setSaving] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importMsg, setImportMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -99,9 +134,21 @@ export default function AdminPlaybooksPage() {
       setLabels(l);
       setPlaybooks(p);
       setActionsList(a);
+      if (focusPlaybookId) {
+        const match = (p as Playbook[]).find((item) => item.id === focusPlaybookId);
+        if (match) {
+          setEditing(match);
+          setShowForm(true);
+          setActiveTab("overview");
+          setForm(toFormState(match));
+          setTargetMissing(false);
+        } else {
+          setTargetMissing(true);
+        }
+      }
       setLoading(false);
     });
-  }, []);
+  }, [focusPlaybookId]);
 
   const addStep = () => {
     setForm((f) => ({
@@ -285,22 +332,6 @@ export default function AdminPlaybooksPage() {
     }
   };
 
-  const startEdit = (p: Playbook) => {
-    setEditing(p);
-    setShowForm(true);
-    setActiveTab("overview");
-    setForm({
-      labelId: p.labelId,
-      title: p.title,
-      steps: Array.isArray(p.steps) ? p.steps : [],
-      symptoms: Array.isArray(p.symptoms) ? p.symptoms : [],
-      evidenceChecklist: Array.isArray(p.evidenceChecklist) ? p.evidenceChecklist : [],
-      candidateCauses: Array.isArray(p.candidateCauses) ? p.candidateCauses : [],
-      diagnosticQuestions: Array.isArray(p.diagnosticQuestions) ? p.diagnosticQuestions : [],
-      escalationTriggers: Array.isArray(p.escalationTriggers) ? p.escalationTriggers : [],
-    });
-  };
-
   const startNew = () => {
     setEditing(null);
     setShowForm(true);
@@ -342,49 +373,79 @@ export default function AdminPlaybooksPage() {
     }
   };
 
+  const handleDelete = async (playbook: Playbook) => {
+    if (!confirm(`Delete playbook "${playbook.title}"? This cannot be undone.`)) return;
+    setDeleteError(null);
+    setDeletingId(playbook.id);
+    try {
+      const res = await fetch(`/api/admin/playbooks/${playbook.id}`, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setDeleteError(data.error ?? "Delete failed");
+        return;
+      }
+      setPlaybooks((prev) => prev.filter((p) => p.id !== playbook.id));
+      if (editing?.id === playbook.id) {
+        setEditing(null);
+        setShowForm(false);
+      }
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   if (loading) return <p>Loading…</p>;
 
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Playbooks</h1>
-        <Link href="/admin" className="text-blue-600 hover:underline">
-          ← Dashboard
-        </Link>
+        <h1 className="text-2xl font-bold">{dedicatedMode ? "Edit playbook" : "Playbooks"}</h1>
+        <div className="flex items-center gap-4">
+          {dedicatedMode && (
+            <Link href="/admin/playbooks" className="text-blue-600 hover:underline">
+              ← Back to playbooks
+            </Link>
+          )}
+          <Link href="/admin" className="text-blue-600 hover:underline">
+            ← Dashboard
+          </Link>
+        </div>
       </div>
 
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        <button
-          onClick={startNew}
-          className="rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
-        >
-          New playbook
-        </button>
-        <button
-          onClick={() => fileInputRef.current?.click()}
-          disabled={importing}
-          className="rounded border border-blue-600 px-4 py-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 disabled:opacity-50"
-        >
-          {importing ? "Importing…" : "Import from Excel"}
-        </button>
-        <a
-          href="/api/admin/playbooks/template"
-          download
-          className="rounded border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-700"
-        >
-          Download template
-        </a>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".xlsx"
-          className="hidden"
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) handleImport(file);
-          }}
-        />
-      </div>
+      {!dedicatedMode && (
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <button
+            onClick={startNew}
+            className="rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
+          >
+            New playbook
+          </button>
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={importing}
+            className="rounded border border-blue-600 px-4 py-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 disabled:opacity-50"
+          >
+            {importing ? "Importing…" : "Import from Excel"}
+          </button>
+          <a
+            href="/api/admin/playbooks/template"
+            download
+            className="rounded border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-700"
+          >
+            Download template
+          </a>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".xlsx"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) handleImport(file);
+            }}
+          />
+        </div>
+      )}
 
       {importMsg && (
         <div
@@ -406,7 +467,19 @@ export default function AdminPlaybooksPage() {
         </div>
       )}
 
-      {(editing || showForm) && (
+      {deleteError && (
+        <div className="mb-4 rounded border border-red-200 bg-red-50 p-2 text-sm text-red-800 dark:border-red-800 dark:bg-red-900/20 dark:text-red-200">
+          {deleteError}
+        </div>
+      )}
+
+      {targetMissing && dedicatedMode && (
+        <div className="rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-200">
+          Playbook not found. It may have been deleted.
+        </div>
+      )}
+
+      {(dedicatedMode ? !!editing : editing || showForm) && (
         <div className="mb-8 rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
           <h2 className="mb-4 font-medium">
             {editing ? "Edit playbook" : "Create playbook"}
@@ -1008,6 +1081,10 @@ export default function AdminPlaybooksPage() {
             </button>
             <button
               onClick={() => {
+                if (dedicatedMode) {
+                  router.push("/admin/playbooks");
+                  return;
+                }
                 setEditing(null);
                 setShowForm(false);
                 setForm({
@@ -1029,33 +1106,44 @@ export default function AdminPlaybooksPage() {
         </div>
       )}
 
-      <ul className="space-y-2">
-        {playbooks.map((p) => (
-          <li
-            key={p.id}
-            className="flex items-center justify-between rounded border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800"
-          >
-            <div>
-              <span className="font-medium">{p.title}</span>
-              <span className="ml-2 text-sm text-gray-500">
-                ({labels.find((l) => l.id === p.labelId)?.displayName ?? p.labelId})
-              </span>
-              <p className="text-sm text-gray-500">
-                {Array.isArray(p.steps) ? p.steps.length : 0} steps
-                {Array.isArray(p.symptoms) && p.symptoms.length > 0 && `, ${p.symptoms.length} symptoms`}
-                {Array.isArray(p.evidenceChecklist) && p.evidenceChecklist.length > 0 &&
-                  `, ${p.evidenceChecklist.length} evidence`}
-              </p>
-            </div>
-            <button
-              onClick={() => startEdit(p)}
-              className="rounded border border-gray-300 px-3 py-1 text-sm dark:border-gray-600"
+      {!dedicatedMode && (
+        <ul className="space-y-2">
+          {playbooks.map((p) => (
+            <li
+              key={p.id}
+              className="flex items-center justify-between rounded border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800"
             >
-              Edit
-            </button>
-          </li>
-        ))}
-      </ul>
+              <div>
+                <span className="font-medium">{p.title}</span>
+                <span className="ml-2 text-sm text-gray-500">
+                  ({labels.find((l) => l.id === p.labelId)?.displayName ?? p.labelId})
+                </span>
+                <p className="text-sm text-gray-500">
+                  {Array.isArray(p.steps) ? p.steps.length : 0} steps
+                  {Array.isArray(p.symptoms) && p.symptoms.length > 0 && `, ${p.symptoms.length} symptoms`}
+                  {Array.isArray(p.evidenceChecklist) && p.evidenceChecklist.length > 0 &&
+                    `, ${p.evidenceChecklist.length} evidence`}
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <Link
+                  href={`/admin/playbooks/${p.id}`}
+                  className="rounded border border-gray-300 px-3 py-1 text-sm dark:border-gray-600"
+                >
+                  Edit
+                </Link>
+                <button
+                  onClick={() => handleDelete(p)}
+                  disabled={deletingId === p.id}
+                  className="rounded border border-red-300 px-3 py-1 text-sm text-red-600 hover:bg-red-50 disabled:opacity-50 dark:border-red-700 dark:hover:bg-red-900/20"
+                >
+                  {deletingId === p.id ? "Deleting…" : "Delete"}
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

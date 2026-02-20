@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 import ExcelJS from "exceljs";
 import { randomUUID } from "crypto";
 import { db } from "@/lib/db";
-import { labels, playbooks } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { actions, labels, playbooks } from "@/lib/db/schema";
+import { eq, inArray } from "drizzle-orm";
 
 const EVIDENCE_TYPES = new Set([
   "photo",
@@ -110,6 +110,7 @@ export async function POST(request: Request) {
       return {
         id: r.id || `evidence_${i + 1}`,
         description: r.description ?? "",
+        ...(r.action_id ? { actionId: r.action_id } : {}),
         type: (type || "observation") as
           | "photo"
           | "reading"
@@ -148,6 +149,7 @@ export async function POST(request: Request) {
       question: r.question ?? "",
       purpose: r.purpose ?? "",
       ...(r.when_to_ask ? { whenToAsk: r.when_to_ask } : {}),
+      ...(r.action_id ? { actionId: r.action_id } : {}),
     }));
 
     // --- Triggers ---
@@ -169,6 +171,28 @@ export async function POST(request: Request) {
       ...(r.check ? { check: r.check } : {}),
       ...(r.if_failed ? { if_failed: r.if_failed } : {}),
     }));
+
+    const referencedActionIds = Array.from(
+      new Set(
+        [
+          ...evidenceItems.map((item) => item.actionId).filter(Boolean),
+          ...questionItems.map((item) => item.actionId).filter(Boolean),
+        ] as string[],
+      ),
+    );
+    if (referencedActionIds.length > 0) {
+      const existingActions = await db
+        .select({ id: actions.id })
+        .from(actions)
+        .where(inArray(actions.id, referencedActionIds));
+      const existingIds = new Set(existingActions.map((a) => a.id));
+      const missingActionIds = referencedActionIds.filter((id) => !existingIds.has(id));
+      if (missingActionIds.length > 0) {
+        errors.push(
+          `Unknown action_id values: ${missingActionIds.join(", ")}. Check Admin -> Actions for valid IDs.`,
+        );
+      }
+    }
 
     if (errors.length > 0) {
       return NextResponse.json({ error: errors.join("\n") }, { status: 400 });
