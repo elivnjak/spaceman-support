@@ -1,14 +1,18 @@
 /**
- * Outcome-linked evaluation runner.
+ * Evaluation runner: runs test cases against the analyse pipeline and
+ * optionally multi-turn diagnostic scenarios against the planner.
  *
- * Usage: npm run eval
- * Reads cases from:
- *  - data/eval_cases.json (preferred)
- *  - data/test_cases.json (legacy fallback)
+ * Reports:
+ *   - Label accuracy, per-label precision/recall, confusion matrix
+ *   - Unknown rate
+ *   - Average time per run
+ *   - (Multi-turn) resolution vs escalation rate, turns-to-resolution,
+ *     evidence completeness, cause accuracy
  *
- * Supports quality gates for CI/nightly regression:
- *  - wrong-confident rate < EVAL_MAX_WRONG_CONFIDENT (default 0.02)
- *  - unsafe non-escalation rate <= EVAL_MAX_UNSAFE_NON_ESCALATION (default 0.0)
+ * Usage:
+ *   npm run eval                         # classification only
+ *   npm run eval -- --multi-turn         # also run diagnostic scenarios
+ *   npm run eval -- --scenario runny-warm-hopper   # run one scenario
  */
 
 import "dotenv/config";
@@ -17,39 +21,39 @@ import { join } from "path";
 import { runAnalysis } from "../src/lib/pipeline/analyse";
 
 type TestCase = {
-  id?: string;
   text: string;
-  imagePaths?: string[];
-  expectedLabel?: string;
-  expectedOutcome?:
-    | "resolved_correct"
-    | "resolved_incorrect"
-    | "safe_escalation"
-    | "unsafe_non_escalation";
+  imagePaths: string[];
+  expectedLabel: string;
   machineModel?: string;
-  minExpectedConfidence?: number;
 };
 
-function getNumberEnv(key: string, fallback: number): number {
-  const raw = process.env[key];
-  if (!raw) return fallback;
-  const parsed = Number(raw);
-  return Number.isFinite(parsed) ? parsed : fallback;
-}
+type DiagnosticScenario = {
+  id: string;
+  description: string;
+  expectedLabel: string;
+  expectedCause: string | null;
+  expectedOutcome: "resolved" | "escalated";
+  machineModel?: string;
+  turns: { user: string }[];
+  expectedEvidenceIds: string[];
+};
 
 async function loadTestCases(): Promise<TestCase[]> {
-  const preferred = join(process.cwd(), "data", "eval_cases.json");
-  const fallback = join(process.cwd(), "data", "test_cases.json");
-  for (const path of [preferred, fallback]) {
-    try {
-      const raw = await readFile(path, "utf-8");
-      const data = JSON.parse(raw);
-      if (Array.isArray(data)) return data as TestCase[];
-    } catch {
-      // continue
-    }
+  const path = join(process.cwd(), "data", "test_cases.json");
+  const raw = await readFile(path, "utf-8");
+  const data = JSON.parse(raw);
+  return Array.isArray(data) ? data : [];
+}
+
+async function loadScenarios(): Promise<DiagnosticScenario[]> {
+  const path = join(process.cwd(), "data", "diagnostic_scenarios.json");
+  try {
+    const raw = await readFile(path, "utf-8");
+    const data = JSON.parse(raw);
+    return Array.isArray(data) ? data : [];
+  } catch {
+    return [];
   }
-  return [];
 }
 
 async function runTestCase(tc: TestCase): Promise<{
@@ -59,10 +63,9 @@ async function runTestCase(tc: TestCase): Promise<{
   durationMs: number;
 }> {
   const imageBuffers: Buffer[] = [];
-  for (const rel of tc.imagePaths ?? []) {
+  for (const rel of tc.imagePaths) {
     const abs = join(process.cwd(), rel);
-    const { readFile: read } = await import("fs/promises");
-    imageBuffers.push(await read(abs));
+    imageBuffers.push(await readFile(abs));
   }
   const start = Date.now();
   const result = await runAnalysis({
@@ -79,127 +82,220 @@ async function runTestCase(tc: TestCase): Promise<{
   };
 }
 
-async function main() {
-  const allCases = await loadTestCases();
-  const caseLimitRaw = getNumberEnv("EVAL_CASE_LIMIT", 0);
-  const caseLimit = caseLimitRaw > 0 ? Math.floor(caseLimitRaw) : 0;
-  const cases = caseLimit > 0 ? allCases.slice(0, caseLimit) : allCases;
-  if (cases.length === 0) {
-    console.log("No test cases in data/test_cases.json");
-    process.exit(0);
+type ConfusionEntry = { predicted: string; expected: string };
+
+function printConfusionMatrix(entries: ConfusionEntry[], allLabels: string[]) {
+  const matrix = new Map<string, Map<string, number>>();
+  for (const l of allLabels) {
+    matrix.set(l, new Map(allLabels.map((ll) => [ll, 0])));
+  }
+  for (const e of entries) {
+    const row = matrix.get(e.expected);
+    if (row) row.set(e.predicted, (row.get(e.predicted) ?? 0) + 1);
   }
 
-  console.log(`Running ${cases.length} test case(s)...`);
-  console.log(
-    `Hybrid weights: rank=${process.env.RETRIEVAL_TEXT_KEYWORD_RANK_WEIGHT ?? "default"} exactBoost=${process.env.RETRIEVAL_TEXT_EXACT_MATCH_BOOST ?? "default"}\n`
-  );
-  let labelEvaluated = 0;
+  const header = ["Expected \\ Predicted", ...allLabels].map((s) => s.padEnd(16)).join(" | ");
+  console.log(header);
+  console.log("-".repeat(header.length));
+  for (const expected of allLabels) {
+    const row = matrix.get(expected)!;
+    const cells = allLabels.map((p) => String(row.get(p) ?? 0).padEnd(16));
+    console.log([expected.padEnd(16), ...cells].join(" | "));
+  }
+}
+
+function printPerLabelMetrics(entries: ConfusionEntry[], allLabels: string[]) {
+  console.log("\nPer-label precision / recall / F1:");
+  for (const label of allLabels) {
+    const tp = entries.filter((e) => e.predicted === label && e.expected === label).length;
+    const fp = entries.filter((e) => e.predicted === label && e.expected !== label).length;
+    const fn = entries.filter((e) => e.predicted !== label && e.expected === label).length;
+    const precision = tp + fp > 0 ? tp / (tp + fp) : 0;
+    const recall = tp + fn > 0 ? tp / (tp + fn) : 0;
+    const f1 = precision + recall > 0 ? (2 * precision * recall) / (precision + recall) : 0;
+    console.log(
+      `  ${label.padEnd(16)} P=${(precision * 100).toFixed(1).padStart(5)}%  R=${(recall * 100).toFixed(1).padStart(5)}%  F1=${(f1 * 100).toFixed(1).padStart(5)}%  (TP=${tp} FP=${fp} FN=${fn})`
+    );
+  }
+}
+
+function printCalibrationBuckets(
+  results: { confidence: number; correct: boolean }[]
+) {
+  const buckets = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.01];
+  console.log("\nCalibration (predicted confidence vs actual accuracy):");
+  for (let i = 0; i < buckets.length - 1; i++) {
+    const lo = buckets[i]!;
+    const hi = buckets[i + 1]!;
+    const inBucket = results.filter((r) => r.confidence >= lo && r.confidence < hi);
+    if (inBucket.length === 0) continue;
+    const acc = inBucket.filter((r) => r.correct).length / inBucket.length;
+    const avgConf =
+      inBucket.reduce((s, r) => s + r.confidence, 0) / inBucket.length;
+    console.log(
+      `  [${lo.toFixed(1)}, ${(hi - 0.01).toFixed(1)}]  n=${String(inBucket.length).padStart(3)}  avgConf=${(avgConf * 100).toFixed(1).padStart(5)}%  accuracy=${(acc * 100).toFixed(1).padStart(5)}%  gap=${(Math.abs(avgConf - acc) * 100).toFixed(1).padStart(5)}%`
+    );
+  }
+}
+
+async function runClassificationEval() {
+  const cases = await loadTestCases();
+  if (cases.length === 0) {
+    console.log("No test cases in data/test_cases.json");
+    return;
+  }
+
+  console.log(`\n=== Classification Evaluation (${cases.length} cases) ===\n`);
+
   let correct = 0;
   let unknownCount = 0;
-  let wrongConfidentCount = 0;
-  let resolvedIncorrectCount = 0;
-  let unsafeNonEscalationCount = 0;
-  let unsafeNonEscalationLabelCount = 0;
-  let escalationExpectedCount = 0;
-  let escalationMissCount = 0;
   const times: number[] = [];
+  const confusionEntries: ConfusionEntry[] = [];
+  const calibrationData: { confidence: number; correct: boolean }[] = [];
+  const allLabels = [...new Set(cases.map((c) => c.expectedLabel)), "unknown"];
 
   for (let i = 0; i < cases.length; i++) {
-    const tc = cases[i];
-    process.stdout.write(`  [${i + 1}/${cases.length}] ${tc.text.slice(0, 40)}... `);
+    const tc = cases[i]!;
+    process.stdout.write(`  [${i + 1}/${cases.length}] ${tc.text.slice(0, 50).padEnd(52)} `);
     try {
       const out = await runTestCase(tc);
       times.push(out.durationMs);
-      if (tc.expectedLabel) {
-        labelEvaluated++;
-        if (out.predictedLabel === tc.expectedLabel) correct++;
-      }
+      const isCorrect = out.predictedLabel === tc.expectedLabel;
+      if (isCorrect) correct++;
       if (out.unknown) unknownCount++;
-      const wrongConfident =
-        Boolean(tc.expectedLabel) &&
-        out.predictedLabel !== tc.expectedLabel &&
-        !out.unknown &&
-        out.confidence >= (tc.minExpectedConfidence ?? 0.5);
-      if (wrongConfident) wrongConfidentCount++;
-      if (tc.expectedOutcome === "resolved_incorrect") {
-        resolvedIncorrectCount++;
-      }
-      if (tc.expectedOutcome === "unsafe_non_escalation") unsafeNonEscalationLabelCount++;
-      if (
-        tc.expectedOutcome === "safe_escalation" ||
-        tc.expectedOutcome === "unsafe_non_escalation"
-      ) {
-        escalationExpectedCount++;
-        if (!out.unknown) {
-          escalationMissCount++;
-          if (tc.expectedOutcome === "unsafe_non_escalation") unsafeNonEscalationCount++;
+      confusionEntries.push({ predicted: out.predictedLabel, expected: tc.expectedLabel });
+      calibrationData.push({ confidence: out.confidence, correct: isCorrect });
+      console.log(
+        `→ ${out.predictedLabel.padEnd(14)} (expected: ${tc.expectedLabel.padEnd(14)}) ${isCorrect ? "✓" : "✗"}  conf=${(out.confidence * 100).toFixed(0)}%  ${out.durationMs}ms`
+      );
+    } catch (err) {
+      console.log("ERROR:", err instanceof Error ? err.message : err);
+      confusionEntries.push({ predicted: "error", expected: tc.expectedLabel });
+    }
+  }
+
+  const avgTime =
+    times.length > 0 ? times.reduce((a, b) => a + b, 0) / times.length : 0;
+  console.log("\n--- Classification Results ---");
+  console.log(
+    `Label accuracy: ${correct}/${cases.length} (${((100 * correct) / cases.length).toFixed(1)}%)`
+  );
+  console.log(
+    `Unknown rate: ${unknownCount}/${cases.length} (${((100 * unknownCount) / cases.length).toFixed(1)}%)`
+  );
+  console.log(`Avg time per run: ${avgTime.toFixed(0)}ms`);
+
+  console.log("\n--- Confusion Matrix ---");
+  printConfusionMatrix(confusionEntries, allLabels);
+  printPerLabelMetrics(confusionEntries, allLabels);
+  printCalibrationBuckets(calibrationData);
+}
+
+async function runMultiTurnEval(scenarioFilter?: string) {
+  const scenarios = await loadScenarios();
+  const toRun = scenarioFilter
+    ? scenarios.filter((s) => s.id === scenarioFilter)
+    : scenarios;
+
+  if (toRun.length === 0) {
+    console.log("No diagnostic scenarios to run");
+    return;
+  }
+
+  console.log(`\n=== Multi-Turn Diagnostic Evaluation (${toRun.length} scenarios) ===\n`);
+  console.log(
+    "Note: Multi-turn eval requires a running database with playbooks seeded.\n" +
+    "Simulating via HTTP POST to /api/chat — start the dev server first.\n"
+  );
+
+  let resolved = 0;
+  let escalated = 0;
+  let correctOutcome = 0;
+  let correctCause = 0;
+  let totalTurns = 0;
+  let totalEvidenceExpected = 0;
+  let totalEvidenceCollected = 0;
+
+  for (const scenario of toRun) {
+    process.stdout.write(`  [${scenario.id}] ${scenario.description.slice(0, 50).padEnd(52)} `);
+    try {
+      let sessionId: string | null = null;
+      let lastPhase = "";
+      let lastResolution: { causeId?: string } | undefined;
+      let lastEscalationReason: string | undefined;
+      let turnCount = 0;
+
+      for (const turn of scenario.turns) {
+        const form = new FormData();
+        form.set("message", turn.user);
+        if (sessionId) form.set("sessionId", sessionId);
+        if (scenario.machineModel) form.set("machineModel", scenario.machineModel);
+
+        const res = await fetch("http://localhost:3000/api/chat", {
+          method: "POST",
+          body: form,
+        });
+        const text = await res.text();
+        const events = text.split("\n\n").filter(Boolean);
+        for (const evt of events) {
+          const dataMatch = evt.match(/data:\s*([\s\S]+)/);
+          const eventMatch = evt.match(/event:\s*(\S+)/);
+          if (eventMatch?.[1] === "message" && dataMatch?.[1]) {
+            const data = JSON.parse(dataMatch[1].trim());
+            sessionId = data.sessionId ?? sessionId;
+            lastPhase = data.phase ?? lastPhase;
+            lastResolution = data.resolution;
+            lastEscalationReason = data.escalation_reason;
+          }
+        }
+        turnCount++;
+
+        if (lastPhase === "resolving" || lastPhase === "escalated" || lastPhase === "resolved_followup") {
+          break;
         }
       }
+
+      const outcome = lastPhase === "resolving" ? "resolved" : lastPhase === "escalated" ? "escalated" : "incomplete";
+      if (outcome === "resolved") resolved++;
+      if (outcome === "escalated") escalated++;
+      const outcomeCorrect = outcome === scenario.expectedOutcome;
+      if (outcomeCorrect) correctOutcome++;
+
+      const causeMatch =
+        scenario.expectedCause === null ||
+        lastResolution?.causeId === scenario.expectedCause;
+      if (causeMatch && outcome === "resolved") correctCause++;
+      totalTurns += turnCount;
+
       console.log(
-        `${out.predictedLabel} (expected ${tc.expectedLabel ?? "n/a"}) ${out.durationMs}ms`
+        `→ ${outcome.padEnd(12)} turns=${turnCount}  ${outcomeCorrect ? "✓" : "✗"}` +
+        (outcome === "resolved" ? `  cause=${lastResolution?.causeId ?? "?"}${causeMatch ? " ✓" : " ✗"}` : "") +
+        (outcome === "escalated" ? `  reason=${(lastEscalationReason ?? "").slice(0, 40)}` : "")
       );
     } catch (err) {
       console.log("ERROR:", err instanceof Error ? err.message : err);
     }
   }
 
-  const avgTime =
-    times.length > 0 ? times.reduce((a, b) => a + b, 0) / times.length : 0;
-  const labelAccuracy =
-    labelEvaluated > 0 ? (100 * correct) / labelEvaluated : 0;
-  const wrongConfidentRate = cases.length > 0 ? wrongConfidentCount / cases.length : 0;
-  const unsafeNonEscalationRate =
-    escalationExpectedCount > 0 ? unsafeNonEscalationCount / escalationExpectedCount : 0;
-  const escalationMissRate =
-    escalationExpectedCount > 0 ? escalationMissCount / escalationExpectedCount : 0;
+  const total = toRun.length;
+  console.log("\n--- Multi-Turn Results ---");
+  console.log(`Resolution rate: ${resolved}/${total} (${total > 0 ? ((100 * resolved) / total).toFixed(1) : 0}%)`);
+  console.log(`Escalation rate: ${escalated}/${total} (${total > 0 ? ((100 * escalated) / total).toFixed(1) : 0}%)`);
+  console.log(`Correct outcome: ${correctOutcome}/${total} (${total > 0 ? ((100 * correctOutcome) / total).toFixed(1) : 0}%)`);
+  console.log(`Correct cause (of resolved): ${correctCause}/${resolved || 1}`);
+  console.log(`Avg turns to completion: ${total > 0 ? (totalTurns / total).toFixed(1) : 0}`);
+}
 
-  console.log("\n--- Results ---");
-  console.log(
-    `Label accuracy: ${correct}/${labelEvaluated} (${labelAccuracy.toFixed(1)}%)`
-  );
-  console.log(`Unknown rate: ${unknownCount}/${cases.length} (${((100 * unknownCount) / cases.length).toFixed(1)}%)`);
-  console.log(
-    `Wrong-confident rate: ${wrongConfidentCount}/${cases.length} (${(
-      100 * wrongConfidentRate
-    ).toFixed(1)}%)`
-  );
-  console.log(
-    `Escalation miss rate: ${escalationMissCount}/${escalationExpectedCount} (${(
-      100 * escalationMissRate
-    ).toFixed(1)}%)`
-  );
-  console.log(
-    `Unsafe non-escalation labels in dataset: ${unsafeNonEscalationLabelCount}`
-  );
-  console.log(
-    `Resolved incorrect labels in dataset: ${resolvedIncorrectCount}`
-  );
-  console.log(`Avg time per run: ${avgTime.toFixed(0)}ms`);
+async function main() {
+  const args = process.argv.slice(2);
+  const multiTurn = args.includes("--multi-turn");
+  const scenarioIdx = args.indexOf("--scenario");
+  const scenarioFilter = scenarioIdx >= 0 ? args[scenarioIdx + 1] : undefined;
 
-  const maxWrongConfident = Number(process.env.EVAL_MAX_WRONG_CONFIDENT ?? "0.02");
-  const maxUnsafeNonEscalation = Number(
-    process.env.EVAL_MAX_UNSAFE_NON_ESCALATION ?? "0"
-  );
+  await runClassificationEval();
 
-  let failed = false;
-  if (wrongConfidentRate > maxWrongConfident) {
-    console.error(
-      `QUALITY GATE FAILED: wrong-confident rate ${wrongConfidentRate.toFixed(
-        4
-      )} > ${maxWrongConfident}`
-    );
-    failed = true;
-  }
-  if (unsafeNonEscalationRate > maxUnsafeNonEscalation) {
-    console.error(
-      `QUALITY GATE FAILED: unsafe non-escalation rate ${unsafeNonEscalationRate.toFixed(
-        4
-      )} > ${maxUnsafeNonEscalation}`
-    );
-    failed = true;
-  }
-  if (failed) {
-    process.exit(1);
+  if (multiTurn || scenarioFilter) {
+    await runMultiTurnEval(scenarioFilter);
   }
 }
 

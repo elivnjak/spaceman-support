@@ -28,19 +28,6 @@ const vector = (name: string, dimensions: number) =>
     },
   })(name);
 
-const tsvector = (name: string) =>
-  customType<{ data: string | null; driverData: string | null }>({
-    dataType() {
-      return "tsvector";
-    },
-    toDriver(value: string | null) {
-      return value ?? null;
-    },
-    fromDriver(value: string | null) {
-      return value ?? null;
-    },
-  })(name);
-
 export const labels = pgTable("labels", {
   id: text("id").primaryKey(),
   displayName: text("display_name").notNull(),
@@ -57,7 +44,6 @@ export const referenceImages = pgTable("reference_images", {
   fileHash: text("file_hash"),
   notes: text("notes"),
   embedding: vector("embedding", 512),
-  embeddingProvider: text("embedding_provider"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });
 
@@ -70,7 +56,6 @@ export const documents = pgTable("documents", {
   rawTextPreview: text("raw_text_preview"),
   pastedContent: text("pasted_content"),
   machineModel: text("machine_model"),
-  labelIds: jsonb("label_ids"),
   sourceUrl: text("source_url"),
   cssSelector: text("css_selector"),
   renderJs: boolean("render_js").default(false),
@@ -86,7 +71,6 @@ export const docChunks = pgTable("doc_chunks", {
   content: text("content").notNull(),
   metadata: jsonb("metadata"),
   embedding: vector("embedding", 1536),
-  searchVector: tsvector("search_vector"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });
 
@@ -150,7 +134,10 @@ export const diagnosticSessions = pgTable("diagnostic_sessions", {
   turnCount: integer("turn_count").notNull().default(0),
   resolvedCauseId: text("resolved_cause_id"),
   escalationReason: text("escalation_reason"),
-  resolutionFeedback: text("resolution_feedback"),
+  /** "confirmed" | "not_fixed" | "partially_fixed" | null (awaiting feedback) */
+  resolutionOutcome: text("resolution_outcome"),
+  /** Structured handoff data sent to external ticketing system on escalation */
+  escalationHandoff: jsonb("escalation_handoff"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });
@@ -164,36 +151,6 @@ export const machineSpecs = pgTable("machine_specs", {
   verified: boolean("verified").default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
-});
-
-export const sessionEvents = pgTable("session_events", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  sessionId: uuid("session_id")
-    .notNull()
-    .references(() => diagnosticSessions.id, { onDelete: "cascade" }),
-  turn: integer("turn").notNull().default(0),
-  eventType: text("event_type").notNull(),
-  promptHash: text("prompt_hash"),
-  modelVersion: text("model_version"),
-  inputSnapshot: jsonb("input_snapshot"),
-  outputSnapshot: jsonb("output_snapshot"),
-  evidenceDelta: jsonb("evidence_delta"),
-  hypothesisDelta: jsonb("hypothesis_delta"),
-  citations: jsonb("citations"),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
-});
-
-export const sessionOutcomes = pgTable("session_outcomes", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  sessionId: uuid("session_id")
-    .notNull()
-    .references(() => diagnosticSessions.id, { onDelete: "cascade" }),
-  outcomeType: text("outcome_type").notNull(),
-  userFeedback: text("user_feedback"),
-  humanOverrideLabel: text("human_override_label"),
-  humanOverrideNotes: text("human_override_notes"),
-  ticketId: text("ticket_id"),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });
 
 export type Label = typeof labels.$inferSelect;
@@ -214,7 +171,3 @@ export type DiagnosticSession = typeof diagnosticSessions.$inferSelect;
 export type NewDiagnosticSession = typeof diagnosticSessions.$inferInsert;
 export type MachineSpec = typeof machineSpecs.$inferSelect;
 export type NewMachineSpec = typeof machineSpecs.$inferInsert;
-export type SessionEvent = typeof sessionEvents.$inferSelect;
-export type NewSessionEvent = typeof sessionEvents.$inferInsert;
-export type SessionOutcome = typeof sessionOutcomes.$inferSelect;
-export type NewSessionOutcome = typeof sessionOutcomes.$inferInsert;

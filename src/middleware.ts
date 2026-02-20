@@ -1,53 +1,111 @@
-import { NextResponse } from "next/server";
-import type { NextRequest } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
+import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 
-function unauthorized() {
-  return new NextResponse("Unauthorized", {
-    status: 401,
-    headers: { "WWW-Authenticate": 'Bearer realm="admin"' },
-  });
+function getClientIp(request: NextRequest): string {
+  return (
+    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
+    request.headers.get("x-real-ip") ??
+    "unknown"
+  );
 }
 
-function isAdminPath(pathname: string): boolean {
-  return pathname.startsWith("/admin") || pathname.startsWith("/api/admin");
-}
-
-function isPublicAdminReadPath(pathname: string): boolean {
-  return pathname === "/admin" || pathname === "/admin/";
-}
-
+/**
+ * Middleware protecting admin UI (basic auth) and admin API routes (Bearer token).
+ * Chat API routes use a separate CHAT_API_KEY if configured.
+ * All API routes are rate-limited.
+ *
+ * Set ADMIN_API_KEY and optionally CHAT_API_KEY in .env to enable.
+ * When keys are not set, access is unrestricted (dev mode).
+ */
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  if (!isAdminPath(pathname) || isPublicAdminReadPath(pathname)) {
+
+  // --- Admin UI: basic auth challenge via browser ---
+  if (pathname.startsWith("/admin")) {
+    const adminKey = process.env.ADMIN_API_KEY;
+    if (!adminKey) return NextResponse.next();
+
+    const authHeader = request.headers.get("Authorization");
+    if (authHeader?.startsWith("Basic ")) {
+      const decoded = atob(authHeader.slice(6));
+      const [, password] = decoded.split(":");
+      if (password === adminKey) return NextResponse.next();
+    }
+
+    return new NextResponse("Authentication required", {
+      status: 401,
+      headers: { "WWW-Authenticate": 'Basic realm="Admin"' },
+    });
+  }
+
+  // --- Admin API routes: Bearer token ---
+  if (pathname.startsWith("/api/admin")) {
+    const adminKey = process.env.ADMIN_API_KEY;
+    if (!adminKey) return NextResponse.next();
+
+    const authHeader = request.headers.get("Authorization");
+    const token = authHeader?.startsWith("Bearer ")
+      ? authHeader.slice(7)
+      : null;
+    // Also accept Basic auth (so admin UI fetch calls pass through)
+    if (authHeader?.startsWith("Basic ")) {
+      const decoded = atob(authHeader.slice(6));
+      const [, password] = decoded.split(":");
+      if (password === adminKey) return NextResponse.next();
+    }
+
+    if (token !== adminKey) {
+      return NextResponse.json(
+        { error: "Invalid or missing admin API key" },
+        { status: 401 }
+      );
+    }
     return NextResponse.next();
   }
 
-  const requiredToken = process.env.ADMIN_API_KEY?.trim();
-  if (!requiredToken) {
-    // Fail closed in production if ADMIN_API_KEY is missing.
-    if (process.env.NODE_ENV === "production") return unauthorized();
+  // --- Chat + Analyse API routes: Bearer token + rate limiting ---
+  if (pathname.startsWith("/api/chat") || pathname.startsWith("/api/analyse")) {
+    const chatKey = process.env.CHAT_API_KEY;
+    if (chatKey) {
+      const authHeader = request.headers.get("Authorization");
+      const token = authHeader?.startsWith("Bearer ")
+        ? authHeader.slice(7)
+        : null;
+      if (token !== chatKey) {
+        return NextResponse.json(
+          { error: "Invalid or missing chat API key" },
+          { status: 401 }
+        );
+      }
+    }
+
+    // Rate limit by IP
+    if (request.method === "POST") {
+      const ip = getClientIp(request);
+      const limit = pathname.startsWith("/api/chat")
+        ? RATE_LIMITS.chatPerIp
+        : RATE_LIMITS.analysePerIp;
+      const result = checkRateLimit(`ip:${pathname}:${ip}`, limit.maxRequests, limit.windowMs);
+      if (!result.allowed) {
+        return NextResponse.json(
+          { error: "Too many requests. Please wait before trying again." },
+          {
+            status: 429,
+            headers: {
+              "Retry-After": String(Math.ceil(result.resetMs / 1000)),
+              "X-RateLimit-Remaining": "0",
+            },
+          }
+        );
+      }
+    }
+
     return NextResponse.next();
-  }
-
-  const authHeader = request.headers.get("authorization") ?? "";
-  const bearerToken = authHeader.startsWith("Bearer ")
-    ? authHeader.slice("Bearer ".length).trim()
-    : "";
-  const cookieToken = request.cookies.get("admin_api_key")?.value?.trim() ?? "";
-  const provided = bearerToken || cookieToken;
-
-  if (!provided || provided !== requiredToken) {
-    // Redirect to public admin page so user can enter key (cookie will be set via /api/auth/admin).
-    const loginUrl = new URL("/admin", request.url);
-    loginUrl.searchParams.set("unauthorized", "1");
-    loginUrl.searchParams.set("next", pathname);
-    return NextResponse.redirect(loginUrl);
   }
 
   return NextResponse.next();
 }
 
 export const config = {
-  matcher: ["/admin/:path*", "/api/admin/:path*"],
+  matcher: ["/admin/:path*", "/api/admin/:path*", "/api/chat/:path*", "/api/analyse/:path*"],
 };
-

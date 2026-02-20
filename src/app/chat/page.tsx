@@ -44,11 +44,6 @@ type MessagePayload = {
   requests: RequestItem[];
   resolution?: ChatMessage["resolution"];
   escalation_reason?: string;
-  evidence_progress?: {
-    collected_required: number;
-    required_total: number;
-    ratio: number;
-  };
   citations?: CitationItem[];
 };
 
@@ -95,15 +90,67 @@ export default function ChatPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [expandedCitations, setExpandedCitations] = useState<Set<string>>(new Set());
   const [openCitation, setOpenCitation] = useState<CitationItem | null>(null);
-  const [requestDrafts, setRequestDrafts] = useState<Record<string, string>>({});
-  const [answeredRequestIds, setAnsweredRequestIds] = useState<Set<string>>(new Set());
-  const inputFieldRef = useRef<HTMLInputElement>(null);
-  const [evidenceProgress, setEvidenceProgress] = useState<{
-    collected_required: number;
-    required_total: number;
-    ratio: number;
-  } | null>(null);
+  const [requestInputs, setRequestInputs] = useState<Record<string, string>>({});
+  const requestFileInputRef = useRef<HTMLInputElement>(null);
+  const [activePhotoRequestId, setActivePhotoRequestId] = useState<string | null>(null);
   const SNIPPET_LENGTH = 280;
+
+  const updateRequestInput = (id: string, value: string) => {
+    setRequestInputs((prev) => ({ ...prev, [id]: value }));
+  };
+
+  const buildResponseFromInputs = (requests: RequestItem[]): string => {
+    const parts: string[] = [];
+    for (const req of requests) {
+      const val = requestInputs[req.id]?.trim();
+      if (!val) continue;
+      if (req.expectedInput?.unit) {
+        parts.push(`${req.prompt}: ${val} ${req.expectedInput.unit}`);
+      } else {
+        parts.push(`${req.prompt}: ${val}`);
+      }
+    }
+    return parts.length > 0 ? parts.join("\n") : input.trim();
+  };
+
+  const getRequestInputKind = (req: RequestItem): "number" | "photo" | "boolean" | "options" | "text" => {
+    const expectedType = req.expectedInput?.type?.toLowerCase();
+    if (req.type === "photo" || expectedType === "photo") return "photo";
+    if (req.type === "reading" || expectedType === "number") return "number";
+    if (expectedType === "boolean") return "boolean";
+    if ((req.expectedInput?.options?.length ?? 0) > 0) return "options";
+    return "text";
+  };
+
+  const submitRequestAnswers = (requests: RequestItem[]) => {
+    if (loading) return;
+    const built = buildResponseFromInputs(requests);
+    if (!built) return;
+    setInput(built);
+    setRequestInputs({});
+    setTimeout(() => {
+      const form = document.querySelector("main form");
+      if (form instanceof HTMLFormElement) {
+        form.requestSubmit();
+      }
+    }, 50);
+  };
+
+  const submitSingleRequestAnswer = (req: RequestItem, value: string) => {
+    if (loading) return;
+    setRequestInputs((prev) => ({ ...prev, [req.id]: value }));
+    const built = req.expectedInput?.unit
+      ? `${req.prompt}: ${value} ${req.expectedInput.unit}`
+      : `${req.prompt}: ${value}`;
+    setInput(built);
+    setRequestInputs({});
+    setTimeout(() => {
+      const form = document.querySelector("main form");
+      if (form instanceof HTMLFormElement) {
+        form.requestSubmit();
+      }
+    }, 50);
+  };
 
   const toggleCitation = (key: string) => {
     setExpandedCitations((prev) => {
@@ -126,24 +173,17 @@ export default function ChatPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  useEffect(() => {
-    if (!loading) inputFieldRef.current?.focus();
-  }, [loading]);
-
-  const sendMessage = async (e: React.FormEvent, inputOverride?: string) => {
+  const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    const text = (inputOverride ?? input).trim();
+    const text = input.trim();
     if (!text && files.length === 0) return;
-    if (!sessionId && !machineModel.trim()) {
-      setError("Machine model is required to start troubleshooting.");
-      return;
-    }
     setLoading(true);
     setStage("");
     setError("");
     setInput("");
     const userImages = [...files];
     setFiles([]);
+    setRequestInputs({});
 
     const form = new FormData();
     form.set("message", text || "(sent photos)");
@@ -185,7 +225,6 @@ export default function ChatPage() {
       }
       if (payload) {
         setSessionId(payload.sessionId);
-        setEvidenceProgress(payload.evidence_progress ?? null);
         setMessages((prev) => [
           ...prev,
           {
@@ -210,18 +249,6 @@ export default function ChatPage() {
     }
   };
 
-  const sendQuickReply = async (text: string, requestId?: string) => {
-    if (requestId) {
-      setAnsweredRequestIds((prev) => new Set(prev).add(requestId));
-    }
-    await sendMessage({ preventDefault: () => {} } as React.FormEvent, text);
-  };
-
-  const lastAssistantIndex = messages.reduce(
-    (acc, m, idx) => (m.role === "assistant" ? idx : acc),
-    -1
-  );
-
   return (
     <main className="flex min-h-screen flex-col bg-gray-50 dark:bg-gray-900">
       <header className="border-b border-gray-200 bg-white px-4 py-3 dark:border-gray-700 dark:bg-gray-800">
@@ -245,25 +272,6 @@ export default function ChatPage() {
             value={machineModel}
             onChange={(e) => setMachineModel(e.target.value)}
           />
-          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-            Include model if known. Better model context improves diagnosis quality.
-          </p>
-          {evidenceProgress && evidenceProgress.required_total > 0 && (
-            <div className="mt-2 rounded border border-gray-200 bg-gray-50 p-2 dark:border-gray-700 dark:bg-gray-900">
-              <div className="mb-1 flex items-center justify-between text-xs text-gray-600 dark:text-gray-300">
-                <span>Evidence progress</span>
-                <span>
-                  {evidenceProgress.collected_required}/{evidenceProgress.required_total} required
-                </span>
-              </div>
-              <div className="h-2 w-full overflow-hidden rounded bg-gray-200 dark:bg-gray-700">
-                <div
-                  className="h-2 bg-blue-600"
-                  style={{ width: `${Math.max(0, Math.min(100, evidenceProgress.ratio * 100))}%` }}
-                />
-              </div>
-            </div>
-          )}
         </div>
       </header>
 
@@ -312,137 +320,142 @@ export default function ChatPage() {
                 ) : (
                   <p className="whitespace-pre-wrap">{m.content}</p>
                 )}
-                {m.role === "assistant" && m.requests && m.requests.length > 0 && (
-                  <div className="mt-3 space-y-2">
-                    {m.requests.map((req) => {
-                      const isAnswered = answeredRequestIds.has(req.id);
-                      const isLatest = i === lastAssistantIndex && !loading;
-                      const isInteractive = isLatest && !isAnswered;
-
-                      if (!isInteractive) {
+                {m.role === "assistant" && m.requests && m.requests.length > 0 && (() => {
+                  const isLatest = i === messages.length - 1 && !loading;
+                  const visibleRequests = m.requests.slice(0, 1);
+                  const primaryRequest = visibleRequests[0];
+                  const shouldShowManualSubmit =
+                    primaryRequest != null &&
+                    (() => {
+                      const kind = getRequestInputKind(primaryRequest);
+                      return kind === "text" || kind === "number" || kind === "photo";
+                    })();
+                  const hasAllVisibleAnswers =
+                    visibleRequests.length > 0 &&
+                    visibleRequests.every((req) => Boolean(requestInputs[req.id]?.trim()));
+                  return (
+                    <div className="mt-3 space-y-2 border-t border-gray-200 pt-2 dark:border-gray-600">
+                      {visibleRequests.map((req, j) => {
+                        const inputKind = getRequestInputKind(req);
                         return (
-                          <div key={req.id} className="flex items-center gap-2 text-sm text-gray-400 dark:text-gray-500">
-                            <svg className="h-4 w-4 shrink-0" viewBox="0 0 20 20" fill="currentColor">
-                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                            </svg>
-                            <span className="line-through">{req.prompt}</span>
-                          </div>
-                        );
-                      }
-
-                      return (
-                        <div key={req.id}>
-                          {req.type === "reading" && (
-                            <div className="mt-1">
-                              {req.expectedInput && (
-                                <p className="mb-1.5 text-xs text-gray-500 dark:text-gray-400">
-                                  {req.expectedInput.unit && `Unit: ${req.expectedInput.unit}`}
-                                  {req.expectedInput.range &&
-                                    ` · Range: ${req.expectedInput.range.min}–${req.expectedInput.range.max}`}
-                                </p>
-                              )}
-                              <div className="flex items-center gap-1.5">
+                          <div
+                            key={j}
+                            className="rounded-lg border border-gray-200 bg-gray-50 p-2 text-sm dark:border-gray-600 dark:bg-gray-700/50"
+                          >
+                            <p className="font-medium text-gray-700 dark:text-gray-300">
+                              {req.prompt}
+                            </p>
+                            {isLatest && inputKind === "number" && (
+                              <div className="mt-2 flex items-center gap-2">
                                 <input
                                   type="number"
-                                  className="w-32 rounded-full border border-gray-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700"
-                                  placeholder={req.expectedInput?.unit ?? "value"}
+                                  placeholder={req.expectedInput?.range ? `${req.expectedInput.range.min}–${req.expectedInput.range.max}` : "Enter value"}
                                   min={req.expectedInput?.range?.min}
                                   max={req.expectedInput?.range?.max}
-                                  value={requestDrafts[req.id] ?? ""}
-                                  onChange={(e) =>
-                                    setRequestDrafts((prev) => ({
-                                      ...prev,
-                                      [req.id]: e.target.value,
-                                    }))
-                                  }
+                                  step="any"
+                                  className="w-32 rounded border border-gray-300 px-2 py-1 text-sm dark:border-gray-500 dark:bg-gray-700"
+                                  value={requestInputs[req.id] ?? ""}
+                                  onChange={(e) => updateRequestInput(req.id, e.target.value)}
                                   onKeyDown={(e) => {
-                                    if (e.key === "Enter" && requestDrafts[req.id]) {
+                                    if (e.key === "Enter") {
                                       e.preventDefault();
-                                      sendQuickReply(
-                                        `${req.id}: ${requestDrafts[req.id]}${req.expectedInput?.unit ? ` ${req.expectedInput.unit}` : ""}`,
-                                        req.id
-                                      );
+                                      submitRequestAnswers(visibleRequests);
                                     }
                                   }}
                                 />
-                                <button
-                                  type="button"
-                                  disabled={!requestDrafts[req.id]}
-                                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white transition-colors hover:bg-blue-700 disabled:opacity-30"
-                                  onClick={() =>
-                                    sendQuickReply(
-                                      requestDrafts[req.id]
-                                        ? `${req.id}: ${requestDrafts[req.id]}${req.expectedInput?.unit ? ` ${req.expectedInput.unit}` : ""}`
-                                        : req.prompt,
-                                      req.id
-                                    )
-                                  }
-                                >
-                                  <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                                    <path fillRule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clipRule="evenodd" />
-                                  </svg>
-                                </button>
+                                {req.expectedInput?.unit && (
+                                  <span className="text-xs text-gray-500">{req.expectedInput.unit}</span>
+                                )}
                               </div>
-                            </div>
-                          )}
-
-                          {req.expectedInput?.options && req.expectedInput.options.length > 0 && (
-                            <div className="mt-2 flex flex-wrap gap-2">
-                              {req.expectedInput.options.map((opt) => (
-                                <button
-                                  key={`${req.id}-${opt}`}
-                                  type="button"
-                                  className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-sm font-medium text-blue-700 transition-colors hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-900/30 dark:text-blue-300 dark:hover:bg-blue-900/50"
-                                  onClick={() => sendQuickReply(`${req.id}: ${opt}`, req.id)}
-                                >
-                                  {opt}
-                                </button>
-                              ))}
-                            </div>
-                          )}
-
-                          {req.type === "question" && !req.expectedInput?.options && (
-                            <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                              Reply in the message box below.
-                            </p>
-                          )}
-
-                          {req.type === "photo" && (
-                            <button
-                              type="button"
-                              onClick={() => fileInputRef.current?.click()}
-                              className="mt-2 inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700 transition-colors hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-900/30 dark:text-blue-300 dark:hover:bg-blue-900/50"
-                            >
-                              <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                                <path fillRule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd" />
-                              </svg>
-                              Upload photo
-                            </button>
-                          )}
-
-                          {req.type === "action" && !(req.expectedInput?.options && req.expectedInput.options.length > 0) && (
-                            <div className="mt-2 flex flex-wrap gap-2">
+                            )}
+                            {isLatest && inputKind === "options" && (
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                {(req.expectedInput?.options ?? []).map((opt) => (
+                                  <button
+                                    key={opt}
+                                    type="button"
+                                    onClick={() => submitSingleRequestAnswer(req, opt)}
+                                    className={`rounded-full border px-3 py-1 text-xs transition-colors ${
+                                      requestInputs[req.id] === opt
+                                        ? "border-blue-500 bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300"
+                                        : "border-gray-300 hover:bg-gray-100 dark:border-gray-500 dark:hover:bg-gray-600"
+                                    }`}
+                                  >
+                                    {opt}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                            {isLatest && inputKind === "boolean" && (
+                              <div className="mt-2 flex gap-2">
+                                {["Yes", "No"].map((opt) => (
+                                  <button
+                                    key={opt}
+                                    type="button"
+                                    onClick={() => submitSingleRequestAnswer(req, opt)}
+                                    className={`rounded border px-3 py-1 text-xs ${
+                                      requestInputs[req.id] === opt
+                                        ? opt === "Yes"
+                                          ? "border-green-500 bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300"
+                                          : "border-red-500 bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300"
+                                        : "border-gray-300 hover:bg-gray-100 dark:border-gray-500 dark:hover:bg-gray-600"
+                                    }`}
+                                  >
+                                    {opt}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                            {isLatest && inputKind === "text" && (
+                              <input
+                                type="text"
+                                placeholder="Type your answer..."
+                                className="mt-2 w-full rounded border border-gray-300 px-2 py-1 text-sm dark:border-gray-500 dark:bg-gray-700"
+                                value={requestInputs[req.id] ?? ""}
+                                onChange={(e) => updateRequestInput(req.id, e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") {
+                                    e.preventDefault();
+                                    submitRequestAnswers(visibleRequests);
+                                  }
+                                }}
+                              />
+                            )}
+                            {isLatest && inputKind === "photo" && (
                               <button
                                 type="button"
-                                className="rounded-full border border-green-200 bg-green-50 px-3 py-1.5 text-sm font-medium text-green-700 transition-colors hover:bg-green-100 dark:border-green-800 dark:bg-green-900/30 dark:text-green-300 dark:hover:bg-green-900/50"
-                                onClick={() => sendQuickReply(`${req.id}: done`, req.id)}
+                                onClick={() => {
+                                  setActivePhotoRequestId(req.id);
+                                  requestFileInputRef.current?.click();
+                                }}
+                                className="mt-2 rounded border border-gray-300 bg-white px-3 py-1 text-xs hover:bg-gray-50 dark:border-gray-500 dark:bg-gray-700 dark:hover:bg-gray-600"
                               >
-                                Done
+                                {files.length > 0 ? `${files.length} photo(s) selected` : "Attach photo"}
                               </button>
-                              <button
-                                type="button"
-                                className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100 dark:border-gray-600 dark:bg-gray-700/50 dark:text-gray-300 dark:hover:bg-gray-700"
-                                onClick={() => sendQuickReply(`${req.id}: unable`, req.id)}
-                              >
-                                Can&apos;t do this
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
+                            )}
+                            {!isLatest && inputKind === "number" && req.expectedInput && (
+                              <p className="mt-1 text-xs text-gray-500">
+                                {req.expectedInput.unit && `Unit: ${req.expectedInput.unit}`}
+                                {req.expectedInput.range &&
+                                  ` Range: ${req.expectedInput.range.min}–${req.expectedInput.range.max}`}
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })}
+                      {isLatest && shouldShowManualSubmit && (
+                        <button
+                          type="button"
+                          disabled={loading || !hasAllVisibleAnswers}
+                          onClick={() => submitRequestAnswers(visibleRequests)}
+                          className="w-full rounded-lg bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-700 disabled:opacity-50"
+                        >
+                          Submit answers
+                        </button>
+                      )}
+                    </div>
+                  );
+                })()}
                 {m.role === "assistant" && m.resolution && (
                   <div className="mt-3 space-y-2 border-t border-green-200 pt-2 dark:border-green-800">
                     <p className="font-medium text-green-800 dark:text-green-300">
@@ -460,25 +473,6 @@ export default function ChatPage() {
                         Why: {m.resolution.why}
                       </p>
                     )}
-                    <div className="mt-2 flex items-center gap-2">
-                      <span className="text-xs text-gray-500 dark:text-gray-400">
-                        Did this solve your issue?
-                      </span>
-                      <button
-                        type="button"
-                        className="rounded bg-green-600 px-2 py-1 text-xs text-white hover:bg-green-700"
-                        onClick={() => sendQuickReply("resolved")}
-                      >
-                        Yes
-                      </button>
-                      <button
-                        type="button"
-                        className="rounded bg-amber-600 px-2 py-1 text-xs text-white hover:bg-amber-700"
-                        onClick={() => sendQuickReply("not fixed")}
-                      >
-                        No
-                      </button>
-                    </div>
                   </div>
                 )}
                 {m.role === "assistant" && m.escalation_reason && (
@@ -569,6 +563,21 @@ export default function ChatPage() {
             className="hidden"
             onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
           />
+          <input
+            type="file"
+            ref={requestFileInputRef}
+            accept="image/*"
+            multiple
+            className="hidden"
+            onChange={(e) => {
+              const newFiles = Array.from(e.target.files ?? []);
+              setFiles((prev) => [...prev, ...newFiles]);
+              if (activePhotoRequestId) {
+                updateRequestInput(activePhotoRequestId, `${newFiles.length} photo(s) attached`);
+                setActivePhotoRequestId(null);
+              }
+            }}
+          />
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
@@ -582,7 +591,6 @@ export default function ChatPage() {
             </span>
           )}
           <input
-            ref={inputFieldRef}
             type="text"
             placeholder="Type your message..."
             className="flex-1 rounded-lg border border-gray-300 px-4 py-2 dark:border-gray-600 dark:bg-gray-800"

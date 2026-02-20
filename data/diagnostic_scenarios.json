@@ -1,0 +1,285 @@
+[
+  {
+    "id": "runny-warm-hopper",
+    "description": "Classic too-warm hopper causing runny product",
+    "expectedLabel": "too_runny",
+    "expectedCause": "hopper_too_warm",
+    "expectedOutcome": "resolved",
+    "machineModel": "6210",
+    "turns": [
+      { "user": "Soft serve is really runny, won't hold its shape at all" },
+      { "user": "It's a Spaceman 6210" },
+      { "user": "The hopper temperature shows -1°C" },
+      { "user": "Yes, there's at least 6 inches of clearance on all sides" },
+      { "user": "We cleaned it last week" }
+    ],
+    "expectedEvidenceIds": ["machine_model", "hopper_temp", "clearance_ok", "last_clean"]
+  },
+  {
+    "id": "runny-poor-airflow",
+    "description": "Poor airflow / clearance causing runny product",
+    "expectedLabel": "too_runny",
+    "expectedCause": "poor_airflow",
+    "expectedOutcome": "resolved",
+    "machineModel": "6220",
+    "turns": [
+      { "user": "Product is thin and dripping off the cone right away" },
+      { "user": "Spaceman 6220" },
+      { "user": "Temperature shows -6°C" },
+      { "user": "No, the machine is pushed right against the wall with boxes stacked on both sides" },
+      { "user": "We cleaned it 3 days ago" }
+    ],
+    "expectedEvidenceIds": ["machine_model", "hopper_temp", "clearance_ok"]
+  },
+  {
+    "id": "runny-worn-scrapers",
+    "description": "Worn scraper blades causing runny product",
+    "expectedLabel": "too_runny",
+    "expectedCause": "worn_scrapers",
+    "expectedOutcome": "resolved",
+    "turns": [
+      { "user": "Our soft serve has been getting progressively more watery over the past week" },
+      { "user": "Temperature is -5°C, seems normal" },
+      { "user": "Yes, plenty of clearance" },
+      { "user": "Cleaned yesterday" },
+      { "user": "Scraper blades look clearly worn down" }
+    ],
+    "expectedEvidenceIds": ["hopper_temp", "clearance_ok", "last_clean", "scraper_condition"]
+  },
+  {
+    "id": "runny-over-pulling",
+    "description": "Exceeding machine pull capacity",
+    "expectedLabel": "too_runny",
+    "expectedCause": "over_pulling",
+    "expectedOutcome": "resolved",
+    "turns": [
+      { "user": "We're running a promotion and the soft serve is getting runny, especially in the afternoon" },
+      { "user": "Temperature reads -4°C" },
+      { "user": "Good clearance, yes" },
+      { "user": "We've been pulling about 120 servings per hour" }
+    ],
+    "expectedEvidenceIds": ["hopper_temp", "clearance_ok", "pulls_per_hour"]
+  },
+  {
+    "id": "runny-wrong-mix",
+    "description": "Wrong mix ratio causing runny product",
+    "expectedLabel": "too_runny",
+    "expectedCause": "wrong_mix_ratio",
+    "expectedOutcome": "resolved",
+    "turns": [
+      { "user": "New employee mixed the product and now it's coming out watery" },
+      { "user": "Temperature looks fine at -6°C" },
+      { "user": "Yes good clearance" },
+      { "user": "About 30 pulls an hour" },
+      { "user": "They used 2 parts water to 1 part mix instead of 1:1" }
+    ],
+    "expectedEvidenceIds": ["hopper_temp", "clearance_ok", "pulls_per_hour", "mix_ratio"]
+  },
+  {
+    "id": "escalation-electrical",
+    "description": "Safety escalation — electrical smell",
+    "expectedLabel": "too_runny",
+    "expectedCause": null,
+    "expectedOutcome": "escalated",
+    "turns": [
+      { "user": "Product is thin and there's a weird electrical smell coming from the back of the machine" }
+    ],
+    "expectedEvidenceIds": []
+  },
+  {
+    "id": "escalation-error-code",
+    "description": "Safety escalation — error code reported",
+    "expectedLabel": "too_runny",
+    "expectedCause": null,
+    "expectedOutcome": "escalated",
+    "turns": [
+      { "user": "Product is runny and the display shows error code E5" }
+    ],
+    "expectedEvidenceIds": []
+  },
+  {
+    "id": "escalation-stall",
+    "description": "Stall escalation — user can't provide evidence",
+    "expectedLabel": "too_runny",
+    "expectedCause": null,
+    "expectedOutcome": "escalated",
+    "turns": [
+      { "user": "It's runny" },
+      { "user": "I don't know, I can't check that right now" },
+      { "user": "I don't have access to the temperature display" },
+      { "user": "I really can't check any of that, can you just tell me what's wrong?" }
+    ],
+    "expectedEvidenceIds": []
+  },
+  {
+    "id": "icy-from-new-mix",
+    "description": "Icy texture after changing mix brand",
+    "expectedLabel": "too_icy",
+    "expectedCause": null,
+    "expectedOutcome": "resolved",
+    "turns": [
+      { "user": "Changed to a new mix supplier and now the product is icy and grainy" },
+      { "user": "Temperature is -7°C" },
+      { "user": "Yes, plenty of space around the machine" },
+      { "user": "Cleaned it before switching mixes" },
+      { "user": "We used the ratio on the new bag, 1 part mix to 1.5 parts water" }
+    ],
+    "expectedEvidenceIds": ["hopper_temp", "clearance_ok", "last_clean", "mix_ratio"]
+  },
+  {
+    "id": "thick-overcooling",
+    "description": "Over-cooling causing thick product",
+    "expectedLabel": "too_thick",
+    "expectedCause": null,
+    "expectedOutcome": "resolved",
+    "turns": [
+      { "user": "Machine is making the product way too thick, hard to pull the handle" },
+      { "user": "Temperature shows -12°C" },
+      { "user": "Good clearance all around" },
+      { "user": "Cleaned last week" }
+    ],
+    "expectedEvidenceIds": ["hopper_temp", "clearance_ok", "last_clean"]
+  },
+  {
+    "id": "thick-low-ambient",
+    "description": "Thick product in cold environment",
+    "expectedLabel": "too_thick",
+    "expectedCause": null,
+    "expectedOutcome": "resolved",
+    "turns": [
+      { "user": "Soft serve is too hard, especially in the morning when the shop is cold" },
+      { "user": "Temperature is -9°C" },
+      { "user": "Yes, lots of clearance" },
+      { "user": "We haven't served any yet today, it's only 7am" }
+    ],
+    "expectedEvidenceIds": ["hopper_temp", "clearance_ok"]
+  },
+  {
+    "id": "good-texture-verification",
+    "description": "User verifying good texture, should not diagnose a problem",
+    "expectedLabel": "good_texture",
+    "expectedCause": null,
+    "expectedOutcome": "resolved",
+    "turns": [
+      { "user": "Our soft serve seems perfect, just want to make sure the machine settings are correct" },
+      { "user": "Temperature is -6°C" },
+      { "user": "Yes, good clearance" }
+    ],
+    "expectedEvidenceIds": ["hopper_temp", "clearance_ok"]
+  },
+  {
+    "id": "runny-blocked-air",
+    "description": "Blocked air tubes causing runny product",
+    "expectedLabel": "too_runny",
+    "expectedCause": "blocked_air_tubes",
+    "expectedOutcome": "resolved",
+    "turns": [
+      { "user": "Soft serve has been getting less fluffy and more watery over the past few days" },
+      { "user": "Temperature is normal, -5°C" },
+      { "user": "Good clearance" },
+      { "user": "About 2 months since last deep clean" },
+      { "user": "Normal amount, maybe 40 per hour" }
+    ],
+    "expectedEvidenceIds": ["hopper_temp", "clearance_ok", "last_clean", "pulls_per_hour"]
+  },
+  {
+    "id": "runny-with-machine-model",
+    "description": "Runny product with specific machine model context",
+    "expectedLabel": "too_runny",
+    "expectedCause": "hopper_too_warm",
+    "expectedOutcome": "resolved",
+    "machineModel": "6228",
+    "turns": [
+      { "user": "SM-6228 producing very thin soft serve today" },
+      { "user": "The display shows 2°C which seems high" },
+      { "user": "Yes there's clearance" },
+      { "user": "Cleaned this morning" }
+    ],
+    "expectedEvidenceIds": ["hopper_temp", "clearance_ok", "last_clean"]
+  },
+  {
+    "id": "icy-overcooled-cylinder",
+    "description": "Ice crystals from over-frozen cylinder",
+    "expectedLabel": "too_icy",
+    "expectedCause": null,
+    "expectedOutcome": "resolved",
+    "turns": [
+      { "user": "Product has visible ice chunks, customers are complaining about graininess" },
+      { "user": "Temperature reads -11°C" },
+      { "user": "Yes" },
+      { "user": "Cleaned 2 days ago" },
+      { "user": "About 20 servings per hour, pretty slow day" }
+    ],
+    "expectedEvidenceIds": ["hopper_temp", "clearance_ok", "last_clean", "pulls_per_hour"]
+  },
+  {
+    "id": "thick-no-service",
+    "description": "Product solidified from sitting too long without service",
+    "expectedLabel": "too_thick",
+    "expectedCause": null,
+    "expectedOutcome": "resolved",
+    "turns": [
+      { "user": "Haven't served anything all day and now the product is rock hard" },
+      { "user": "Temperature is -10°C" },
+      { "user": "Good clearance" },
+      { "user": "0 pulls today, it's been idle since this morning" }
+    ],
+    "expectedEvidenceIds": ["hopper_temp", "clearance_ok", "pulls_per_hour"]
+  },
+  {
+    "id": "icy-dirty-scraper",
+    "description": "Icy product from dirty scraper blades",
+    "expectedLabel": "too_icy",
+    "expectedCause": null,
+    "expectedOutcome": "resolved",
+    "turns": [
+      { "user": "Getting ice flakes in the soft serve, it was fine yesterday" },
+      { "user": "-7°C" },
+      { "user": "Yes clearance is fine" },
+      { "user": "Cleaned about a week ago" },
+      { "user": "Some wear visible on the blades" }
+    ],
+    "expectedEvidenceIds": ["hopper_temp", "clearance_ok", "last_clean", "scraper_condition"]
+  },
+  {
+    "id": "runny-high-volume-event",
+    "description": "Runny product during high-volume event",
+    "expectedLabel": "too_runny",
+    "expectedCause": "over_pulling",
+    "expectedOutcome": "resolved",
+    "machineModel": "6210-C",
+    "turns": [
+      { "user": "We're at a festival and the machine can't keep up, product getting runnier" },
+      { "user": "-3°C, climbing from -6 earlier" },
+      { "user": "It's in a tent, good clearance" },
+      { "user": "Probably 150+ servings in the last hour" }
+    ],
+    "expectedEvidenceIds": ["hopper_temp", "clearance_ok", "pulls_per_hour"]
+  },
+  {
+    "id": "escalation-refrigerant",
+    "description": "Safety escalation — refrigerant leak suspected",
+    "expectedLabel": "too_runny",
+    "expectedCause": null,
+    "expectedOutcome": "escalated",
+    "turns": [
+      { "user": "Product is runny and I think there might be a refrigerant leak, there's a hissing sound" }
+    ],
+    "expectedEvidenceIds": []
+  },
+  {
+    "id": "icy-after-power-outage",
+    "description": "Icy texture after power interruption",
+    "expectedLabel": "too_icy",
+    "expectedCause": null,
+    "expectedOutcome": "resolved",
+    "turns": [
+      { "user": "We had a power outage last night and now the product has ice crystals in it" },
+      { "user": "-8°C, just came back to normal" },
+      { "user": "Yes, good clearance" },
+      { "user": "Cleaned before the outage, 2 days ago" },
+      { "user": "Only pulled about 10 servings so far today" }
+    ],
+    "expectedEvidenceIds": ["hopper_temp", "clearance_ok", "last_clean", "pulls_per_hour"]
+  }
+]

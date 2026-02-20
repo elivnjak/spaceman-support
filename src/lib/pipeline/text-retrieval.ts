@@ -94,12 +94,14 @@ export async function searchDocChunks(
     ? raw
     : (raw as { rows?: Record<string, unknown>[] }).rows ?? [];
 
-  return rows.map((r: Record<string, unknown>) => ({
-    id: r.id as string,
-    documentId: r.document_id as string,
-    chunkIndex: Number(r.chunk_index),
-    content: r.content as string,
-    metadata: r.metadata,
-    similarity: Number(r.similarity),
-  }));
+  return rows
+    .map((r: Record<string, unknown>) => ({
+      id: r.id as string,
+      documentId: r.document_id as string,
+      chunkIndex: Number(r.chunk_index),
+      content: r.content as string,
+      metadata: r.metadata,
+      similarity: Number(r.similarity),
+    }))
+    .filter((c) => c.similarity >= CONFIDENCE_CONFIG.minChunkScore);
 }

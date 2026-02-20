@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 import { LLM_CONFIG } from "@/lib/config";
-import { validateGrounding, replaceWithCanonicalAndSort, type PlaybookStep, type LLMStep } from "./validate-grounding";
+import { validateGrounding, enforcePlaybookInstructions, type PlaybookStep, type LLMStep } from "./validate-grounding";
 
 function getOpenAI() {
   const key = process.env.OPENAI_API_KEY;
@@ -34,62 +34,14 @@ const SYSTEM_PROMPT = `You are a support assistant. You must ONLY use the provid
 Output valid JSON with this exact structure (no other text):
 {
   "diagnosis": "short diagnosis",
-  "steps": [{"step_id": "<must be one of the provided step_ids>", "instruction": "what to do", "check": "how to verify (empty string if not applicable)"}],
+  "steps": [{"step_id": "<must be one of the provided step_ids>", "instruction": "what to do", "check": "how to verify"}],
   "why": "brief explanation citing the match and playbook",
-  "retakeTips": ["optional tip if photo was unclear"] or [],
-  "citations": [{"chunkId": "id", "reason": "why cited"}] or [],
-  "followUpQuestions": ["optional question 1", "optional question 2"] or []
+  "retakeTips": ["optional tip if photo was unclear"],
+  "citations": [{"chunkId": "id", "reason": "why cited"}],
+  "followUpQuestions": ["optional question 1", "optional question 2"]
 }
 Every step_id in "steps" MUST be one of the step_ids from the playbook.
 When there are multiple possible causes (multiple steps), include 1–3 short followUpQuestions that help the user narrow down which cause applies (e.g. "Have you been pulling a lot of product in a short time?", "When did you last clean the air tube?"). Omit followUpQuestions or use [] when a single cause is clear.`;
-
-const GENERATE_JSON_SCHEMA = {
-  name: "generate_response",
-  schema: {
-    type: "object",
-    additionalProperties: false,
-    properties: {
-      diagnosis: { type: "string" },
-      steps: {
-        type: "array",
-        items: {
-          type: "object",
-          additionalProperties: false,
-          properties: {
-            step_id: { type: "string" },
-            instruction: { type: "string" },
-            check: { type: "string" },
-          },
-          required: ["step_id", "instruction", "check"],
-        },
-      },
-      why: { type: "string" },
-      retakeTips: { type: "array", items: { type: "string" } },
-      citations: {
-        type: "array",
-        items: {
-          type: "object",
-          additionalProperties: false,
-          properties: {
-            chunkId: { type: "string" },
-            reason: { type: "string" },
-          },
-          required: ["chunkId", "reason"],
-        },
-      },
-      followUpQuestions: { type: "array", items: { type: "string" } },
-    },
-    required: [
-      "diagnosis",
-      "steps",
-      "why",
-      "retakeTips",
-      "citations",
-      "followUpQuestions",
-    ],
-  },
-  strict: true,
-} as const;
 
 export async function generateAnswer(
   input: GenerateInput,
@@ -125,11 +77,7 @@ export async function generateAnswer(
       { role: "system", content: SYSTEM_PROMPT },
       { role: "user", content: userContent },
     ],
-    response_format: {
-      type: "json_schema",
-      json_schema: GENERATE_JSON_SCHEMA,
-    } as never,
-    temperature: 0,
+    response_format: { type: "json_object" },
   });
   const text = res.choices[0]?.message?.content;
   if (!text) throw new Error("Empty generation response");
@@ -147,12 +95,24 @@ export async function generateAnswerWithValidation(
     check: s.check,
   }));
   const validation = validateGrounding(llmSteps, input.playbookSteps);
-  if (!validation.valid) {
+
+  if (validation.invalidStepIds.length > 0) {
     result = await generateAnswer(input, true);
   }
-  result.steps = replaceWithCanonicalAndSort(
-    result.steps.map((s) => ({ step_id: s.step_id, instruction: s.instruction, check: s.check })),
+
+  // Always enforce playbook instructions to prevent instruction drift
+  result.steps = enforcePlaybookInstructions(
+    result.steps.map((s) => ({
+      step_id: s.step_id,
+      instruction: s.instruction,
+      check: s.check,
+    })),
     input.playbookSteps
-  );
+  ).map((s) => ({
+    step_id: s.step_id,
+    instruction: s.instruction ?? "",
+    check: s.check,
+  }));
+
   return result;
 }

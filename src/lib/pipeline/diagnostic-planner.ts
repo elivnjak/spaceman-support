@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 import { LLM_CONFIG, DIAGNOSTIC_CONFIG } from "@/lib/config";
-import { validateGrounding, type PlaybookStep, type LLMStep } from "./validate-grounding";
+import { validateGrounding, enforcePlaybookInstructions, type PlaybookStep, type LLMStep } from "./validate-grounding";
 
 function getOpenAI() {
   const key = process.env.OPENAI_API_KEY;
@@ -22,38 +22,6 @@ export type CandidateCause = {
   cause: string;
   likelihood: "high" | "medium" | "low";
   rulingEvidence: string[];
-  supportRules?: {
-    evidenceId: string;
-    operator:
-      | ">"
-      | ">="
-      | "<"
-      | "<="
-      | "="
-      | "!="
-      | "in"
-      | "not_in"
-      | "contains"
-      | "not_contains";
-    value: string | number | boolean | Array<string | number | boolean>;
-    weight?: number;
-  }[];
-  contradictionRules?: {
-    evidenceId: string;
-    operator:
-      | ">"
-      | ">="
-      | "<"
-      | "<="
-      | "="
-      | "!="
-      | "in"
-      | "not_in"
-      | "contains"
-      | "not_contains";
-    value: string | number | boolean | Array<string | number | boolean>;
-    weight?: number;
-  }[];
 };
 export type DiagnosticQuestionItem = {
   id: string;
@@ -133,6 +101,8 @@ export type PlannerOutput = {
     why: string;
   };
   escalation_reason?: string;
+  /** When evidence contradicts current playbook, suggest switching to a different label */
+  suggested_label_switch?: string;
 };
 
 export type ActionRecord = {
@@ -154,17 +124,10 @@ export type DiagnosticPlannerInput = {
   actions: ActionRecord[];
   lastUserMessage: string;
   machineModel?: string | null;
+  /** Image buffers from the current turn to send as vision content */
+  imageBuffers?: Buffer[];
   /** Outstanding request IDs from previous turn (so LLM can map user reply to evidence) */
   outstandingRequestIds?: string[];
-  /** Pre-computed next best actions/evidence prompts ranked by information gain. */
-  suggestedNextActions?: {
-    id: string;
-    type: string;
-    description: string;
-    actionId?: string;
-  }[];
-  /** Mid-session image evidence summary from CLIP label matches. */
-  newImageEvidenceSummary?: string;
 };
 
 function buildStateSummary(input: DiagnosticPlannerInput): string {
@@ -252,7 +215,8 @@ You must respond with valid JSON only, no other text. Schema:
     { "evidenceId": "string (from checklist)", "value": any, "confidence": "exact" | "approximate" | "uncertain" }
   ],
   "resolution": { "causeId": "string", "diagnosis": "string", "steps": [{"step_id": "string", "instruction": "string", "check": "string?"}], "why": "string" } (only when phase is resolving),
-  "escalation_reason": "string (only when phase is escalated)"
+  "escalation_reason": "string (only when phase is escalated)",
+  "suggested_label_switch": "string (optional: if the user's symptoms clearly indicate a DIFFERENT issue category than this playbook covers, set this to the label_id that would be more appropriate. Only use this when evidence strongly contradicts the current playbook's scope.)"
 }
 Rules: Max 3 items in requests. When phase is "resolving", resolution.steps must only use step_ids from the playbook. When phase is "escalated", set escalation_reason. Extract evidence from the user's last message into evidence_extracted when they answered a request. When you are still gathering info or diagnosing and there are more evidence items or checks from the playbook to do, always include at least one request and make the message lead into it (e.g. "Thanks for checking. Next, please…"). Do not end the turn with only a meta-comment about updating hypotheses.
 
@@ -303,19 +267,27 @@ ${input.lastUserMessage}
 ${input.machineModel ? `\nMachine model: ${input.machineModel}` : ""}
 
 ${input.outstandingRequestIds?.length ? `Outstanding request IDs from your previous turn: ${input.outstandingRequestIds.join(", ")}. Map the user's reply to evidence_extracted using these IDs.` : ""}
-${input.suggestedNextActions?.length ? `\nSuggested next actions (ranked):\n${input.suggestedNextActions.map((a) => `- ${a.id} (${a.type}): ${a.description}${a.actionId ? ` [actionId=${a.actionId}]` : ""}`).join("\n")}\nPrefer these unless there is a clear safety reason not to.` : ""}
-${input.newImageEvidenceSummary ? `\nNew image evidence this turn: ${input.newImageEvidenceSummary}` : ""}
 
 Respond with JSON only.`;
+
+  const hasImages = input.imageBuffers && input.imageBuffers.length > 0;
+  const userContent: OpenAI.Chat.Completions.ChatCompletionContentPart[] = hasImages
+    ? [
+        ...input.imageBuffers!.map((buf) => ({
+          type: "image_url" as const,
+          image_url: { url: `data:image/jpeg;base64,${buf.toString("base64")}` },
+        })),
+        { type: "text" as const, text: userPrompt },
+      ]
+    : [{ type: "text" as const, text: userPrompt }];
 
   const res = await getOpenAI().chat.completions.create({
     model: LLM_CONFIG.diagnosticPlannerModel,
     messages: [
       { role: "system", content: systemPrompt },
-      { role: "user", content: userPrompt },
+      { role: "user", content: userContent },
     ],
     response_format: { type: "json_object" },
-    temperature: 0,
   });
   const text = res.choices[0]?.message?.content;
   if (!text) throw new Error("Empty diagnostic planner response");
@@ -378,7 +350,6 @@ Answer the user's question in one or two short paragraphs. Use only the document
       { role: "system", content: systemPrompt },
       { role: "user", content: userPrompt },
     ],
-    temperature: 0,
   });
   const text = res.choices[0]?.message?.content?.trim();
   return text ?? "I don't have specific information on that in the documentation. If you need more detail, please contact support.";
@@ -389,46 +360,79 @@ export function validateAndSanitizePlannerOutput(
   output: PlannerOutput,
   playbook: DiagnosticPlaybook,
   actionsById: Map<string, ActionRecord>,
-  forEndUser: boolean,
-  currentEvidence?: Record<string, EvidenceRecord>
+  forEndUser: boolean
 ): { output: PlannerOutput; errors: string[] } {
   const errors: string[] = [];
   const sanitized = { ...output, requests: [...output.requests] };
 
-  if (sanitized.requests.length > DIAGNOSTIC_CONFIG.maxRequestsPerTurn) {
-    sanitized.requests = sanitized.requests.slice(0, DIAGNOSTIC_CONFIG.maxRequestsPerTurn);
-    errors.push("Truncated requests to max per turn");
+  const maxRequestsForChat = 1;
+  const allowedMax = Math.min(
+    DIAGNOSTIC_CONFIG.maxRequestsPerTurn,
+    maxRequestsForChat
+  );
+  if (sanitized.requests.length > allowedMax) {
+    sanitized.requests = sanitized.requests.slice(0, allowedMax);
+    errors.push("Truncated requests to one-at-a-time chat flow");
   }
 
   const allowedIds = new Set(playbook.evidenceChecklist?.map((e) => e.id) ?? []);
   playbook.evidenceChecklist?.forEach((e) => e.actionId && allowedIds.add(e.actionId));
 
   const filtered: PlannerRequest[] = [];
-  const hasPowerOffConfirmation = Boolean(
-    currentEvidence &&
-      Object.keys(currentEvidence).some((k) =>
-        k.toLowerCase().includes("power_off")
-      )
-  );
   for (const req of sanitized.requests) {
+    const nextReq: PlannerRequest = {
+      ...req,
+      expectedInput: req.expectedInput ? { ...req.expectedInput } : undefined,
+    };
     const action = actionsById.get(req.id);
     const isEvidenceId = playbook.evidenceChecklist?.some((e) => e.id === req.id);
+    const checklistItem = playbook.evidenceChecklist?.find((e) => e.id === req.id);
+
+    if (!nextReq.expectedInput && action?.expectedInput && typeof action.expectedInput === "object") {
+      nextReq.expectedInput = action.expectedInput as PlannerRequest["expectedInput"];
+    }
+
+    const expectedType = nextReq.expectedInput?.type?.toLowerCase();
+    if (expectedType === "number") nextReq.type = "reading";
+    else if (expectedType === "photo") nextReq.type = "photo";
+    else if (expectedType === "boolean") {
+      nextReq.type = "question";
+      nextReq.expectedInput = {
+        ...nextReq.expectedInput,
+        type: "boolean",
+        options:
+          nextReq.expectedInput?.options?.length
+            ? nextReq.expectedInput.options
+            : ["Yes", "No"],
+      };
+    } else if (expectedType === "enum") {
+      nextReq.type = "question";
+    } else if (expectedType === "text") {
+      nextReq.type = "question";
+    }
+
+    if (!nextReq.expectedInput && checklistItem?.type === "confirmation") {
+      nextReq.type = "question";
+      nextReq.expectedInput = { type: "boolean", options: ["Yes", "No"] };
+    }
+
+    if (!nextReq.prompt?.trim() && action?.instructions) {
+      nextReq.prompt = action.instructions;
+    }
+
     if (action) {
       if (forEndUser && action.safetyLevel === "technician_only") {
         errors.push(`Action ${req.id} is technician_only; skipped for end user`);
         continue;
       }
-      if (forEndUser && action.safetyLevel === "caution" && !hasPowerOffConfirmation) {
-        errors.push(
-          `Action ${req.id} is caution and requires power_off confirmation; skipped`
-        );
-        continue;
+      if (forEndUser && action.safetyLevel === "caution") {
+        nextReq.prompt = `⚠️ Caution: ${nextReq.prompt}`;
       }
     } else if (!isEvidenceId && !allowedIds.has(req.id)) {
       errors.push(`Request id ${req.id} is not in playbook evidence checklist or actions`);
       continue;
     }
-    filtered.push(req);
+    filtered.push(nextReq);
   }
   sanitized.requests = filtered;
 
@@ -438,13 +442,40 @@ export function validateAndSanitizePlannerOutput(
       output.resolution.steps as LLMStep[],
       playbookSteps
     );
-    if (!validation.valid) {
+    if (validation.invalidStepIds.length > 0) {
       errors.push(`Invalid step_ids: ${validation.invalidStepIds.join(", ")}`);
       sanitized.phase = "diagnosing";
       sanitized.resolution = undefined;
+    } else {
+      if (validation.driftedStepIds.length > 0) {
+        errors.push(`Instruction drift detected on: ${validation.driftedStepIds.join(", ")}; enforcing playbook text`);
+      }
+      sanitized.resolution = {
+        ...sanitized.resolution!,
+        steps: enforcePlaybookInstructions(
+          sanitized.resolution!.steps as LLMStep[],
+          playbookSteps
+        ).map((s) => ({
+          step_id: s.step_id,
+          instruction: s.instruction ?? "",
+          check: s.check,
+        })),
+      };
     }
   }
 
   return { output: sanitized, errors };
 }
 
+/** Check if user message contains any escalation trigger text (case-insensitive substring). */
+export function checkEscalationTriggers(
+  userMessage: string,
+  triggers: EscalationTriggerItem[] | null | undefined
+): { triggered: boolean; matched?: EscalationTriggerItem } {
+  if (!triggers?.length) return { triggered: false };
+  const lower = userMessage.toLowerCase();
+  for (const t of triggers) {
+    if (lower.includes(t.trigger.toLowerCase())) return { triggered: true, matched: t };
+  }
+  return { triggered: false };
+}
