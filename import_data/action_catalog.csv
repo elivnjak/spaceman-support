@@ -1,37 +1,37 @@
-action_id,name,description,type
-take_photo_product,Photo of product/texture,Take a clear photo of the dispensed product (close + mid shot).,photo
-take_photo_display,Photo of display/alarm,Take a clear photo of the machine display showing mode/alarm/error.,photo
-take_photo_leak_area,Photo of leak area,Take a clear photo of where liquid/product is leaking (include drip tray/under machine).,photo
-check_mode_freeze,Confirm FREEZE mode,Confirm the machine is in FREEZE mode (not WASH/STANDBY).,confirmation
-check_mode_wash,Confirm WASH mode,Confirm the machine is in WASH mode (for cleaning only).,confirmation
-check_mix_level,Check mix/product level,Check hopper/bowl level is above low-mix sensor/min line.,observation
-confirm_prechilled_mix,Confirm mix is pre-chilled,Confirm refill mix/product was cooled in a fridge/coolroom before pouring in.,confirmation
-confirm_no_frozen_chunks_added,Confirm no frozen chunks added,Confirm no frozen product/chunks/ice were added into hopper/bowl.,confirmation
-read_hopper_temp_display,Read hopper temperature,Read and report hopper temperature from display (if available).,reading
-read_cylinder_temp_display,Read cylinder/barrel temperature,Read and report cylinder/barrel temperature from display (if available).,reading
-read_viscosity_setting,Read viscosity setting,Read and report the current viscosity/firmness setting (if available).,reading
-read_error_code,Read error code,Read and report the exact error/alarm code and any flashing lights.,reading
-check_airflow_clearance,Check airflow/clearance,Confirm vents are unobstructed and clearance is maintained around the machine.,observation
-inspect_condenser_for_dust,Inspect condenser for dust,Visually inspect condenser/air intake for dust/grease build-up (no panel removal).,observation
-clean_external_air_filter,Clean external air filter/vent,Clean accessible air filter/vent grill per operator manual (no tools/panels).,action
-confirm_recent_condenser_cleaning,Confirm condenser cleaning,Confirm when condenser was last professionally cleaned.,confirmation
-inspect_air_tube_orientation,Inspect air tube orientation,Check air tube is installed correctly (hole facing down where applicable).,observation
-clean_air_tube_starcap,Clean air tube/star cap,Remove and clean air tube/star cap with brushes as per cleaning procedure.,action
-confirm_last_full_clean,Confirm last full clean,Confirm last full disassembly + wash + sanitise (date/time).,confirmation
-inspect_drip_tray,Inspect drip tray,Check drip tray level and whether leak is steady or occasional.,observation
-inspect_o_rings_gaskets,Inspect O-rings/gaskets,Inspect door gasket and draw-valve O-rings for damage/flat spots.,observation
-lubricate_o_rings_gaskets,Lubricate seals,Lubricate O-rings/gaskets with food-grade lubricant per manual.,action
-perform_rinse_and_sanitise_cycle,Run rinse/sanitise cycle,Run rinse and sanitise cycle per operator manual.,action
-check_product_brix,Check product brix,Measure and report brix with refractometer (or confirm recipe brix spec).,reading
-check_product_recipe_ratio,Confirm recipe ratio,Confirm product was mixed to the correct water:syrup/base ratio.,confirmation
-confirm_ambient_heat_sunlight,Confirm hot environment,"Confirm machine location is hot, outdoors, or in direct sunlight.",observation
-confirm_high_volume_serving,Confirm high-volume serving,Confirm serving volume is high/continuous with little recovery time.,confirmation
-confirm_idle_time,Confirm idle time,Confirm machine sat idle (no draws) for >30 minutes.,confirmation
-attempt_reset,Press RESET,Press the RESET button on the front control panel (if applicable).,action
-power_cycle_off_on,Power cycle,"Turn machine OFF, wait 60 seconds, turn ON.",action
-check_power_supply_outlet,Check outlet power,Confirm the outlet switch is ON and the plug is fully seated.,observation
-confirm_breaker_tripped,Check breaker/RCD,Confirm if breaker/RCD has tripped for the circuit.,observation
-listen_for_compressor_fan,Listen for compressor/fan,Listen for compressor and condenser fan starting a few seconds after FREEZE engaged.,observation
-check_hopper_lid_closed,Confirm lid closed,Confirm hopper/bowl lid is properly seated/closed.,confirmation
-check_door_locked,Confirm door/handle locked,Confirm dispensing door and handles are locked/latched correctly.,confirmation
-take_photo_serial_plate,Photo of model/serial plate,Take a clear photo of the machine data plate showing model and serial number.,photo
+action_id,name,description,type,expected_input_type,expected_input_unit,expected_input_min,expected_input_max,expected_input_options,safety_level
+take_photo_product,Photo of product/texture,Take a clear photo of the dispensed product (close + mid shot).,photo,photo,,,,,safe
+take_photo_display,Photo of display/alarm,Take a clear photo of the machine display showing mode/alarm/error.,photo,photo,,,,,safe
+take_photo_leak_area,Photo of leak area,Take a clear photo of where liquid/product is leaking (include drip tray/under machine).,photo,photo,,,,,safe
+check_mode_freeze,Confirm FREEZE mode,Confirm the machine is in FREEZE mode (not WASH/STANDBY).,confirmation,boolean,,,,Yes|No,safe
+check_mode_wash,Confirm WASH mode,Confirm the machine is in WASH mode (for cleaning only).,confirmation,boolean,,,,Yes|No,safe
+check_mix_level,Check mix/product level,Check hopper/bowl level is above low-mix sensor/min line.,observation,enum,,,,Above minimum line|Near minimum line|Below minimum line|Unknown,safe
+confirm_prechilled_mix,Confirm mix is pre-chilled,Confirm refill mix/product was cooled in a fridge/coolroom before pouring in.,confirmation,boolean,,,,Yes|No,safe
+confirm_no_frozen_chunks_added,Confirm no frozen chunks added,Confirm no frozen product/chunks/ice were added into hopper/bowl.,confirmation,boolean,,,,Yes|No,safe
+read_hopper_temp_display,Read hopper temperature,Read and report hopper temperature from display (if available).,reading,number,C,-20,30,,safe
+read_cylinder_temp_display,Read cylinder/barrel temperature,Read and report cylinder/barrel temperature from display (if available).,reading,number,C,-30,30,,safe
+read_viscosity_setting,Read viscosity setting,Read and report the current viscosity/firmness setting (if available).,reading,number,setting,0,100,,safe
+read_error_code,Read error code,Read and report the exact error/alarm code and any flashing lights.,reading,text,,,,,safe
+check_airflow_clearance,Check airflow/clearance,Confirm vents are unobstructed and clearance is maintained around the machine.,observation,enum,,,,Clear with adequate space|Partially obstructed or tight clearance|Blocked or no clearance,safe
+inspect_condenser_for_dust,Inspect condenser for dust,Visually inspect condenser/air intake for dust/grease build-up (no panel removal).,observation,enum,,,,No visible build-up|Light dust build-up|Heavy dust or grease build-up,safe
+clean_external_air_filter,Clean external air filter/vent,Clean accessible air filter/vent grill per operator manual (no tools/panels).,action,enum,,,,Completed|Unable to complete safely|Not accessible,caution
+confirm_recent_condenser_cleaning,Confirm condenser cleaning,Confirm when condenser was last professionally cleaned.,confirmation,enum,,,,Cleaned within 30 days|Cleaned over 30 days ago|Unknown,safe
+inspect_air_tube_orientation,Inspect air tube orientation,Check air tube is installed correctly (hole facing down where applicable).,observation,enum,,,,Correct orientation|Incorrect orientation|Unsure,safe
+clean_air_tube_starcap,Clean air tube/star cap,Remove and clean air tube/star cap with brushes as per cleaning procedure.,action,enum,,,,Completed|Unable to complete safely|Not sure,caution
+confirm_last_full_clean,Confirm last full clean,Confirm last full disassembly + wash + sanitise (date/time).,confirmation,enum,,,,Within last 72 hours|More than 72 hours ago|Unknown,safe
+inspect_drip_tray,Inspect drip tray,Check drip tray level and whether leak is steady or occasional.,observation,enum,,,,Dry or no leak|Occasional drips|Steady leak,safe
+inspect_o_rings_gaskets,Inspect O-rings/gaskets,Inspect door gasket and draw-valve O-rings for damage/flat spots.,observation,enum,,,,No visible wear|Worn or flattened|Damaged or cracked,safe
+lubricate_o_rings_gaskets,Lubricate seals,Lubricate O-rings/gaskets with food-grade lubricant per manual.,action,enum,,,,Completed|Unable to complete safely|Skipped,caution
+perform_rinse_and_sanitise_cycle,Run rinse/sanitise cycle,Run rinse and sanitise cycle per operator manual.,action,enum,,,,Completed|Unable to complete safely|Skipped,caution
+check_product_brix,Check product brix,Measure and report brix with refractometer (or confirm recipe brix spec).,reading,number,brix,0,30,,safe
+check_product_recipe_ratio,Confirm recipe ratio,Confirm product was mixed to the correct water:syrup/base ratio.,confirmation,enum,,,,Correct ratio|Unsure of ratio|Incorrect ratio,safe
+confirm_ambient_heat_sunlight,Confirm hot environment,"Confirm machine location is hot, outdoors, or in direct sunlight.",observation,enum,,,,Normal ambient and no direct heat|Warm area or intermittent sun|Hot area or direct sunlight,safe
+confirm_high_volume_serving,Confirm high-volume serving,Confirm serving volume is high/continuous with little recovery time.,confirmation,boolean,,,,Yes|No,safe
+confirm_idle_time,Confirm idle time,Confirm machine sat idle (no draws) for >30 minutes.,confirmation,boolean,,,,Yes|No,safe
+attempt_reset,Press RESET,Press the RESET button on the front control panel (if applicable).,action,enum,,,,Completed|No reset available|Attempted but issue persists,caution
+power_cycle_off_on,Power cycle,"Turn machine OFF, wait 60 seconds, turn ON.",action,enum,,,,Completed|Unable to perform safely|Attempted but issue persists,caution
+check_power_supply_outlet,Check outlet power,Confirm the outlet switch is ON and the plug is fully seated.,observation,enum,,,,Outlet on and plug secure|Outlet off|Plug loose or disconnected,safe
+confirm_breaker_tripped,Check breaker/RCD,Confirm if breaker/RCD has tripped for the circuit.,observation,enum,,,,Breaker or RCD tripped|Not tripped|Unknown,safe
+listen_for_compressor_fan,Listen for compressor/fan,Listen for compressor and condenser fan starting a few seconds after FREEZE engaged.,observation,enum,,,,Compressor and fan running|Only one running|Neither running|Unsure,safe
+check_hopper_lid_closed,Confirm lid closed,Confirm hopper/bowl lid is properly seated/closed.,confirmation,boolean,,,,Yes|No,safe
+check_door_locked,Confirm door/handle locked,Confirm dispensing door and handles are locked/latched correctly.,confirmation,boolean,,,,Yes|No,safe
+take_photo_serial_plate,Photo of model/serial plate,Take a clear photo of the machine data plate showing model and serial number.,photo,photo,,,,,safe

@@ -7,7 +7,7 @@ This folder contains 30 issue playbooks (one XLSX per issue), plus two shared CS
 ## Files
 - `*.xlsx` — One playbook per issue slug (based on the provided template).
 - `label_dictionary.csv` — Maps label IDs to human-readable names and descriptions.
-- `action_catalog.csv` — Supported action IDs referenced by Evidence rows.
+- `action_catalog.csv` — Supported action IDs referenced by Evidence rows. It also stores canonical `expected_input_*` metadata used to keep chat request controls consistent (`enum`, `boolean`, `number`, `photo`, `text`) plus safety level.
 
 ## Spreadsheet conventions
 - **Evidence**: each row captures one atomic signal (photo, observation, confirmation, reading, timing).

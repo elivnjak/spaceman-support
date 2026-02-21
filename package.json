@@ -13,7 +13,10 @@
     "db:studio": "drizzle-kit studio",
     "db:init": "npx tsx scripts/init-vector-extension.ts",
     "eval": "npx tsx scripts/eval.ts",
-    "db:seed": "npx tsx scripts/setup-db.ts"
+    "db:seed": "npx tsx scripts/setup-db.ts",
+    "types:audit": "npx tsx scripts/audit-input-types.ts",
+    "types:normalize:dry": "npx tsx scripts/normalize-input-types.ts --mode dry-run",
+    "types:normalize": "npx tsx scripts/normalize-input-types.ts --mode apply"
   },
   "dependencies": {
     "@mozilla/readability": "^0.6.0",
