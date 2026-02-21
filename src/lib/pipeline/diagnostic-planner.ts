@@ -76,6 +76,8 @@ export type PlannerRequest = {
     unit?: string;
     range?: { min: number; max: number };
     options?: string[];
+    values?: string[];
+    enum?: string[];
   };
 };
 
@@ -386,32 +388,47 @@ export function validateAndSanitizePlannerOutput(
     };
     const action = actionsById.get(req.id);
     const isEvidenceId = playbook.evidenceChecklist?.some((e) => e.id === req.id);
-    const checklistItem = playbook.evidenceChecklist?.find((e) => e.id === req.id);
+    const checklistItem = playbook.evidenceChecklist?.find(
+      (e) => e.id === req.id || e.actionId === req.id
+    );
 
     if (!nextReq.expectedInput && action?.expectedInput && typeof action.expectedInput === "object") {
       nextReq.expectedInput = action.expectedInput as PlannerRequest["expectedInput"];
     }
 
     const expectedType = nextReq.expectedInput?.type?.toLowerCase();
+    const expectedOptions =
+      nextReq.expectedInput?.options?.length
+        ? nextReq.expectedInput.options
+        : nextReq.expectedInput?.values?.length
+          ? nextReq.expectedInput.values
+          : nextReq.expectedInput?.enum?.length
+            ? nextReq.expectedInput.enum
+            : undefined;
     if (expectedType === "number") nextReq.type = "reading";
     else if (expectedType === "photo") nextReq.type = "photo";
-    else if (expectedType === "boolean") {
+    else if (expectedType === "boolean" || expectedType === "bool") {
       nextReq.type = "question";
       nextReq.expectedInput = {
         ...nextReq.expectedInput,
         type: "boolean",
-        options:
-          nextReq.expectedInput?.options?.length
-            ? nextReq.expectedInput.options
-            : ["Yes", "No"],
+        options: expectedOptions?.length ? expectedOptions : ["Yes", "No"],
       };
-    } else if (expectedType === "enum") {
+    } else if (expectedType === "enum" || (!!expectedOptions?.length && expectedType !== "text")) {
       nextReq.type = "question";
+      nextReq.expectedInput = {
+        ...nextReq.expectedInput,
+        type: "enum",
+        ...(expectedOptions?.length ? { options: expectedOptions } : {}),
+      };
     } else if (expectedType === "text") {
       nextReq.type = "question";
     }
 
-    if (!nextReq.expectedInput && checklistItem?.type === "confirmation") {
+    if (
+      checklistItem?.type === "confirmation" &&
+      (!nextReq.expectedInput || expectedType === "text")
+    ) {
       nextReq.type = "question";
       nextReq.expectedInput = { type: "boolean", options: ["Yes", "No"] };
     }

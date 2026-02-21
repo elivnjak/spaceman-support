@@ -36,6 +36,7 @@ export default function AdminActionsPage() {
   const [saving, setSaving] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState("");
+  const [formError, setFormError] = useState("");
 
   useEffect(() => {
     fetch("/api/admin/actions")
@@ -72,8 +73,13 @@ export default function AdminActionsPage() {
     e.preventDefault();
     setSaving(true);
     setDeleteError("");
+    setFormError("");
     try {
       const expectedInput = buildExpectedInput();
+      if (expectedInput?.type === "enum" && (expectedInput.options?.length ?? 0) < 2) {
+        setFormError("Enum expected input requires at least 2 options.");
+        return;
+      }
       const appliesToModels = form.appliesToModels
         .split(",")
         .map((s) => s.trim())
@@ -113,6 +119,8 @@ export default function AdminActionsPage() {
           safetyLevel: "safe",
           appliesToModels: "",
         });
+      } else {
+        setFormError(created?.error || "Unable to save action.");
       }
     } finally {
       setSaving(false);
@@ -166,6 +174,11 @@ export default function AdminActionsPage() {
 
       <form onSubmit={handleSubmit} className="mb-8 space-y-4 rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
         <h2 className="text-lg font-medium">Add or update action</h2>
+        {formError && (
+          <div className="rounded border border-red-200 bg-red-50 p-2 text-sm text-red-800 dark:border-red-800 dark:bg-red-900/20 dark:text-red-200">
+            {formError}
+          </div>
+        )}
         <div className="grid gap-4 sm:grid-cols-2">
           <input
             type="text"

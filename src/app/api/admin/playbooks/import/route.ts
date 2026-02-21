@@ -182,7 +182,7 @@ export async function POST(request: Request) {
     );
     if (referencedActionIds.length > 0) {
       const existingActions = await db
-        .select({ id: actions.id })
+        .select({ id: actions.id, expectedInput: actions.expectedInput })
         .from(actions)
         .where(inArray(actions.id, referencedActionIds));
       const existingIds = new Set(existingActions.map((a) => a.id));
@@ -191,6 +191,23 @@ export async function POST(request: Request) {
         errors.push(
           `Unknown action_id values: ${missingActionIds.join(", ")}. Check Admin -> Actions for valid IDs.`,
         );
+      }
+
+      const expectedInputByActionId = new Map(
+        existingActions.map((a) => [
+          a.id,
+          (a.expectedInput as { type?: string } | null)?.type?.toLowerCase(),
+        ])
+      );
+      for (let i = 0; i < evidenceItems.length; i += 1) {
+        const item = evidenceItems[i];
+        if (!item.actionId) continue;
+        const expectedType = expectedInputByActionId.get(item.actionId);
+        if (!expectedType) continue;
+        if (expectedType === "photo") item.type = "photo";
+        else if (expectedType === "number") item.type = "reading";
+        else if (expectedType === "boolean" || expectedType === "bool") item.type = "confirmation";
+        else if (item.type !== "action") item.type = "observation";
       }
     }
 

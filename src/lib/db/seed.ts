@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { db } from "./index";
 import { labels, actions, playbooks } from "./schema";
 import { eq } from "drizzle-orm";
+import { loadActionCatalogRows } from "@/lib/actions/catalog";
 
 const DEFAULT_LABELS = [
   { id: "good_texture", displayName: "Good texture", description: "Normal, desired consistency" },
@@ -120,7 +121,16 @@ export async function seedLabels(): Promise<void> {
 }
 
 export async function seedActions(): Promise<void> {
-  for (const a of DEFAULT_ACTIONS) {
+  const catalogActions = loadActionCatalogRows().map((a) => ({
+    id: a.actionId,
+    title: a.name,
+    instructions: a.description,
+    expectedInput: a.expectedInput,
+    safetyLevel: a.safetyLevel,
+  }));
+  const actionsById = new Map<string, (typeof catalogActions)[number]>();
+  [...catalogActions, ...DEFAULT_ACTIONS].forEach((a) => actionsById.set(a.id, a));
+  for (const a of actionsById.values()) {
     await db
       .insert(actions)
       .values({
