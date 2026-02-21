@@ -127,6 +127,8 @@ export const diagnosticSessions = pgTable("diagnostic_sessions", {
   status: text("status").notNull().default("active"),
   machineModel: text("machine_model"),
   playbookId: uuid("playbook_id").references(() => playbooks.id),
+  triageHistory: jsonb("triage_history").notNull().default([]),
+  triageRound: integer("triage_round").notNull().default(0),
   messages: jsonb("messages").notNull().default([]),
   evidence: jsonb("evidence").notNull().default({}),
   hypotheses: jsonb("hypotheses").notNull().default([]),

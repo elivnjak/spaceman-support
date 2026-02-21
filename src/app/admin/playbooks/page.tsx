@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 
 type Label = { id: string; displayName: string };
 type Step = {
@@ -92,14 +92,11 @@ function toFormState(p: Playbook): PlaybookFormState {
   };
 }
 
-export default function AdminPlaybooksPage({
-  focusPlaybookId,
-  dedicatedMode = false,
-}: {
-  focusPlaybookId?: string;
-  dedicatedMode?: boolean;
-} = {}) {
+export default function AdminPlaybooksPage() {
   const router = useRouter();
+  const params = useParams<{ id?: string }>();
+  const focusPlaybookId = params?.id;
+  const dedicatedMode = Boolean(focusPlaybookId);
   const [labels, setLabels] = useState<Label[]>([]);
   const [actionsList, setActionsList] = useState<Action[]>([]);
   const [playbooks, setPlaybooks] = useState<Playbook[]>([]);

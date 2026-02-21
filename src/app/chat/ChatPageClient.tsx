@@ -302,7 +302,7 @@ export function ChatPageClient({ chatApiKey }: ChatPageClientProps) {
         <div className="flex-1 space-y-4 overflow-y-auto">
           {messages.length === 0 && (
             <p className="rounded-lg border border-dashed border-gray-300 bg-white p-6 text-center text-gray-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-400">
-              Describe your issue and optionally attach photos. We'll ask follow-up questions to narrow down the cause.
+              Describe your issue and optionally attach photos. We&apos;ll ask follow-up questions to narrow down the cause.
             </p>
           )}
           {messages.map((m, i) => (

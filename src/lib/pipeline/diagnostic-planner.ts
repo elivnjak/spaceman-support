@@ -49,6 +49,7 @@ export type EvidenceRecord = {
   type: string;
   unit?: string;
   confidence: "exact" | "approximate" | "uncertain";
+  photoAnalysis?: string;
   collectedAt: string;
   turn: number;
 };
@@ -83,7 +84,7 @@ export type PlannerRequest = {
 
 export type PlannerOutput = {
   message: string;
-  phase: "gathering_info" | "diagnosing" | "resolving" | "resolved_followup" | "escalated";
+  phase: "triaging" | "gathering_info" | "diagnosing" | "resolving" | "resolved_followup" | "escalated";
   requests: PlannerRequest[];
   hypotheses_update: {
     causeId: string;
@@ -95,6 +96,7 @@ export type PlannerOutput = {
     evidenceId: string;
     value: unknown;
     confidence: "exact" | "approximate" | "uncertain";
+    photoAnalysis?: string;
   }[];
   resolution?: {
     causeId: string;
@@ -140,7 +142,8 @@ function buildStateSummary(input: DiagnosticPlannerInput): string {
     lines.push("(none yet)");
   } else {
     for (const [eid, rec] of Object.entries(evidence)) {
-      lines.push(`- ${eid}: ${JSON.stringify(rec.value)} (${rec.confidence})`);
+      const photoSuffix = rec.photoAnalysis ? `; photo_analysis=${rec.photoAnalysis}` : "";
+      lines.push(`- ${eid}: ${JSON.stringify(rec.value)} (${rec.confidence}${photoSuffix})`);
     }
   }
   lines.push("\n## Current hypotheses");
@@ -214,7 +217,7 @@ You must respond with valid JSON only, no other text. Schema:
     { "causeId": "string", "confidence": number 0-1, "reasoning": "string", "status": "active" | "ruled_out" | "confirmed" }
   ],
   "evidence_extracted": [
-    { "evidenceId": "string (from checklist)", "value": any, "confidence": "exact" | "approximate" | "uncertain" }
+    { "evidenceId": "string (from checklist)", "value": any, "confidence": "exact" | "approximate" | "uncertain", "photoAnalysis": "string (optional: concise observation extracted from photo evidence when relevant)" }
   ],
   "resolution": { "causeId": "string", "diagnosis": "string", "steps": [{"step_id": "string", "instruction": "string", "check": "string?"}], "why": "string" } (only when phase is resolving),
   "escalation_reason": "string (only when phase is escalated)",
@@ -246,6 +249,24 @@ When enough evidence has been collected to narrow down causes, you must conclude
 
 ${OUTPUT_SCHEMA}`;
 
+  const hasImages = input.imageBuffers && input.imageBuffers.length > 0;
+  const photoChecklistIds = new Set(
+    (input.playbook.evidenceChecklist ?? [])
+      .filter((e) => e.type === "photo")
+      .map((e) => e.id)
+  );
+  const photoRequestIds = (input.outstandingRequestIds ?? []).filter((id) =>
+    photoChecklistIds.has(id)
+  );
+  const photoContextBlock = hasImages
+    ? `## Photo submission
+The user attached ${input.imageBuffers!.length} image(s) this turn.
+${photoRequestIds.length ? `These image(s) are likely answering photo request IDs: ${photoRequestIds.join(", ")}.` : "Map image observations to the most relevant photo evidence IDs from the checklist."}
+Carefully examine each image and extract diagnostically relevant observations (visible damage, indicator lights, labels, readings, error codes, leaks, smoke, unusual residues, etc.).
+When adding photo-derived evidence, include a concise "photoAnalysis" note on that evidence_extracted item.
+If a value is directly readable from the image, use confidence "exact"; if inferred, use "approximate".`
+    : "";
+
   const userPrompt = `${playbookBlock}
 
 ${actionsBlock}
@@ -269,10 +290,10 @@ ${input.lastUserMessage}
 ${input.machineModel ? `\nMachine model: ${input.machineModel}` : ""}
 
 ${input.outstandingRequestIds?.length ? `Outstanding request IDs from your previous turn: ${input.outstandingRequestIds.join(", ")}. Map the user's reply to evidence_extracted using these IDs.` : ""}
+${photoContextBlock ? `\n\n${photoContextBlock}` : ""}
 
 Respond with JSON only.`;
 
-  const hasImages = input.imageBuffers && input.imageBuffers.length > 0;
   const userContent: OpenAI.Chat.Completions.ChatCompletionContentPart[] = hasImages
     ? [
         ...input.imageBuffers!.map((buf) => ({
@@ -311,6 +332,7 @@ export async function runFollowUpAnswer(input: {
   lastUserMessage: string;
   resolution: PlannerOutput["resolution"];
   machineModel?: string | null;
+  imageBuffers?: Buffer[];
 }): Promise<string> {
   const systemPrompt = `You are a helpful support assistant. A diagnosis has already been provided to the user. Answer the user's follow-up question using the provided documentation. Be direct and specific. Do not repeat the full diagnosis or resolution steps unless the user explicitly asks for them.
 
@@ -346,11 +368,22 @@ ${input.lastUserMessage}
 
 Answer the user's question in one or two short paragraphs. Use only the documentation above when citing facts. Cite each source you use with (document <id>).`;
 
+  const hasImages = (input.imageBuffers?.length ?? 0) > 0;
+  const userContent: OpenAI.Chat.Completions.ChatCompletionContentPart[] = hasImages
+    ? [
+        ...(input.imageBuffers ?? []).map((buf) => ({
+          type: "image_url" as const,
+          image_url: { url: `data:image/jpeg;base64,${buf.toString("base64")}` },
+        })),
+        { type: "text" as const, text: userPrompt },
+      ]
+    : [{ type: "text" as const, text: userPrompt }];
+
   const res = await getOpenAI().chat.completions.create({
     model: LLM_CONFIG.diagnosticPlannerModel,
     messages: [
       { role: "system", content: systemPrompt },
-      { role: "user", content: userPrompt },
+      { role: "user", content: userContent },
     ],
   });
   const text = res.choices[0]?.message?.content?.trim();

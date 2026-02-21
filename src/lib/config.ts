@@ -57,6 +57,12 @@ export const DIAGNOSTIC_CONFIG = {
   requiredEvidenceTurnsBeforeEscalation: 4,
 } as const;
 
+export const TRIAGE_CONFIG = {
+  autoSelectThreshold: getNumberEnv("TRIAGE_AUTO_SELECT", 0.8),
+  confirmThreshold: getNumberEnv("TRIAGE_CONFIRM_THRESHOLD", 0.7),
+  maxRounds: getNumberEnv("TRIAGE_MAX_ROUNDS", 3),
+} as const;
+
 export const INGESTION_CONFIG = {
   visionModel: "gpt-4o",
   /** Min score from page heuristic (0–1) to trigger vision extraction for that page. */

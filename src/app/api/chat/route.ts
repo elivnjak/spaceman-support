@@ -7,12 +7,7 @@ import {
   labels,
 } from "@/lib/db/schema";
 import { eq, inArray } from "drizzle-orm";
-import { clipEmbedder } from "@/lib/embeddings/clip";
 import { openaiTextEmbedder } from "@/lib/embeddings/openai-text";
-import {
-  searchReferenceImages,
-  aggregateLabelScores,
-} from "@/lib/pipeline/image-retrieval";
 import { searchDocChunks } from "@/lib/pipeline/text-retrieval";
 import {
   runDiagnosticPlanner,
@@ -26,17 +21,18 @@ import {
   type PlannerOutput,
   type ActionRecord,
 } from "@/lib/pipeline/diagnostic-planner";
-import { DIAGNOSTIC_CONFIG } from "@/lib/config";
+import { DIAGNOSTIC_CONFIG, TRIAGE_CONFIG } from "@/lib/config";
 import {
   writeStorageFile,
   diagnosticSessionImagePath,
 } from "@/lib/storage";
 import { buildEscalationHandoff, sendEscalationWebhook } from "@/lib/escalation";
+import { runPlaybookTriage, type TriageHistoryItem } from "@/lib/pipeline/playbook-triage";
 
 const STAGE_MESSAGES: Record<string, string> = {
-  analysing_photos: "Analysing your photos…",
-  finding_similar: "Finding similar examples…",
   selecting_playbook: "Selecting diagnostic guide…",
+  asking_followup: "Asking a follow-up question…",
+  analysing_photos: "Analysing your photos…",
   searching_manuals: "Searching knowledge base…",
   thinking: "Thinking…",
 };
@@ -114,86 +110,18 @@ export async function POST(request: Request) {
         let sessionId: string;
 
         if (isNewSession) {
-          send(controller, "stage", JSON.stringify({ message: STAGE_MESSAGES.select_playbook }));
-          let playbookId: string | null = null;
-          let labelId: string | null = null;
-
-          if (imageBuffers.length > 0) {
-            send(controller, "stage", JSON.stringify({ message: STAGE_MESSAGES.analysing_photos }));
-            const imageEmbeddings: number[][] = [];
-            for (const buf of imageBuffers) {
-              const emb = await clipEmbedder.embed(buf);
-              imageEmbeddings.push(emb);
-            }
-            send(controller, "stage", JSON.stringify({ message: STAGE_MESSAGES.finding_similar }));
-            const allMatches = [];
-            for (const emb of imageEmbeddings) {
-              const matches = await searchReferenceImages(emb);
-              allMatches.push(...matches);
-            }
-            const labelScores = aggregateLabelScores(allMatches);
-            if (labelScores.length > 0) {
-              labelId = labelScores[0].labelId;
-              const [pb] = await db
-                .select()
-                .from(playbooks)
-                .where(eq(playbooks.labelId, labelId));
-              if (pb) playbookId = pb.id;
-            }
-          }
-          if (!playbookId && message.trim()) {
-            send(controller, "stage", JSON.stringify({ message: STAGE_MESSAGES.selecting_playbook }));
-            const allPlaybooks = await db
-              .select({ id: playbooks.id, labelId: playbooks.labelId, title: playbooks.title })
-              .from(playbooks);
-            const allLabels = await db.select().from(labels);
-
-            if (allPlaybooks.length > 0) {
-              const labelDescriptions = allLabels
-                .map((l) => `- ${l.id}: ${l.displayName}${l.description ? ` (${l.description})` : ""}`)
-                .join("\n");
-
-              const OpenAI = (await import("openai")).default;
-              const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-              const classRes = await openai.chat.completions.create({
-                model: "gpt-4o",
-                messages: [
-                  {
-                    role: "system",
-                    content: `You classify user support messages into issue categories. Available categories:\n${labelDescriptions}\n\nRespond with JSON: {"label_id": "<category id>", "confidence": <0-1>}. If none clearly match, pick the closest.`,
-                  },
-                  { role: "user", content: message },
-                ],
-                response_format: { type: "json_object" },
-              });
-              const classText = classRes.choices[0]?.message?.content;
-              if (classText) {
-                try {
-                  const parsed = JSON.parse(classText) as { label_id?: string };
-                  if (parsed.label_id) {
-                    labelId = parsed.label_id;
-                    const matchedPb = allPlaybooks.find((pb) => pb.labelId === parsed.label_id);
-                    if (matchedPb) playbookId = matchedPb.id;
-                  }
-                } catch { /* fall through to default */ }
-              }
-            }
-          }
-          if (!playbookId) {
-            const [firstPlaybook] = await db.select().from(playbooks).limit(1);
-            if (firstPlaybook) playbookId = firstPlaybook.id;
-          }
-
           const [created] = await db
             .insert(diagnosticSessions)
             .values({
               status: "active",
               machineModel: machineModel ?? null,
-              playbookId,
+              playbookId: null,
+              triageHistory: [],
+              triageRound: 0,
               messages: [],
               evidence: {},
               hypotheses: [],
-              phase: "gathering_info",
+              phase: "triaging",
               turnCount: 0,
             })
             .returning();
@@ -209,6 +137,8 @@ export async function POST(request: Request) {
         }
 
         const messages = (session!.messages as ChatMessage[]) ?? [];
+        const triageHistory = (session!.triageHistory as TriageHistoryItem[] | null) ?? [];
+        let triageRound = session!.triageRound ?? 0;
         const imagePaths: string[] = [];
         if (imageBuffers.length > 0 && sessionId) {
           for (let i = 0; i < imageBuffers.length; i++) {
@@ -227,6 +157,150 @@ export async function POST(request: Request) {
           images: imagePaths.length ? imagePaths : undefined,
           timestamp: new Date().toISOString(),
         });
+
+        const isTriageFlow = isNewSession || session.phase === "triaging";
+        if (isTriageFlow) {
+          send(controller, "stage", JSON.stringify({ message: STAGE_MESSAGES.selecting_playbook }));
+          if (imageBuffers.length > 0) {
+            send(controller, "stage", JSON.stringify({ message: STAGE_MESSAGES.analysing_photos }));
+          }
+
+          const allPlaybooks = await db
+            .select({ id: playbooks.id, labelId: playbooks.labelId, title: playbooks.title })
+            .from(playbooks);
+          const allLabels = await db.select().from(labels);
+          const labelsById = new Map(allLabels.map((l) => [l.id, l]));
+          const triageLabels = allPlaybooks.map((pb) => {
+            const labelMeta = labelsById.get(pb.labelId);
+            return {
+              labelId: pb.labelId,
+              playbookTitle: pb.title,
+              displayName: labelMeta?.displayName ?? pb.labelId,
+              description: labelMeta?.description ?? null,
+            };
+          });
+
+          triageRound += 1;
+          const nextTriageHistory: TriageHistoryItem[] = [
+            ...triageHistory,
+            { role: "user", content: message || "(sent photos)" },
+          ];
+          const triageResult = await runPlaybookTriage({
+            labels: triageLabels,
+            triageHistory: nextTriageHistory,
+            imageBuffers: imageBuffers.length > 0 ? imageBuffers : undefined,
+          });
+
+          const matchedPlaybook = triageResult.selectedLabelId
+            ? allPlaybooks.find((pb) => pb.labelId === triageResult.selectedLabelId)
+            : null;
+          const canAutoSelect =
+            !!matchedPlaybook &&
+            triageResult.confidence >= TRIAGE_CONFIG.autoSelectThreshold;
+          const canConfirmSelect =
+            !!matchedPlaybook &&
+            triageRound >= TRIAGE_CONFIG.maxRounds &&
+            triageResult.confidence >= TRIAGE_CONFIG.confirmThreshold;
+
+          if (!canAutoSelect && !canConfirmSelect) {
+            send(controller, "stage", JSON.stringify({ message: STAGE_MESSAGES.asking_followup }));
+
+            const candidateOptions = triageResult.candidateLabels
+              .map((id) => labelsById.get(id)?.displayName ?? id)
+              .slice(0, 3);
+            const followUpQuestion =
+              triageResult.followUpQuestion ??
+              "I need one more detail to choose the correct diagnostic guide. What symptom do you notice first?";
+            const shouldEscalate = triageRound >= TRIAGE_CONFIG.maxRounds;
+            const responseMessage = shouldEscalate
+              ? "I still can't confidently identify the right playbook from the provided details. I'm connecting you with a technician."
+              : followUpQuestion;
+            const responsePhase = shouldEscalate ? "escalated" : "triaging";
+            const assistantTurn: ChatMessage & { requests?: PlannerOutput["requests"] } = {
+              role: "assistant",
+              content: responseMessage,
+              timestamp: new Date().toISOString(),
+              requests: !shouldEscalate
+                ? [
+                    {
+                      type: "question",
+                      id: "triage_followup",
+                      prompt: followUpQuestion,
+                      expectedInput: candidateOptions.length >= 2
+                        ? { type: "enum", options: candidateOptions }
+                        : { type: "text" },
+                    },
+                  ]
+                : undefined,
+            };
+            messages.push(assistantTurn);
+
+            await db
+              .update(diagnosticSessions)
+              .set({
+                messages,
+                phase: responsePhase,
+                status: shouldEscalate ? "escalated" : "active",
+                escalationReason: shouldEscalate
+                  ? "Unable to confidently identify a playbook after triage follow-ups."
+                  : null,
+                triageRound,
+                triageHistory: [
+                  ...nextTriageHistory,
+                  { role: "assistant", content: responseMessage },
+                ],
+                updatedAt: new Date(),
+              })
+              .where(eq(diagnosticSessions.id, sessionId));
+
+            send(
+              controller,
+              "message",
+              JSON.stringify({
+                sessionId,
+                message: responseMessage,
+                phase: responsePhase,
+                requests: assistantTurn.requests,
+                escalation_reason: shouldEscalate
+                  ? "Unable to confidently identify a playbook after triage follow-ups."
+                  : undefined,
+              })
+            );
+            controller.close();
+            return;
+          }
+
+          await db
+            .update(diagnosticSessions)
+            .set({
+              playbookId: matchedPlaybook?.id ?? null,
+              phase: "gathering_info",
+              triageRound,
+              triageHistory: [
+                ...nextTriageHistory,
+                {
+                  role: "assistant",
+                  content: `Selected playbook ${matchedPlaybook?.title ?? "unknown"} with confidence ${triageResult.confidence.toFixed(2)}.`,
+                },
+              ],
+              updatedAt: new Date(),
+            })
+            .where(eq(diagnosticSessions.id, sessionId));
+
+          session = {
+            ...session,
+            playbookId: matchedPlaybook?.id ?? null,
+            phase: "gathering_info",
+            triageRound,
+            triageHistory: [
+              ...nextTriageHistory,
+              {
+                role: "assistant",
+                content: `Selected playbook ${matchedPlaybook?.title ?? "unknown"} with confidence ${triageResult.confidence.toFixed(2)}.`,
+              },
+            ],
+          };
+        }
 
         const playbookRow = session.playbookId
           ? (await db.select().from(playbooks).where(eq(playbooks.id, session.playbookId)))[0]
@@ -401,6 +475,7 @@ export async function POST(request: Request) {
             lastUserMessage: message,
             resolution: lastResolution,
             machineModel: session.machineModel ?? undefined,
+            imageBuffers: imageBuffers.length > 0 ? imageBuffers : undefined,
           });
           phase = "resolved_followup";
           plannerOutput = {
@@ -523,6 +598,7 @@ export async function POST(request: Request) {
             value: e.value,
             type: typeof e.value,
             confidence: e.confidence,
+            photoAnalysis: e.photoAnalysis,
             collectedAt: now,
             turn: turnCount,
           };
