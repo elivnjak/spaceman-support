@@ -105,6 +105,7 @@ export function ChatPageClient({ chatApiKey }: ChatPageClientProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [expandedCitations, setExpandedCitations] = useState<Set<string>>(new Set());
   const [openCitation, setOpenCitation] = useState<CitationItem | null>(null);
+  const [lightbox, setLightbox] = useState<{ images: string[]; index: number } | null>(null);
   const [requestInputs, setRequestInputs] = useState<Record<string, string>>({});
   const requestFileInputRef = useRef<HTMLInputElement>(null);
   const [activePhotoRequestId, setActivePhotoRequestId] = useState<string | null>(null);
@@ -198,6 +199,27 @@ export function ChatPageClient({ chatApiKey }: ChatPageClientProps) {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  useEffect(() => {
+    if (!lightbox) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setLightbox(null);
+      if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+        setLightbox((prev) =>
+          prev && prev.index < prev.images.length - 1
+            ? { ...prev, index: prev.index + 1 }
+            : prev
+        );
+      }
+      if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+        setLightbox((prev) =>
+          prev && prev.index > 0 ? { ...prev, index: prev.index - 1 } : prev
+        );
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [lightbox]);
 
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -339,19 +361,33 @@ export function ChatPageClient({ chatApiKey }: ChatPageClientProps) {
                 ) : (
                   <p className="whitespace-pre-wrap">{m.content}</p>
                 )}
-                {m.role === "assistant" && m.guideImages && m.guideImages.length > 0 && (
-                  <div className="mt-3 grid grid-cols-2 gap-2">
-                    {m.guideImages.map((src, idx) => (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        key={`${src}-${idx}`}
-                        src={src}
-                        alt="Name plate guide"
-                        className="h-28 w-full rounded-md border border-gray-200 object-cover dark:border-gray-600"
-                      />
-                    ))}
-                  </div>
-                )}
+                {m.role === "assistant" && m.guideImages && m.guideImages.length > 0 && (() => {
+                  const count = m.guideImages.length;
+                  const gridClass =
+                    count === 1
+                      ? ""
+                      : count === 3
+                        ? "grid grid-cols-2 gap-2"
+                        : "grid grid-cols-2 gap-2";
+                  const imgClass =
+                    count === 1
+                      ? "max-h-64 w-full rounded-lg border border-gray-200 object-contain bg-gray-100 dark:border-gray-600 dark:bg-gray-700"
+                      : "h-40 w-full rounded-lg border border-gray-200 object-contain bg-gray-100 dark:border-gray-600 dark:bg-gray-700";
+                  return (
+                    <div className={`mt-3 ${gridClass}`}>
+                      {m.guideImages.map((src, idx) => (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          key={`${src}-${idx}`}
+                          src={src}
+                          alt={`Guide image ${idx + 1} of ${count}`}
+                          className={`${imgClass} ${count === 3 && idx === 0 ? "col-span-2 h-48" : ""} cursor-pointer transition-opacity hover:opacity-90`}
+                          onClick={() => setLightbox({ images: m.guideImages!, index: idx })}
+                        />
+                      ))}
+                    </div>
+                  );
+                })()}
                 {m.role === "assistant" && m.requests && m.requests.length > 0 && (() => {
                   const isLatest = i === messages.length - 1 && !loading;
                   const visibleRequests = m.requests.slice(0, 1);
@@ -654,6 +690,65 @@ export function ChatPageClient({ chatApiKey }: ChatPageClientProps) {
           </pre>
         )}
       </div>
+
+      {lightbox && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+          onClick={() => setLightbox(null)}
+        >
+          <div className="relative flex max-h-[90vh] max-w-[90vw] items-center" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              onClick={() => setLightbox(null)}
+              className="absolute -right-3 -top-3 z-10 rounded-full bg-white p-1.5 shadow-lg hover:bg-gray-100 dark:bg-gray-700 dark:hover:bg-gray-600"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-700 dark:text-gray-200" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+              </svg>
+            </button>
+
+            {lightbox.images.length > 1 && (
+              <button
+                type="button"
+                disabled={lightbox.index === 0}
+                onClick={() => setLightbox((prev) => prev && prev.index > 0 ? { ...prev, index: prev.index - 1 } : prev)}
+                className="mr-3 shrink-0 rounded-full bg-white/90 p-2 shadow-lg transition-opacity hover:bg-white disabled:opacity-30 dark:bg-gray-700/90 dark:hover:bg-gray-600"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-800 dark:text-gray-200" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
+                </svg>
+              </button>
+            )}
+
+            <div className="flex flex-col items-center">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={lightbox.images[lightbox.index]}
+                alt={`Guide image ${lightbox.index + 1} of ${lightbox.images.length}`}
+                className="max-h-[80vh] max-w-[80vw] rounded-xl object-contain shadow-2xl"
+              />
+              {lightbox.images.length > 1 && (
+                <span className="mt-3 rounded-full bg-black/50 px-3 py-1 text-xs font-medium text-white">
+                  {lightbox.index + 1} / {lightbox.images.length}
+                </span>
+              )}
+            </div>
+
+            {lightbox.images.length > 1 && (
+              <button
+                type="button"
+                disabled={lightbox.index === lightbox.images.length - 1}
+                onClick={() => setLightbox((prev) => prev && prev.index < prev.images.length - 1 ? { ...prev, index: prev.index + 1 } : prev)}
+                className="ml-3 shrink-0 rounded-full bg-white/90 p-2 shadow-lg transition-opacity hover:bg-white disabled:opacity-30 dark:bg-gray-700/90 dark:hover:bg-gray-600"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-800 dark:text-gray-200" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+                </svg>
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {openCitation && (
         <div
