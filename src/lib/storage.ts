@@ -43,6 +43,7 @@ export function getStorageRelativePath(fullPath: string): string {
 
 export const REFERENCE_IMAGES_DIR = "reference_images";
 export const NAMEPLATE_GUIDE_IMAGES_DIR = "nameplate_guide_images";
+export const CLEARANCE_GUIDE_IMAGES_DIR = "clearance_guide_images";
 export const UPLOADED_DOCS_DIR = "documents";
 
 export function referenceImagePath(labelId: string, filename: string): string {
@@ -51,6 +52,10 @@ export function referenceImagePath(labelId: string, filename: string): string {
 
 export function nameplateGuideImagePath(filename: string): string {
   return path.join(NAMEPLATE_GUIDE_IMAGES_DIR, filename);
+}
+
+export function clearanceGuideImagePath(filename: string): string {
+  return path.join(CLEARANCE_GUIDE_IMAGES_DIR, filename);
 }
 
 export function documentPath(filename: string): string {

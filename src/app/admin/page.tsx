@@ -9,6 +9,7 @@ import {
   actions,
   supportedModels,
   nameplateConfig,
+  clearanceConfig,
 } from "@/lib/db/schema";
 import { AdminLoginForm } from "./AdminLoginForm";
 
@@ -22,6 +23,7 @@ async function getCounts() {
       actionsList,
       supportedModelsList,
       nameplateConfigList,
+      clearanceConfigList,
     ] = await Promise.all([
       db.select().from(labels),
       db.select().from(referenceImages),
@@ -30,6 +32,7 @@ async function getCounts() {
       db.select().from(actions),
       db.select().from(supportedModels),
       db.select().from(nameplateConfig),
+      db.select().from(clearanceConfig),
     ]);
     return {
       labels: labelsList.length,
@@ -40,6 +43,7 @@ async function getCounts() {
       actions: actionsList.length,
       supportedModels: supportedModelsList.length,
       nameplateConfigured: nameplateConfigList.length > 0,
+      clearanceConfigured: clearanceConfigList.length > 0,
     };
   } catch {
     return {
@@ -51,6 +55,7 @@ async function getCounts() {
       actions: 0,
       supportedModels: 0,
       nameplateConfigured: false,
+      clearanceConfigured: false,
     };
   }
 }
@@ -157,6 +162,20 @@ export default async function AdminDashboardPage({ searchParams }: Props) {
           </p>
           <Link
             href="/admin/nameplate"
+            className="mt-2 inline-block text-sm text-blue-600 hover:underline"
+          >
+            Manage
+          </Link>
+        </div>
+        <div className="rounded-lg border border-gray-200 bg-white p-6 shadow dark:border-gray-700 dark:bg-gray-800">
+          <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400">
+            Clearance Config
+          </h2>
+          <p className="mt-2 text-lg font-bold">
+            {counts.clearanceConfigured ? "Configured" : "Not configured"}
+          </p>
+          <Link
+            href="/admin/clearance"
             className="mt-2 inline-block text-sm text-blue-600 hover:underline"
           >
             Manage

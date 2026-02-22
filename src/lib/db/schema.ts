@@ -146,6 +146,21 @@ export const nameplateGuideImages = pgTable("nameplate_guide_images", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });
 
+export const clearanceConfig = pgTable("clearance_config", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  instructionText: text("instruction_text").notNull(),
+  guideImageIds: jsonb("guide_image_ids").notNull().default([]),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+});
+
+export const clearanceGuideImages = pgTable("clearance_guide_images", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  filePath: text("file_path").notNull(),
+  fileHash: text("file_hash"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
+
 export const supportSessions = pgTable(
   "support_sessions",
   {
@@ -173,6 +188,7 @@ export const diagnosticSessions = pgTable("diagnostic_sessions", {
   machineModel: text("machine_model"),
   serialNumber: text("serial_number"),
   productType: text("product_type"),
+  clearanceImagePaths: jsonb("clearance_image_paths").notNull().default([]),
   manufacturingYear: integer("manufacturing_year"),
   playbookId: uuid("playbook_id").references(() => playbooks.id),
   triageHistory: jsonb("triage_history").notNull().default([]),
@@ -221,6 +237,10 @@ export type NameplateConfig = typeof nameplateConfig.$inferSelect;
 export type NewNameplateConfig = typeof nameplateConfig.$inferInsert;
 export type NameplateGuideImage = typeof nameplateGuideImages.$inferSelect;
 export type NewNameplateGuideImage = typeof nameplateGuideImages.$inferInsert;
+export type ClearanceConfig = typeof clearanceConfig.$inferSelect;
+export type NewClearanceConfig = typeof clearanceConfig.$inferInsert;
+export type ClearanceGuideImage = typeof clearanceGuideImages.$inferSelect;
+export type NewClearanceGuideImage = typeof clearanceGuideImages.$inferInsert;
 export type Playbook = typeof playbooks.$inferSelect;
 export type NewPlaybook = typeof playbooks.$inferInsert;
 export type PlaybookProductType = typeof playbookProductTypes.$inferSelect;

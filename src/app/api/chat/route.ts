@@ -9,6 +9,8 @@ import {
   productTypes,
   nameplateConfig,
   nameplateGuideImages,
+  clearanceConfig,
+  clearanceGuideImages,
 } from "@/lib/db/schema";
 import { asc, eq, inArray } from "drizzle-orm";
 import { openaiTextEmbedder } from "@/lib/embeddings/openai-text";
@@ -27,6 +29,7 @@ import {
 } from "@/lib/pipeline/diagnostic-planner";
 import { DIAGNOSTIC_CONFIG, TRIAGE_CONFIG } from "@/lib/config";
 import { ensureNameplateTables } from "@/lib/db/ensure-nameplate-tables";
+import { ensureClearanceTables } from "@/lib/db/ensure-clearance-tables";
 import {
   writeStorageFile,
   diagnosticSessionImagePath,
@@ -41,6 +44,7 @@ import {
 
 const STAGE_MESSAGES: Record<string, string> = {
   requesting_nameplate: "Collecting machine details…",
+  requesting_clearance: "Collecting machine clearance photos…",
   selecting_playbook: "Selecting diagnostic guide…",
   asking_followup: "Asking a follow-up question…",
   analysing_photos: "Analysing your photos…",
@@ -164,6 +168,32 @@ async function getNameplatePrompt(): Promise<{ instructionText: string; guideIma
   return { instructionText, guideImages };
 }
 
+async function getClearancePrompt(): Promise<{ instructionText: string; guideImages: string[] }> {
+  await ensureClearanceTables();
+  const [config] = await db.select().from(clearanceConfig).limit(1);
+  const defaultInstruction =
+    "Please send photos of machine clearance from different angles so our technical team can use them if escalation is needed.";
+  const instructionText = config?.instructionText?.trim() || defaultInstruction;
+
+  const rawIds = Array.isArray(config?.guideImageIds) ? config.guideImageIds : [];
+  const guideIds = rawIds
+    .map((value) => (typeof value === "string" ? value : ""))
+    .filter(Boolean);
+  if (guideIds.length === 0) {
+    return { instructionText, guideImages: [] };
+  }
+
+  const rows = await db
+    .select({ id: clearanceGuideImages.id })
+    .from(clearanceGuideImages)
+    .where(inArray(clearanceGuideImages.id, guideIds));
+  const rowIds = new Set(rows.map((row) => row.id));
+  const guideImages = guideIds
+    .filter((id) => rowIds.has(id))
+    .map((id) => `/api/clearance-guide-image/${id}`);
+  return { instructionText, guideImages };
+}
+
 async function getProductTypeOptions(): Promise<{ name: string; isOther: boolean }[]> {
   const rows = await db
     .select({ name: productTypes.name, isOther: productTypes.isOther })
@@ -198,6 +228,7 @@ export async function POST(request: Request) {
     async start(controller) {
       try {
         await ensureNameplateTables();
+        await ensureClearanceTables();
         let session = sessionIdRaw
           ? (await db.select().from(diagnosticSessions).where(eq(diagnosticSessions.id, sessionIdRaw)))[0]
           : null;
@@ -233,6 +264,7 @@ export async function POST(request: Request) {
         }
 
         const messages = (session!.messages as ChatMessage[]) ?? [];
+        let imageBuffersForLlm = imageBuffers;
         let triageHistory = (session!.triageHistory as TriageHistoryItem[] | null) ?? [];
         let triageRound = session!.triageRound ?? 0;
         const imagePaths: string[] = [];
@@ -896,7 +928,7 @@ export async function POST(request: Request) {
             .set({
               productType: chosenProductType,
               messages,
-              phase: "triaging",
+              phase: "clearance_check",
               status: "active",
               updatedAt: new Date(),
             })
@@ -904,6 +936,133 @@ export async function POST(request: Request) {
           session = {
             ...session,
             productType: chosenProductType,
+            phase: "clearance_check",
+            status: "active",
+          };
+
+          const { instructionText, guideImages } = await getClearancePrompt();
+          const clearanceResponseMessage = `Thanks. ${instructionText}`;
+          const assistantTurn: ChatMessage & {
+            requests?: PlannerOutput["requests"];
+            guideImages?: string[];
+          } = {
+            role: "assistant",
+            content: clearanceResponseMessage,
+            timestamp: new Date().toISOString(),
+            requests: [
+              {
+                type: "photo",
+                id: "clearance_photos",
+                prompt: "Please upload machine clearance photos from different angles.",
+                expectedInput: { type: "photo" },
+              },
+            ],
+            guideImages: guideImages.length > 0 ? guideImages : undefined,
+          };
+          messages.push(assistantTurn);
+
+          await db
+            .update(diagnosticSessions)
+            .set({
+              messages,
+              phase: "clearance_check",
+              status: "active",
+              updatedAt: new Date(),
+            })
+            .where(eq(diagnosticSessions.id, sessionId));
+
+          send(
+            controller,
+            "message",
+            JSON.stringify({
+              sessionId,
+              message: clearanceResponseMessage,
+              phase: "clearance_check",
+              requests: assistantTurn.requests,
+              guideImages: guideImages.length > 0 ? guideImages : undefined,
+              model: session.machineModel ?? undefined,
+              serialNumber: session.serialNumber ?? undefined,
+              productType: session.productType ?? undefined,
+              playbookId: session.playbookId ?? undefined,
+            })
+          );
+          controller.close();
+          return;
+        }
+
+        if (session.phase === "clearance_check") {
+          send(controller, "stage", JSON.stringify({ message: STAGE_MESSAGES.requesting_clearance }));
+          const { instructionText, guideImages } = await getClearancePrompt();
+
+          if (imageBuffers.length === 0) {
+            const responseMessage = instructionText;
+            const assistantTurn: ChatMessage & {
+              requests?: PlannerOutput["requests"];
+              guideImages?: string[];
+            } = {
+              role: "assistant",
+              content: responseMessage,
+              timestamp: new Date().toISOString(),
+              requests: [
+                {
+                  type: "photo",
+                  id: "clearance_photos",
+                  prompt: "Please upload machine clearance photos from different angles.",
+                  expectedInput: { type: "photo" },
+                },
+              ],
+              guideImages: guideImages.length > 0 ? guideImages : undefined,
+            };
+            messages.push(assistantTurn);
+
+            await db
+              .update(diagnosticSessions)
+              .set({
+                messages,
+                phase: "clearance_check",
+                status: "active",
+                updatedAt: new Date(),
+              })
+              .where(eq(diagnosticSessions.id, sessionId));
+
+            send(
+              controller,
+              "message",
+              JSON.stringify({
+                sessionId,
+                message: responseMessage,
+                phase: "clearance_check",
+                requests: assistantTurn.requests,
+                guideImages: guideImages.length > 0 ? guideImages : undefined,
+                model: session.machineModel ?? undefined,
+                serialNumber: session.serialNumber ?? undefined,
+                productType: session.productType ?? undefined,
+                playbookId: session.playbookId ?? undefined,
+              })
+            );
+            controller.close();
+            return;
+          }
+
+          const existingClearancePaths = Array.isArray(session.clearanceImagePaths)
+            ? session.clearanceImagePaths.filter((value): value is string => typeof value === "string")
+            : [];
+          const combinedClearancePaths = Array.from(new Set([...existingClearancePaths, ...imagePaths]));
+          imageBuffersForLlm = [];
+
+          await db
+            .update(diagnosticSessions)
+            .set({
+              clearanceImagePaths: combinedClearancePaths,
+              messages,
+              phase: "triaging",
+              status: "active",
+              updatedAt: new Date(),
+            })
+            .where(eq(diagnosticSessions.id, sessionId));
+          session = {
+            ...session,
+            clearanceImagePaths: combinedClearancePaths,
             phase: "triaging",
             status: "active",
           };
@@ -912,7 +1071,7 @@ export async function POST(request: Request) {
         const isTriageFlow = session.phase === "triaging";
         if (isTriageFlow) {
           send(controller, "stage", JSON.stringify({ message: STAGE_MESSAGES.selecting_playbook }));
-          if (imageBuffers.length > 0) {
+          if (imageBuffersForLlm.length > 0) {
             send(controller, "stage", JSON.stringify({ message: STAGE_MESSAGES.analysing_photos }));
           }
 
@@ -988,7 +1147,7 @@ export async function POST(request: Request) {
           const triageResult = await runPlaybookTriage({
             labels: triageLabels,
             triageHistory: nextTriageHistory,
-            imageBuffers: imageBuffers.length > 0 ? imageBuffers : undefined,
+            imageBuffers: imageBuffersForLlm.length > 0 ? imageBuffersForLlm : undefined,
             currentProductType: session.productType,
           });
           console.log(
@@ -1319,7 +1478,7 @@ export async function POST(request: Request) {
             lastUserMessage: message,
             resolution: lastResolution,
             machineModel: session.machineModel ?? undefined,
-            imageBuffers: imageBuffers.length > 0 ? imageBuffers : undefined,
+            imageBuffers: imageBuffersForLlm.length > 0 ? imageBuffersForLlm : undefined,
           });
           phase = "resolved_followup";
           plannerOutput = {
@@ -1403,7 +1562,7 @@ export async function POST(request: Request) {
               lastUserMessage: message,
               machineModel: session.machineModel ?? undefined,
               outstandingRequestIds,
-              imageBuffers: imageBuffers.length > 0 ? imageBuffers : undefined,
+              imageBuffers: imageBuffersForLlm.length > 0 ? imageBuffersForLlm : undefined,
             });
 
             const { output: sanitized } = validateAndSanitizePlannerOutput(

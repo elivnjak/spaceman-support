@@ -18,7 +18,7 @@ It focuses on the `/chat` -> `/api/chat` flow and covers:
 - **Triage**: Pre-diagnosis phase where the system picks the correct playbook label.
 - **Evidence**: Facts collected from user responses (text, readings, photos, confirmations).
 - **Hypothesis**: Possible root cause with confidence and status.
-- **Phase**: Session state: `triaging`, `gathering_info`, `diagnosing`, `resolving`, `resolved_followup`, or `escalated`.
+- **Phase**: Session state: `collecting_issue`, `nameplate_check`, `product_type_check`, `clearance_check`, `triaging`, `gathering_info`, `diagnosing`, `resolving`, `resolved_followup`, or `escalated`.
 - **RAG**: Retrieval-augmented generation using document chunks for grounded responses.
 - **Requests**: Structured next-step prompts (question/photo/action/reading).
 - **SSE**: Streamed backend events used by chat UI for stages + final response.
@@ -27,12 +27,14 @@ It focuses on the `/chat` -> `/api/chat` flow and covers:
 
 ## High-Level System Flow
 
-1. User sends text and optional photos.
-2. If session is new (or still `triaging`), backend runs GPT-4o vision triage to select playbook.
-3. If confident, backend assigns playbook and enters diagnostic loop.
-4. If not confident, backend asks a triage follow-up question (often with candidate options).
-5. If still not confident after max triage rounds, backend escalates to technician.
-6. During diagnosis, backend runs RAG + planner each turn, updates evidence/hypotheses, and moves toward resolve/escalate.
+1. User sends issue details and optional photos.
+2. Backend runs intake gates in order: `collecting_issue` -> `nameplate_check` -> `product_type_check` -> `clearance_check`.
+3. In `clearance_check`, user uploads machine-clearance photos from different angles (stored for escalation use only).
+4. After intake, backend enters `triaging` and runs GPT-4o vision triage to select a playbook.
+5. If confident, backend assigns playbook and enters diagnostic loop.
+6. If not confident, backend asks a triage follow-up question (often with candidate options).
+7. If still not confident after max triage rounds, backend escalates to technician.
+8. During diagnosis, backend runs RAG + planner each turn, updates evidence/hypotheses, and moves toward resolve/escalate.
 
 ---
 
@@ -156,21 +158,27 @@ Each message:
 
 ## Image Handling (Now)
 
-Images are used in two important places:
+Images are used in three important places:
 
 ### 1) Playbook triage (new or still-triaging sessions)
 
 - Photos are sent directly to GPT-4o triage together with message text.
 - The system does **not** use CLIP similarity matching for playbook selection anymore.
 
-### 2) Diagnostic planner turns
+### 2) Clearance intake photos
+
+- During `clearance_check`, user uploads machine-clearance photos from multiple angles.
+- These photos are stored in `diagnostic_sessions.clearance_image_paths`.
+- These photos are **not** sent to LLMs during the clearance step itself.
+
+### 3) Diagnostic planner turns
 
 - Photos are sent to planner model as vision inputs.
 - Prompt now explicitly instructs model to extract photo-derived evidence.
 - Planner can return `photoAnalysis` per `evidence_extracted` item.
 - Backend persists that `photoAnalysis` into session evidence so future turns keep visual context even without re-sending original photo.
 
-### 3) Follow-up after resolution
+### 4) Follow-up after resolution
 
 - `runFollowUpAnswer` now also supports image inputs, so post-resolution Q&A can use vision too.
 

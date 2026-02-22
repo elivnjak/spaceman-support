@@ -11,6 +11,7 @@ const navItems = [
   { href: "/admin/models", label: "Supported models" },
   { href: "/admin/product-types", label: "Product types" },
   { href: "/admin/nameplate", label: "Nameplate config" },
+  { href: "/admin/clearance", label: "Clearance config" },
   { href: "/admin/docs", label: "Documents" },
   { href: "/admin/playbooks", label: "Playbooks" },
   { href: "/admin/test", label: "Test console" },
