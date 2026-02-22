@@ -19,7 +19,18 @@ const navItems = [
 
 export function AdminNav() {
   const [open, setOpen] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
   const pathname = usePathname();
+
+  const handleLogout = async () => {
+    if (loggingOut) return;
+    setLoggingOut(true);
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } finally {
+      window.location.href = "/admin";
+    }
+  };
 
   const linkClass = (href: string) => {
     const isActive =
@@ -63,6 +74,14 @@ export function AdminNav() {
           >
             Back to app
           </Link>
+          <button
+            type="button"
+            onClick={handleLogout}
+            disabled={loggingOut}
+            className="shrink-0 text-sm text-gray-600 hover:text-gray-900 disabled:opacity-60 dark:text-gray-400 dark:hover:text-white"
+          >
+            {loggingOut ? "Signing out..." : "Sign out"}
+          </button>
         </div>
       </nav>
 

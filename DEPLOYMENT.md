@@ -5,7 +5,7 @@ You need:
 - **Postgres with pgvector** (for embeddings and vector search)
 - **Node 18+** (Next.js 15)
 - **Persistent storage** for uploaded docs and images (files under `storage/` or `STORAGE_PATH`)
-- **Env vars**: `DATABASE_URL`, `OPENAI_API_KEY`, `ADMIN_API_KEY`, `CHAT_API_KEY` (and optionally `REPLICATE_API_TOKEN`, `HUGGINGFACE_API_KEY`, `ESCALATION_WEBHOOK_URL`)
+- **Env vars**: `DATABASE_URL`, `OPENAI_API_KEY`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `CHAT_API_KEY` (and optionally `REPLICATE_API_TOKEN`, `HUGGINGFACE_API_KEY`, `ESCALATION_WEBHOOK_URL`)
 
 ---
 
@@ -26,7 +26,7 @@ You need:
 
 4. **Set environment variables** (in the app service → **Variables**):
    - `DATABASE_URL` — from step 2 (or Neon).
-   - `OPENAI_API_KEY`, `ADMIN_API_KEY`, `CHAT_API_KEY` (required).
+   - `OPENAI_API_KEY`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `CHAT_API_KEY` (required).
    - Optional: `REPLICATE_API_TOKEN`, `HUGGINGFACE_API_KEY`, `ESCALATION_WEBHOOK_URL`.
 
 5. **Persistent storage for uploads**
@@ -55,7 +55,8 @@ Use this to run the app + Postgres on a single Linux server (e.g. DigitalOcean, 
    ```env
    POSTGRES_PASSWORD=your_secure_password_here
    OPENAI_API_KEY=sk-...
-   ADMIN_API_KEY=...
+   ADMIN_EMAIL=admin@admin.com
+   ADMIN_PASSWORD=choose_a_strong_password
    CHAT_API_KEY=...
    ```
    `DATABASE_URL` is set automatically from `POSTGRES_PASSWORD`. Do not commit `.env.production`.

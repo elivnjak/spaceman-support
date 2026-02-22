@@ -9,54 +9,31 @@ function getClientIp(request: NextRequest): string {
   );
 }
 
-/**
- * Middleware protecting admin UI (basic auth) and admin API routes (Bearer token).
- * Chat API routes use a separate CHAT_API_KEY if configured.
- * All API routes are rate-limited.
- *
- * Set ADMIN_API_KEY and optionally CHAT_API_KEY in .env to enable.
- * When keys are not set, access is unrestricted (dev mode).
- */
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  const sessionToken = request.cookies.get("session_token")?.value?.trim() ?? "";
 
-  // --- Admin UI: basic auth challenge via browser ---
-  if (pathname.startsWith("/admin")) {
-    const adminKey = process.env.ADMIN_API_KEY;
-    if (!adminKey) return NextResponse.next();
-
-    const authHeader = request.headers.get("Authorization");
-    if (authHeader?.startsWith("Basic ")) {
-      const decoded = atob(authHeader.slice(6));
-      const [, password] = decoded.split(":");
-      if (password === adminKey) return NextResponse.next();
-    }
-
-    return new NextResponse("Authentication required", {
-      status: 401,
-      headers: { "WWW-Authenticate": 'Basic realm="Admin"' },
-    });
+  // Allow admin root to render login form when unauthenticated.
+  if (pathname === "/admin") {
+    return NextResponse.next();
   }
 
-  // --- Admin API routes: Bearer token ---
-  if (pathname.startsWith("/api/admin")) {
-    const adminKey = process.env.ADMIN_API_KEY;
-    if (!adminKey) return NextResponse.next();
-
-    const authHeader = request.headers.get("Authorization");
-    const token = authHeader?.startsWith("Bearer ")
-      ? authHeader.slice(7)
-      : null;
-    // Also accept Basic auth (so admin UI fetch calls pass through)
-    if (authHeader?.startsWith("Basic ")) {
-      const decoded = atob(authHeader.slice(6));
-      const [, password] = decoded.split(":");
-      if (password === adminKey) return NextResponse.next();
+  // --- Admin UI routes: require session cookie ---
+  if (pathname.startsWith("/admin")) {
+    if (!sessionToken) {
+      const redirectUrl = new URL("/admin", request.url);
+      redirectUrl.searchParams.set("unauthorized", "1");
+      redirectUrl.searchParams.set("next", pathname);
+      return NextResponse.redirect(redirectUrl);
     }
+    return NextResponse.next();
+  }
 
-    if (token !== adminKey) {
+  // --- Admin API routes: require session cookie ---
+  if (pathname.startsWith("/api/admin")) {
+    if (!sessionToken) {
       return NextResponse.json(
-        { error: "Invalid or missing admin API key" },
+        { error: "Unauthorized" },
         { status: 401 }
       );
     }

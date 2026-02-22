@@ -1,8 +1,9 @@
 import { sql } from "drizzle-orm";
 import { db } from "./index";
-import { labels, actions, playbooks } from "./schema";
+import { labels, actions, playbooks, users } from "./schema";
 import { eq } from "drizzle-orm";
 import { loadActionCatalogRows } from "@/lib/actions/catalog";
+import { hashPassword } from "@/lib/auth";
 
 const DEFAULT_LABELS = [
   { id: "good_texture", displayName: "Good texture", description: "Normal, desired consistency" },
@@ -24,6 +25,58 @@ export async function ensureVectorIndexes(): Promise<void> {
     CREATE INDEX IF NOT EXISTS doc_chunks_embedding_idx
     ON doc_chunks USING hnsw (embedding vector_cosine_ops)
   `);
+}
+
+/** Ensures users and sessions tables exist (idempotent). Run before seedAdminUser if migrations may not have been applied. */
+export async function ensureAuthTables(): Promise<void> {
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS "users" (
+      "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+      "email" text NOT NULL,
+      "password_hash" text NOT NULL,
+      "role" text DEFAULT 'admin' NOT NULL,
+      "created_at" timestamp with time zone DEFAULT now(),
+      "updated_at" timestamp with time zone DEFAULT now(),
+      CONSTRAINT "users_email_unique" UNIQUE("email")
+    )
+  `);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS "sessions" (
+      "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+      "user_id" uuid NOT NULL REFERENCES "users"("id") ON DELETE cascade,
+      "token" text NOT NULL,
+      "expires_at" timestamp with time zone NOT NULL,
+      "created_at" timestamp with time zone DEFAULT now(),
+      CONSTRAINT "sessions_token_unique" UNIQUE("token")
+    )
+  `);
+}
+
+export async function seedAdminUser(): Promise<void> {
+  await ensureAuthTables();
+  const email = (process.env.ADMIN_EMAIL ?? "admin@admin.com").trim().toLowerCase();
+  const password = (process.env.ADMIN_PASSWORD ?? "admin123").trim();
+
+  if (!password) {
+    throw new Error("ADMIN_PASSWORD cannot be empty when seeding admin user");
+  }
+
+  const passwordHash = await hashPassword(password);
+  await db
+    .insert(users)
+    .values({
+      email,
+      passwordHash,
+      role: "admin",
+    })
+    .onConflictDoUpdate({
+      target: users.email,
+      set: {
+        passwordHash,
+        role: "admin",
+        updatedAt: new Date(),
+      },
+    });
 }
 
 const DEFAULT_ACTIONS = [

@@ -51,6 +51,25 @@ export const productTypes = pgTable("product_types", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });
 
+export const users = pgTable("users", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  email: text("email").notNull().unique(),
+  passwordHash: text("password_hash").notNull(),
+  role: text("role").notNull().default("admin"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+});
+
+export const sessions = pgTable("sessions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  token: text("token").notNull().unique(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
+
 export const referenceImages = pgTable("reference_images", {
   id: uuid("id").primaryKey().defaultRandom(),
   labelId: text("label_id")
@@ -225,6 +244,10 @@ export type SupportedModel = typeof supportedModels.$inferSelect;
 export type NewSupportedModel = typeof supportedModels.$inferInsert;
 export type ProductType = typeof productTypes.$inferSelect;
 export type NewProductType = typeof productTypes.$inferInsert;
+export type User = typeof users.$inferSelect;
+export type NewUser = typeof users.$inferInsert;
+export type Session = typeof sessions.$inferSelect;
+export type NewSession = typeof sessions.$inferInsert;
 export type ReferenceImage = typeof referenceImages.$inferSelect;
 export type NewReferenceImage = typeof referenceImages.$inferInsert;
 export type Document = typeof documents.$inferSelect;

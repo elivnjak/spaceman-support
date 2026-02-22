@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { db } from "@/lib/db";
+import { getSessionCookieName, validateSession } from "@/lib/auth";
 import {
   labels,
   referenceImages,
@@ -63,14 +64,25 @@ async function getCounts() {
 type Props = { searchParams: Promise<{ unauthorized?: string; next?: string }> };
 
 export default async function AdminDashboardPage({ searchParams }: Props) {
-  const counts = await getCounts();
   const params = await searchParams;
-  const requiredToken = process.env.ADMIN_API_KEY?.trim();
   const cookieStore = await cookies();
-  const cookieToken = cookieStore.get("admin_api_key")?.value?.trim() ?? "";
-  const isAuthenticated = !!requiredToken && cookieToken === requiredToken;
-  const showLogin =
-    !!requiredToken && (!isAuthenticated || params.unauthorized === "1");
+  const sessionToken = cookieStore.get(getSessionCookieName())?.value?.trim() ?? "";
+  const session = sessionToken ? await validateSession(sessionToken) : null;
+  const isAuthenticated = !!session && session.user.role === "admin";
+  const showLogin = !isAuthenticated || params.unauthorized === "1";
+  const counts = isAuthenticated
+    ? await getCounts()
+    : {
+        labels: 0,
+        images: 0,
+        docs: 0,
+        docsReady: 0,
+        playbooks: 0,
+        actions: 0,
+        supportedModels: 0,
+        nameplateConfigured: false,
+        clearanceConfigured: false,
+      };
 
   return (
     <div>
@@ -78,7 +90,8 @@ export default async function AdminDashboardPage({ searchParams }: Props) {
       {showLogin && (
         <AdminLoginForm next={params.next} />
       )}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      {isAuthenticated && (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-lg border border-gray-200 bg-white p-6 shadow dark:border-gray-700 dark:bg-gray-800">
           <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400">
             Reference images
@@ -181,15 +194,18 @@ export default async function AdminDashboardPage({ searchParams }: Props) {
             Manage
           </Link>
         </div>
-      </div>
-      <div className="mt-8">
+        </div>
+      )}
+      {isAuthenticated && (
+        <div className="mt-8">
         <Link
           href="/admin/test"
           className="inline-flex items-center rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
         >
           Test the assistant
         </Link>
-      </div>
+        </div>
+      )}
     </div>
   );
 }
