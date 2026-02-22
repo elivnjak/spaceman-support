@@ -40,6 +40,7 @@ type Playbook = {
   id: string;
   labelId: string;
   title: string;
+  requiresProductType?: boolean;
   steps: Step[];
   schemaVersion?: number;
   symptoms?: SymptomItem[] | null;
@@ -53,6 +54,7 @@ type Playbook = {
 type PlaybookFormState = {
   labelId: string;
   title: string;
+  requiresProductType: boolean;
   steps: Step[];
   symptoms: SymptomItem[];
   evidenceChecklist: EvidenceItem[];
@@ -83,6 +85,7 @@ function toFormState(p: Playbook): PlaybookFormState {
   return {
     labelId: p.labelId,
     title: p.title,
+    requiresProductType: Boolean(p.requiresProductType),
     steps: Array.isArray(p.steps) ? p.steps : [],
     symptoms: Array.isArray(p.symptoms) ? p.symptoms : [],
     evidenceChecklist: Array.isArray(p.evidenceChecklist) ? p.evidenceChecklist : [],
@@ -108,6 +111,7 @@ export default function AdminPlaybooksPage() {
   const [form, setForm] = useState({
     labelId: "",
     title: "",
+    requiresProductType: false,
     steps: [] as Step[],
     symptoms: [] as SymptomItem[],
     evidenceChecklist: [] as EvidenceItem[],
@@ -120,6 +124,7 @@ export default function AdminPlaybooksPage() {
   const [importMsg, setImportMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [saveMsg, setSaveMsg] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -139,6 +144,7 @@ export default function AdminPlaybooksPage() {
           setActiveTab("overview");
           setForm(toFormState(match));
           setTargetMissing(false);
+          setSaveMsg(null);
         } else {
           setTargetMissing(true);
         }
@@ -282,6 +288,7 @@ export default function AdminPlaybooksPage() {
           id: editing?.id,
           labelId: form.labelId,
           title: form.title,
+          requiresProductType: form.requiresProductType,
           steps: form.steps,
           symptoms: form.symptoms.length ? form.symptoms : null,
           evidenceChecklist: form.evidenceChecklist.length
@@ -311,18 +318,25 @@ export default function AdminPlaybooksPage() {
           }
           return [...prev, saved];
         });
-        setEditing(null);
-        setShowForm(false);
-        setForm({
-          labelId: "",
-          title: "",
-          steps: [],
-          symptoms: [],
-          evidenceChecklist: [],
-          candidateCauses: [],
-          diagnosticQuestions: [],
-          escalationTriggers: [],
-        });
+        setSaveMsg("Playbook saved successfully.");
+        if (dedicatedMode) {
+          setEditing(saved);
+          setForm(toFormState(saved));
+        } else {
+          setEditing(null);
+          setShowForm(false);
+          setForm({
+            labelId: "",
+            title: "",
+            requiresProductType: false,
+            steps: [],
+            symptoms: [],
+            evidenceChecklist: [],
+            candidateCauses: [],
+            diagnosticQuestions: [],
+            escalationTriggers: [],
+          });
+        }
       }
     } finally {
       setSaving(false);
@@ -330,12 +344,14 @@ export default function AdminPlaybooksPage() {
   };
 
   const startNew = () => {
+    setSaveMsg(null);
     setEditing(null);
     setShowForm(true);
     setActiveTab("overview");
     setForm({
       labelId: labels[0]?.id ?? "",
       title: "",
+      requiresProductType: false,
       steps: [],
       symptoms: [],
       evidenceChecklist: [],
@@ -444,6 +460,18 @@ export default function AdminPlaybooksPage() {
         </div>
       )}
 
+      {saveMsg && (
+        <div className="mb-4 flex items-center justify-between gap-2 rounded bg-green-50 px-4 py-3 text-sm text-green-800 dark:bg-green-900/30 dark:text-green-300">
+          <span>{saveMsg}</span>
+          <button
+            onClick={() => setSaveMsg(null)}
+            className="shrink-0 text-lg leading-none opacity-60 hover:opacity-100"
+          >
+            ×
+          </button>
+        </div>
+      )}
+
       {importMsg && (
         <div
           className={`mb-4 rounded px-4 py-3 text-sm ${
@@ -534,6 +562,18 @@ export default function AdminPlaybooksPage() {
                   onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
                   placeholder="e.g. Fix too runny"
                 />
+              </div>
+              <div className="mb-4">
+                <label className="flex items-center gap-2 text-sm font-medium text-gray-600 dark:text-gray-400">
+                  <input
+                    type="checkbox"
+                    checked={form.requiresProductType}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, requiresProductType: e.target.checked }))
+                    }
+                  />
+                  Require product type before diagnosis
+                </label>
               </div>
               {editing?.schemaVersion != null && (
                 <p className="text-sm text-gray-500">Schema version: {editing.schemaVersion}</p>

@@ -137,7 +137,9 @@ export default function AdminModelsPage() {
           <p className="text-sm text-gray-500 dark:text-gray-400">{models.length} total</p>
         </div>
         <div className="space-y-2">
-          {models.map((model) => (
+          {[...models]
+            .sort((a, b) => a.modelNumber.localeCompare(b.modelNumber))
+            .map((model) => (
             <div
               key={model.id}
               className="flex items-center justify-between rounded border border-gray-200 px-3 py-2 dark:border-gray-700"

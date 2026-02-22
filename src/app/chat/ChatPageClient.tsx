@@ -51,6 +51,7 @@ type MessagePayload = {
   guideImages?: string[];
   model?: string | null;
   serialNumber?: string | null;
+  productType?: string | null;
   playbookId?: string | null;
   playbookTitle?: string | null;
   playbookLabelId?: string | null;
@@ -120,11 +121,7 @@ export function ChatPageClient({ chatApiKey }: ChatPageClientProps) {
     for (const req of requests) {
       const val = requestInputs[req.id]?.trim();
       if (!val) continue;
-      if (req.expectedInput?.unit) {
-        parts.push(`${req.prompt}: ${val} ${req.expectedInput.unit}`);
-      } else {
-        parts.push(`${req.prompt}: ${val}`);
-      }
+      parts.push(val);
     }
     return parts.length > 0 ? parts.join("\n") : input.trim();
   };
@@ -166,10 +163,7 @@ export function ChatPageClient({ chatApiKey }: ChatPageClientProps) {
   const submitSingleRequestAnswer = (req: RequestItem, value: string) => {
     if (loading) return;
     setRequestInputs((prev) => ({ ...prev, [req.id]: value }));
-    const built = req.expectedInput?.unit
-      ? `${req.prompt}: ${value} ${req.expectedInput.unit}`
-      : `${req.prompt}: ${value}`;
-    setInput(built);
+    setInput(value);
     setRequestInputs({});
     setTimeout(() => {
       const form = document.querySelector("main form");
@@ -292,6 +286,7 @@ export function ChatPageClient({ chatApiKey }: ChatPageClientProps) {
           lastRequests: payload!.requests,
           model: payload!.model ?? s.model,
           serialNumber: payload!.serialNumber ?? s.serialNumber,
+          productType: payload!.productType ?? s.productType,
           playbookId: payload!.playbookId ?? s.playbookId,
           playbookTitle: payload!.playbookTitle ?? s.playbookTitle,
           playbookLabelId: payload!.playbookLabelId ?? s.playbookLabelId,
@@ -524,21 +519,21 @@ export function ChatPageClient({ chatApiKey }: ChatPageClientProps) {
                     </div>
                   );
                 })()}
-                {m.role === "assistant" && m.resolution && (
+                {m.role === "assistant" && Boolean(m.resolution?.diagnosis) && (
                   <div className="mt-3 space-y-2 border-t border-green-200 pt-2 dark:border-green-800">
                     <p className="font-medium text-green-800 dark:text-green-300">
-                      Diagnosis: {m.resolution.diagnosis}
+                      Diagnosis: {m.resolution?.diagnosis}
                     </p>
-                    {(m.resolution.steps?.length ?? 0) > 0 && (
+                    {(m.resolution?.steps?.length ?? 0) > 0 && (
                       <ol className="list-inside list-decimal space-y-1 text-sm">
-                        {(m.resolution.steps ?? []).map((s, k) => (
+                        {(m.resolution?.steps ?? []).map((s, k) => (
                           <li key={k}>{s.instruction}</li>
                         ))}
                       </ol>
                     )}
-                    {m.resolution.why && (
+                    {m.resolution?.why && (
                       <p className="text-xs text-gray-600 dark:text-gray-400">
-                        Why: {m.resolution.why}
+                        Why: {m.resolution?.why}
                       </p>
                     )}
                   </div>

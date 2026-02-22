@@ -42,6 +42,14 @@ export const supportedModels = pgTable("supported_models", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });
 
+export const productTypes = pgTable("product_types", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull().unique(),
+  isOther: boolean("is_other").notNull().default(false),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
+
 export const referenceImages = pgTable("reference_images", {
   id: uuid("id").primaryKey().defaultRandom(),
   labelId: text("label_id")
@@ -105,6 +113,7 @@ export const playbooks = pgTable("playbooks", {
   candidateCauses: jsonb("candidate_causes"),
   diagnosticQuestions: jsonb("diagnostic_questions"),
   escalationTriggers: jsonb("escalation_triggers"),
+  requiresProductType: boolean("requires_product_type").notNull().default(false),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });
 
@@ -149,6 +158,7 @@ export const diagnosticSessions = pgTable("diagnostic_sessions", {
   status: text("status").notNull().default("active"),
   machineModel: text("machine_model"),
   serialNumber: text("serial_number"),
+  productType: text("product_type"),
   manufacturingYear: integer("manufacturing_year"),
   playbookId: uuid("playbook_id").references(() => playbooks.id),
   triageHistory: jsonb("triage_history").notNull().default([]),
@@ -183,6 +193,8 @@ export type Label = typeof labels.$inferSelect;
 export type NewLabel = typeof labels.$inferInsert;
 export type SupportedModel = typeof supportedModels.$inferSelect;
 export type NewSupportedModel = typeof supportedModels.$inferInsert;
+export type ProductType = typeof productTypes.$inferSelect;
+export type NewProductType = typeof productTypes.$inferInsert;
 export type ReferenceImage = typeof referenceImages.$inferSelect;
 export type NewReferenceImage = typeof referenceImages.$inferInsert;
 export type Document = typeof documents.$inferSelect;

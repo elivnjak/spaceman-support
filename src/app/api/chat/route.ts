@@ -5,10 +5,11 @@ import {
   playbooks,
   actions,
   labels,
+  productTypes,
   nameplateConfig,
   nameplateGuideImages,
 } from "@/lib/db/schema";
-import { eq, inArray } from "drizzle-orm";
+import { asc, eq, inArray } from "drizzle-orm";
 import { openaiTextEmbedder } from "@/lib/embeddings/openai-text";
 import { searchDocChunks } from "@/lib/pipeline/text-retrieval";
 import {
@@ -162,6 +163,22 @@ async function getNameplatePrompt(): Promise<{ instructionText: string; guideIma
   return { instructionText, guideImages };
 }
 
+async function getProductTypeOptions(): Promise<{ name: string; isOther: boolean }[]> {
+  const rows = await db
+    .select({ name: productTypes.name, isOther: productTypes.isOther })
+    .from(productTypes)
+    .orderBy(asc(productTypes.sortOrder), asc(productTypes.name));
+  if (rows.length > 0) {
+    return rows;
+  }
+  return [
+    { name: "Yogurt", isOther: false },
+    { name: "Acai", isOther: false },
+    { name: "Ice Cream", isOther: false },
+    { name: "Other", isOther: true },
+  ];
+}
+
 export async function POST(request: Request) {
   const formData = await request.formData();
   const sessionIdRaw = (formData.get("sessionId") as string)?.trim() || null;
@@ -301,6 +318,7 @@ export async function POST(request: Request) {
                 guideImages: guideImages.length > 0 ? guideImages : undefined,
                 model: session.machineModel ?? undefined,
                 serialNumber: session.serialNumber ?? undefined,
+                productType: session.productType ?? undefined,
                 playbookId: session.playbookId ?? undefined,
               })
             );
@@ -364,6 +382,7 @@ export async function POST(request: Request) {
                 requests: assistantTurn.requests,
                 model: session.machineModel ?? undefined,
                 serialNumber: session.serialNumber ?? undefined,
+                productType: session.productType ?? undefined,
                 playbookId: session.playbookId ?? undefined,
               })
             );
@@ -419,6 +438,7 @@ export async function POST(request: Request) {
                 guideImages: guideImages.length > 0 ? guideImages : undefined,
                 model: session.machineModel ?? undefined,
                 serialNumber: session.serialNumber ?? undefined,
+                productType: session.productType ?? undefined,
                 playbookId: session.playbookId ?? undefined,
               })
             );
@@ -478,6 +498,7 @@ export async function POST(request: Request) {
                 guideImages: guideImages.length > 0 ? guideImages : undefined,
                 model: session.machineModel ?? undefined,
                 serialNumber: session.serialNumber ?? undefined,
+                productType: session.productType ?? undefined,
                 playbookId: session.playbookId ?? undefined,
               })
             );
@@ -514,6 +535,7 @@ export async function POST(request: Request) {
                   requests: [],
                   model: session.machineModel ?? undefined,
                   serialNumber: session.serialNumber ?? undefined,
+                  productType: session.productType ?? undefined,
                   playbookId: session.playbookId ?? undefined,
                 })
               );
@@ -566,6 +588,7 @@ export async function POST(request: Request) {
                 guideImages: guideImages.length > 0 ? guideImages : undefined,
                 model: session.machineModel ?? undefined,
                 serialNumber: session.serialNumber ?? undefined,
+                productType: session.productType ?? undefined,
                 playbookId: session.playbookId ?? undefined,
               })
             );
@@ -608,6 +631,7 @@ export async function POST(request: Request) {
                 escalation_reason: "Machine is more than 5 years old based on serial number.",
                 model: session.machineModel ?? undefined,
                 serialNumber: session.serialNumber ?? undefined,
+                productType: session.productType ?? undefined,
                 playbookId: session.playbookId ?? undefined,
               })
             );
@@ -671,12 +695,181 @@ export async function POST(request: Request) {
                 requests: [],
                 model: session.machineModel ?? undefined,
                 serialNumber: session.serialNumber ?? undefined,
+                productType: session.productType ?? undefined,
                 playbookId: session.playbookId ?? undefined,
               })
             );
             controller.close();
             return;
           }
+        }
+
+        if (session.phase === "product_type_check") {
+          const availableProductTypes = await getProductTypeOptions();
+          const productTypeOptions = availableProductTypes.map((item) => item.name);
+          const otherOption = availableProductTypes.find((item) => item.isOther);
+          const responseMessage = "What type of product are you using?";
+          const previousAssistantMessage = [...messages]
+            .reverse()
+            .find((entry) => entry.role === "assistant") as
+            | (ChatMessage & { requests?: PlannerOutput["requests"] })
+            | undefined;
+          const expectingOtherDetail = Boolean(
+            previousAssistantMessage?.requests?.some((request) => request.id === "product_type_other_detail")
+          );
+          const normalizedMessage = message.trim().toLowerCase();
+          const normalizedOptions = new Map(
+            availableProductTypes.map((item) => [item.name.trim().toLowerCase(), item.name])
+          );
+          const matchedOption = normalizedOptions.get(normalizedMessage);
+
+          if (!message.trim() || isPlaceholderUserMessage(message) || isTrivialMessage(message)) {
+            const assistantTurn: ChatMessage & { requests?: PlannerOutput["requests"] } = {
+              role: "assistant",
+              content: `${responseMessage} If you choose Other, please specify the exact product.`,
+              timestamp: new Date().toISOString(),
+              requests: [
+                {
+                  type: "question",
+                  id: "product_type",
+                  prompt: responseMessage,
+                  expectedInput: { type: "enum", options: productTypeOptions },
+                },
+              ],
+            };
+            messages.push(assistantTurn);
+            await db
+              .update(diagnosticSessions)
+              .set({
+                messages,
+                phase: "product_type_check",
+                status: "active",
+                updatedAt: new Date(),
+              })
+              .where(eq(diagnosticSessions.id, sessionId));
+
+            send(
+              controller,
+              "message",
+              JSON.stringify({
+                sessionId,
+                message: assistantTurn.content,
+                phase: "product_type_check",
+                requests: assistantTurn.requests,
+                model: session.machineModel ?? undefined,
+                serialNumber: session.serialNumber ?? undefined,
+                productType: session.productType ?? undefined,
+                playbookId: session.playbookId ?? undefined,
+              })
+            );
+            controller.close();
+            return;
+          }
+
+          if (otherOption && matchedOption === otherOption.name && !expectingOtherDetail) {
+            const askDetailMessage = "Please type the exact product type you are using.";
+            const assistantTurn: ChatMessage & { requests?: PlannerOutput["requests"] } = {
+              role: "assistant",
+              content: askDetailMessage,
+              timestamp: new Date().toISOString(),
+              requests: [
+                {
+                  type: "question",
+                  id: "product_type_other_detail",
+                  prompt: askDetailMessage,
+                  expectedInput: { type: "text" },
+                },
+              ],
+            };
+            messages.push(assistantTurn);
+            await db
+              .update(diagnosticSessions)
+              .set({
+                messages,
+                phase: "product_type_check",
+                status: "active",
+                updatedAt: new Date(),
+              })
+              .where(eq(diagnosticSessions.id, sessionId));
+
+            send(
+              controller,
+              "message",
+              JSON.stringify({
+                sessionId,
+                message: askDetailMessage,
+                phase: "product_type_check",
+                requests: assistantTurn.requests,
+                model: session.machineModel ?? undefined,
+                serialNumber: session.serialNumber ?? undefined,
+                productType: session.productType ?? undefined,
+                playbookId: session.playbookId ?? undefined,
+              })
+            );
+            controller.close();
+            return;
+          }
+
+          const chosenProductType = matchedOption ?? (expectingOtherDetail ? message.trim() : "");
+          if (!chosenProductType) {
+            const assistantTurn: ChatMessage & { requests?: PlannerOutput["requests"] } = {
+              role: "assistant",
+              content: `${responseMessage} If you choose Other, please specify the exact product.`,
+              timestamp: new Date().toISOString(),
+              requests: [
+                {
+                  type: "question",
+                  id: "product_type",
+                  prompt: responseMessage,
+                  expectedInput: { type: "enum", options: productTypeOptions },
+                },
+              ],
+            };
+            messages.push(assistantTurn);
+            await db
+              .update(diagnosticSessions)
+              .set({
+                messages,
+                phase: "product_type_check",
+                status: "active",
+                updatedAt: new Date(),
+              })
+              .where(eq(diagnosticSessions.id, sessionId));
+
+            send(
+              controller,
+              "message",
+              JSON.stringify({
+                sessionId,
+                message: assistantTurn.content,
+                phase: "product_type_check",
+                requests: assistantTurn.requests,
+                model: session.machineModel ?? undefined,
+                serialNumber: session.serialNumber ?? undefined,
+                productType: session.productType ?? undefined,
+                playbookId: session.playbookId ?? undefined,
+              })
+            );
+            controller.close();
+            return;
+          }
+
+          await db
+            .update(diagnosticSessions)
+            .set({
+              productType: chosenProductType,
+              messages,
+              phase: "gathering_info",
+              status: "active",
+              updatedAt: new Date(),
+            })
+            .where(eq(diagnosticSessions.id, sessionId));
+          session = {
+            ...session,
+            productType: chosenProductType,
+            phase: "gathering_info",
+            status: "active",
+          };
         }
 
         const isTriageFlow = session.phase === "triaging";
@@ -687,7 +880,12 @@ export async function POST(request: Request) {
           }
 
           const allPlaybooks = await db
-            .select({ id: playbooks.id, labelId: playbooks.labelId, title: playbooks.title })
+            .select({
+              id: playbooks.id,
+              labelId: playbooks.labelId,
+              title: playbooks.title,
+              requiresProductType: playbooks.requiresProductType,
+            })
             .from(playbooks);
           const allLabels = await db.select().from(labels);
           const labelsById = new Map(allLabels.map((l) => [l.id, l]));
@@ -799,6 +997,7 @@ export async function POST(request: Request) {
                   : undefined,
                 model: session.machineModel ?? undefined,
                 serialNumber: session.serialNumber ?? undefined,
+                productType: session.productType ?? undefined,
                 playbookId: session.playbookId ?? undefined,
               })
             );
@@ -810,7 +1009,10 @@ export async function POST(request: Request) {
             .update(diagnosticSessions)
             .set({
               playbookId: matchedPlaybook?.id ?? null,
-              phase: "gathering_info",
+              phase:
+                matchedPlaybook?.requiresProductType && !session.productType
+                  ? "product_type_check"
+                  : "gathering_info",
               triageRound,
               triageHistory: [
                 ...nextTriageHistory,
@@ -826,7 +1028,10 @@ export async function POST(request: Request) {
           session = {
             ...session,
             playbookId: matchedPlaybook?.id ?? null,
-            phase: "gathering_info",
+            phase:
+              matchedPlaybook?.requiresProductType && !session.productType
+                ? "product_type_check"
+                : "gathering_info",
             triageRound,
             triageHistory: [
               ...nextTriageHistory,
@@ -836,6 +1041,55 @@ export async function POST(request: Request) {
               },
             ],
           };
+
+          if (matchedPlaybook?.requiresProductType && !session.productType) {
+            const availableProductTypes = await getProductTypeOptions();
+            const productTypeOptions = availableProductTypes.map((item) => item.name);
+            const responseMessage =
+              "Before we continue, what type of product are you using? If you choose Other, please specify the exact product.";
+            const assistantTurn: ChatMessage & { requests?: PlannerOutput["requests"] } = {
+              role: "assistant",
+              content: responseMessage,
+              timestamp: new Date().toISOString(),
+              requests: [
+                {
+                  type: "question",
+                  id: "product_type",
+                  prompt: "What type of product are you using?",
+                  expectedInput: { type: "enum", options: productTypeOptions },
+                },
+              ],
+            };
+            messages.push(assistantTurn);
+            await db
+              .update(diagnosticSessions)
+              .set({
+                messages,
+                phase: "product_type_check",
+                status: "active",
+                updatedAt: new Date(),
+              })
+              .where(eq(diagnosticSessions.id, sessionId));
+
+            send(
+              controller,
+              "message",
+              JSON.stringify({
+                sessionId,
+                message: responseMessage,
+                phase: "product_type_check",
+                requests: assistantTurn.requests,
+                model: session.machineModel ?? undefined,
+                serialNumber: session.serialNumber ?? undefined,
+                productType: session.productType ?? undefined,
+                playbookId: session.playbookId ?? undefined,
+                playbookTitle: matchedPlaybook.title,
+                playbookLabelId: matchedPlaybook.labelId,
+              })
+            );
+            controller.close();
+            return;
+          }
         }
 
         const playbookRow = session.playbookId
@@ -951,6 +1205,7 @@ export async function POST(request: Request) {
                     escalation_reason: "Resolution did not fix the issue",
                     model: session.machineModel ?? undefined,
                     serialNumber: session.serialNumber ?? undefined,
+                    productType: session.productType ?? undefined,
                     playbookId: session.playbookId ?? undefined,
                   })
                 );
@@ -987,6 +1242,7 @@ export async function POST(request: Request) {
                   requests: [],
                   model: session.machineModel ?? undefined,
                   serialNumber: session.serialNumber ?? undefined,
+                  productType: session.productType ?? undefined,
                   playbookId: session.playbookId ?? undefined,
                 })
               );
@@ -1292,6 +1548,7 @@ export async function POST(request: Request) {
             citations: citations.length > 0 ? citations : undefined,
             model: session.machineModel ?? undefined,
             serialNumber: session.serialNumber ?? undefined,
+            productType: session.productType ?? undefined,
             playbookId: session.playbookId ?? undefined,
             playbookTitle: playbook?.title ?? undefined,
             playbookLabelId: playbook?.labelId ?? undefined,

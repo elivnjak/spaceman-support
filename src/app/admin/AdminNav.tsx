@@ -1,0 +1,126 @@
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { useState } from "react";
+
+const navItems = [
+  { href: "/admin", label: "Dashboard" },
+  { href: "/admin/labels", label: "Labels" },
+  { href: "/admin/images", label: "Reference images" },
+  { href: "/admin/models", label: "Supported models" },
+  { href: "/admin/product-types", label: "Product types" },
+  { href: "/admin/nameplate", label: "Nameplate config" },
+  { href: "/admin/docs", label: "Documents" },
+  { href: "/admin/playbooks", label: "Playbooks" },
+  { href: "/admin/test", label: "Test console" },
+] as const;
+
+export function AdminNav() {
+  const [open, setOpen] = useState(false);
+  const pathname = usePathname();
+
+  const linkClass = (href: string) => {
+    const isActive =
+      href === "/admin" ? pathname === "/admin" : pathname.startsWith(href);
+    return isActive
+      ? "font-medium text-gray-900 dark:text-white"
+      : "text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white";
+  };
+
+  return (
+    <>
+      <nav className="border-b border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
+        <div className="mx-auto flex max-w-6xl items-center gap-4 px-4 py-3">
+          <button
+            type="button"
+            onClick={() => setOpen(true)}
+            className="flex shrink-0 items-center justify-center rounded-md p-2 text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-white"
+            aria-label="Open menu"
+          >
+            <svg
+              className="h-6 w-6"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              aria-hidden
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M4 6h16M4 12h16M4 18h16"
+              />
+            </svg>
+          </button>
+          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+            Admin
+          </span>
+          <Link
+            href="/"
+            className="ml-auto shrink-0 text-sm text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
+          >
+            Back to app
+          </Link>
+        </div>
+      </nav>
+
+      {/* Overlay */}
+      {open && (
+        <button
+          type="button"
+          onClick={() => setOpen(false)}
+          className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
+          aria-label="Close menu"
+        />
+      )}
+
+      {/* Slide-out panel */}
+      <div
+        className={`fixed left-0 top-0 z-50 h-full w-72 max-w-[85vw] transform border-r border-gray-200 bg-white shadow-xl transition-transform duration-200 ease-out dark:border-gray-700 dark:bg-gray-800 ${
+          open ? "translate-x-0" : "-translate-x-full"
+        }`}
+        aria-hidden={!open}
+      >
+        <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3 dark:border-gray-700">
+          <span className="font-semibold text-gray-900 dark:text-white">
+            Menu
+          </span>
+          <button
+            type="button"
+            onClick={() => setOpen(false)}
+            className="rounded-md p-2 text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-white"
+            aria-label="Close menu"
+          >
+            <svg
+              className="h-5 w-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M6 18L18 6M6 6l12 12"
+              />
+            </svg>
+          </button>
+        </div>
+        <ul className="flex flex-col py-2">
+          {navItems.map(({ href, label }) => (
+            <li key={href}>
+              <Link
+                href={href}
+                onClick={() => setOpen(false)}
+                className={`block px-4 py-3 ${linkClass(href)}`}
+              >
+                {label}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </>
+  );
+}
