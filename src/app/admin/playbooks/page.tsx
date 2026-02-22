@@ -41,7 +41,6 @@ type Playbook = {
   id: string;
   labelId: string;
   title: string;
-  requiresProductType?: boolean;
   productTypeIds?: string[];
   steps: Step[];
   schemaVersion?: number;
@@ -56,7 +55,6 @@ type Playbook = {
 type PlaybookFormState = {
   labelId: string;
   title: string;
-  requiresProductType: boolean;
   productTypeIds: string[];
   steps: Step[];
   symptoms: SymptomItem[];
@@ -88,7 +86,6 @@ function toFormState(p: Playbook): PlaybookFormState {
   return {
     labelId: p.labelId,
     title: p.title,
-    requiresProductType: Boolean(p.requiresProductType),
     productTypeIds: Array.isArray(p.productTypeIds) ? p.productTypeIds : [],
     steps: Array.isArray(p.steps) ? p.steps : [],
     symptoms: Array.isArray(p.symptoms) ? p.symptoms : [],
@@ -116,7 +113,6 @@ export default function AdminPlaybooksPage() {
   const [form, setForm] = useState({
     labelId: "",
     title: "",
-    requiresProductType: false,
     productTypeIds: [] as string[],
     steps: [] as Step[],
     symptoms: [] as SymptomItem[],
@@ -296,8 +292,7 @@ export default function AdminPlaybooksPage() {
           id: editing?.id,
           labelId: form.labelId,
           title: form.title,
-          requiresProductType: form.requiresProductType,
-          productTypeIds: form.requiresProductType ? form.productTypeIds : [],
+          productTypeIds: form.productTypeIds,
           steps: form.steps,
           symptoms: form.symptoms.length ? form.symptoms : null,
           evidenceChecklist: form.evidenceChecklist.length
@@ -337,7 +332,6 @@ export default function AdminPlaybooksPage() {
           setForm({
             labelId: "",
             title: "",
-            requiresProductType: false,
             productTypeIds: [],
             steps: [],
             symptoms: [],
@@ -361,7 +355,6 @@ export default function AdminPlaybooksPage() {
     setForm({
       labelId: labels[0]?.id ?? "",
       title: "",
-      requiresProductType: false,
       productTypeIds: [],
       steps: [],
       symptoms: [],
@@ -574,53 +567,39 @@ export default function AdminPlaybooksPage() {
                   placeholder="e.g. Fix too runny"
                 />
               </div>
-              <div className="mb-4">
-                <label className="flex items-center gap-2 text-sm font-medium text-gray-600 dark:text-gray-400">
-                  <input
-                    type="checkbox"
-                    checked={form.requiresProductType}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, requiresProductType: e.target.checked }))
-                    }
-                  />
-                  Require product type before diagnosis
-                </label>
-              </div>
-              {form.requiresProductType && (
-                <div className="mb-4 rounded border border-gray-200 p-3 dark:border-gray-700">
-                  <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                    Applicable product types
-                  </p>
-                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                    Leave empty to apply to all product types.
-                  </p>
-                  <div className="mt-2 flex flex-wrap gap-x-4 gap-y-2">
-                    {productTypes.map((productType) => {
-                      const checked = form.productTypeIds.includes(productType.id);
-                      return (
-                        <label
-                          key={productType.id}
-                          className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={(e) => {
-                              setForm((f) => ({
-                                ...f,
-                                productTypeIds: e.target.checked
-                                  ? [...f.productTypeIds, productType.id]
-                                  : f.productTypeIds.filter((id) => id !== productType.id),
-                              }));
-                            }}
-                          />
-                          {productType.name}
-                        </label>
-                      );
-                    })}
-                  </div>
+              <div className="mb-4 rounded border border-gray-200 p-3 dark:border-gray-700">
+                <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Applicable product types
+                </p>
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  Leave empty to apply to all product types.
+                </p>
+                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-2">
+                  {productTypes.map((productType) => {
+                    const checked = form.productTypeIds.includes(productType.id);
+                    return (
+                      <label
+                        key={productType.id}
+                        className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(e) => {
+                            setForm((f) => ({
+                              ...f,
+                              productTypeIds: e.target.checked
+                                ? [...f.productTypeIds, productType.id]
+                                : f.productTypeIds.filter((id) => id !== productType.id),
+                            }));
+                          }}
+                        />
+                        {productType.name}
+                      </label>
+                    );
+                  })}
                 </div>
-              )}
+              </div>
               {editing?.schemaVersion != null && (
                 <p className="text-sm text-gray-500">Schema version: {editing.schemaVersion}</p>
               )}
@@ -1173,7 +1152,6 @@ export default function AdminPlaybooksPage() {
                 setForm({
                   labelId: "",
                   title: "",
-                  requiresProductType: false,
                   productTypeIds: [],
                   steps: [],
                   symptoms: [],

@@ -94,7 +94,6 @@ const PlaybookSchema = z.object({
   id: z.string().uuid().optional(),
   labelId: z.string().min(1),
   title: z.string().min(1),
-  requiresProductType: z.boolean().optional(),
   productTypeIds: z.array(z.string().uuid()).optional(),
   steps: z.array(StepSchema).default([]),
   schemaVersion: z.number().int().optional(),
@@ -166,7 +165,6 @@ export async function POST(request: Request) {
     id,
     labelId,
     title,
-    requiresProductType,
     productTypeIds,
     steps,
     schemaVersion,
@@ -177,13 +175,11 @@ export async function POST(request: Request) {
     escalationTriggers,
   } = parsed.data;
   const stepsWithIds = ensureStepIds(steps || []);
-  const nextProductTypeIds =
-    Boolean(requiresProductType) && Array.isArray(productTypeIds) ? productTypeIds : [];
+  const nextProductTypeIds = Array.isArray(productTypeIds) ? productTypeIds : [];
 
   const payload = {
     labelId,
     title,
-    requiresProductType: Boolean(requiresProductType),
     steps: stepsWithIds,
     updatedAt: new Date(),
     ...(schemaVersion != null && { schemaVersion }),
@@ -229,7 +225,6 @@ export async function POST(request: Request) {
       .values({
         labelId,
         title,
-        requiresProductType: Boolean(requiresProductType),
         steps: stepsWithIds,
         ...(schemaVersion != null && { schemaVersion }),
         ...(symptoms != null && { symptoms }),

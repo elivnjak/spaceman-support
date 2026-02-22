@@ -646,8 +646,26 @@ export async function POST(request: Request) {
             .map((h) => h.content.slice(0, 40))
             .join(" | ");
           console.log(
-            `[chat] phase: nameplate_check -> triaging (session=${sessionId}) triageHistory items=${triageHistory.length} user_preview="${triagePreview}${triagePreview.length >= 80 ? "…" : ""}"`
+            `[chat] phase: nameplate_check -> product_type_check (session=${sessionId}) triageHistory items=${triageHistory.length} user_preview="${triagePreview}${triagePreview.length >= 80 ? "…" : ""}"`
           );
+          const availableProductTypes = await getProductTypeOptions();
+          const productTypeOptions = availableProductTypes.map((item) => item.name);
+          const responseMessage =
+            "Before we continue, what type of product are you using? If you choose Other, please specify the exact product.";
+          const assistantTurn: ChatMessage & { requests?: PlannerOutput["requests"] } = {
+            role: "assistant",
+            content: responseMessage,
+            timestamp: new Date().toISOString(),
+            requests: [
+              {
+                type: "question",
+                id: "product_type",
+                prompt: "What type of product are you using?",
+                expectedInput: { type: "enum", options: productTypeOptions },
+              },
+            ],
+          };
+          messages.push(assistantTurn);
 
           await db
             .update(diagnosticSessions)
@@ -656,7 +674,8 @@ export async function POST(request: Request) {
               serialNumber: extractedSerial,
               manufacturingYear,
               triageHistory,
-              phase: "triaging",
+              messages,
+              phase: "product_type_check",
               status: "active",
               updatedAt: new Date(),
             })
@@ -668,9 +687,26 @@ export async function POST(request: Request) {
             serialNumber: extractedSerial,
             manufacturingYear,
             triageHistory,
-            phase: "triaging",
+            phase: "product_type_check",
             status: "active",
           };
+
+          send(
+            controller,
+            "message",
+            JSON.stringify({
+              sessionId,
+              message: responseMessage,
+              phase: "product_type_check",
+              requests: assistantTurn.requests,
+              model: session.machineModel ?? undefined,
+              serialNumber: session.serialNumber ?? undefined,
+              productType: session.productType ?? undefined,
+              playbookId: session.playbookId ?? undefined,
+            })
+          );
+          controller.close();
+          return;
           } catch {
             messages.push({
               role: "assistant",
@@ -855,73 +891,12 @@ export async function POST(request: Request) {
             return;
           }
 
-          let playbookIdForSession = session.playbookId ?? null;
-          if (session.playbookId) {
-            const [activePlaybook] = await db
-              .select({ id: playbooks.id, labelId: playbooks.labelId })
-              .from(playbooks)
-              .where(eq(playbooks.id, session.playbookId));
-
-            if (activePlaybook) {
-              const siblingPlaybooks = await db
-                .select({ id: playbooks.id, labelId: playbooks.labelId })
-                .from(playbooks)
-                .where(eq(playbooks.labelId, activePlaybook.labelId));
-              const siblingIds = siblingPlaybooks.map((pb) => pb.id);
-              const siblingAssignments = siblingIds.length
-                ? await db
-                    .select({
-                      playbookId: playbookProductTypes.playbookId,
-                      productTypeName: productTypes.name,
-                    })
-                    .from(playbookProductTypes)
-                    .innerJoin(
-                      productTypes,
-                      eq(playbookProductTypes.productTypeId, productTypes.id)
-                    )
-                    .where(inArray(playbookProductTypes.playbookId, siblingIds))
-                : [];
-              const productTypesByPlaybookId = new Map<string, string[]>();
-              for (const assignment of siblingAssignments) {
-                const existing = productTypesByPlaybookId.get(assignment.playbookId);
-                if (existing) {
-                  existing.push(assignment.productTypeName);
-                } else {
-                  productTypesByPlaybookId.set(assignment.playbookId, [assignment.productTypeName]);
-                }
-              }
-
-              const normalize = (value: string) => value.trim().toLowerCase();
-              const selectedPlaybookTypes = productTypesByPlaybookId.get(activePlaybook.id) ?? [];
-              const selectedPlaybookTypeSet = new Set(selectedPlaybookTypes.map(normalize));
-              const selectedPlaybookAppliesToAll = selectedPlaybookTypes.length === 0;
-              const selectedPlaybookMatchesProductType =
-                selectedPlaybookAppliesToAll ||
-                selectedPlaybookTypeSet.has(normalize(chosenProductType));
-
-              if (!selectedPlaybookMatchesProductType) {
-                const exactMatchSibling = siblingPlaybooks.find((pb) => {
-                  const assignedTypes = productTypesByPlaybookId.get(pb.id) ?? [];
-                  return assignedTypes.map(normalize).includes(normalize(chosenProductType));
-                });
-                const allTypesSibling = siblingPlaybooks.find(
-                  (pb) => (productTypesByPlaybookId.get(pb.id) ?? []).length === 0
-                );
-                const nextPlaybook = exactMatchSibling ?? allTypesSibling ?? null;
-                if (nextPlaybook) {
-                  playbookIdForSession = nextPlaybook.id;
-                }
-              }
-            }
-          }
-
           await db
             .update(diagnosticSessions)
             .set({
               productType: chosenProductType,
-              playbookId: playbookIdForSession,
               messages,
-              phase: "gathering_info",
+              phase: "triaging",
               status: "active",
               updatedAt: new Date(),
             })
@@ -929,8 +904,7 @@ export async function POST(request: Request) {
           session = {
             ...session,
             productType: chosenProductType,
-            playbookId: playbookIdForSession,
-            phase: "gathering_info",
+            phase: "triaging",
             status: "active",
           };
         }
@@ -947,7 +921,6 @@ export async function POST(request: Request) {
               id: playbooks.id,
               labelId: playbooks.labelId,
               title: playbooks.title,
-              requiresProductType: playbooks.requiresProductType,
             })
             .from(playbooks);
           const playbookProductTypeAssignments = allPlaybooks.length
@@ -1136,10 +1109,7 @@ export async function POST(request: Request) {
             .update(diagnosticSessions)
             .set({
               playbookId: matchedPlaybook?.id ?? null,
-              phase:
-                matchedPlaybook?.requiresProductType && !session.productType
-                  ? "product_type_check"
-                  : "gathering_info",
+              phase: "gathering_info",
               triageRound,
               triageHistory: [
                 ...nextTriageHistory,
@@ -1155,10 +1125,7 @@ export async function POST(request: Request) {
           session = {
             ...session,
             playbookId: matchedPlaybook?.id ?? null,
-            phase:
-              matchedPlaybook?.requiresProductType && !session.productType
-                ? "product_type_check"
-                : "gathering_info",
+            phase: "gathering_info",
             triageRound,
             triageHistory: [
               ...nextTriageHistory,
@@ -1169,54 +1136,6 @@ export async function POST(request: Request) {
             ],
           };
 
-          if (matchedPlaybook?.requiresProductType && !session.productType) {
-            const availableProductTypes = await getProductTypeOptions();
-            const productTypeOptions = availableProductTypes.map((item) => item.name);
-            const responseMessage =
-              "Before we continue, what type of product are you using? If you choose Other, please specify the exact product.";
-            const assistantTurn: ChatMessage & { requests?: PlannerOutput["requests"] } = {
-              role: "assistant",
-              content: responseMessage,
-              timestamp: new Date().toISOString(),
-              requests: [
-                {
-                  type: "question",
-                  id: "product_type",
-                  prompt: "What type of product are you using?",
-                  expectedInput: { type: "enum", options: productTypeOptions },
-                },
-              ],
-            };
-            messages.push(assistantTurn);
-            await db
-              .update(diagnosticSessions)
-              .set({
-                messages,
-                phase: "product_type_check",
-                status: "active",
-                updatedAt: new Date(),
-              })
-              .where(eq(diagnosticSessions.id, sessionId));
-
-            send(
-              controller,
-              "message",
-              JSON.stringify({
-                sessionId,
-                message: responseMessage,
-                phase: "product_type_check",
-                requests: assistantTurn.requests,
-                model: session.machineModel ?? undefined,
-                serialNumber: session.serialNumber ?? undefined,
-                productType: session.productType ?? undefined,
-                playbookId: session.playbookId ?? undefined,
-                playbookTitle: matchedPlaybook.title,
-                playbookLabelId: matchedPlaybook.labelId,
-              })
-            );
-            controller.close();
-            return;
-          }
         }
 
         const playbookRow = session.playbookId
