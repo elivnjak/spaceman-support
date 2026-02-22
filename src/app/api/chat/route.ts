@@ -5,6 +5,8 @@ import {
   playbooks,
   actions,
   labels,
+  nameplateConfig,
+  nameplateGuideImages,
 } from "@/lib/db/schema";
 import { eq, inArray } from "drizzle-orm";
 import { openaiTextEmbedder } from "@/lib/embeddings/openai-text";
@@ -22,14 +24,21 @@ import {
   type ActionRecord,
 } from "@/lib/pipeline/diagnostic-planner";
 import { DIAGNOSTIC_CONFIG, TRIAGE_CONFIG } from "@/lib/config";
+import { ensureNameplateTables } from "@/lib/db/ensure-nameplate-tables";
 import {
   writeStorageFile,
   diagnosticSessionImagePath,
 } from "@/lib/storage";
 import { buildEscalationHandoff, sendEscalationWebhook } from "@/lib/escalation";
 import { runPlaybookTriage, type TriageHistoryItem } from "@/lib/pipeline/playbook-triage";
+import {
+  analyzeNameplate,
+  parseManufacturingYear,
+  validateModel,
+} from "@/lib/pipeline/nameplate-analysis";
 
 const STAGE_MESSAGES: Record<string, string> = {
+  requesting_nameplate: "Collecting machine details…",
   selecting_playbook: "Selecting diagnostic guide…",
   asking_followup: "Asking a follow-up question…",
   analysing_photos: "Analysing your photos…",
@@ -85,6 +94,32 @@ function buildCitations(
   return citations;
 }
 
+async function getNameplatePrompt(): Promise<{ instructionText: string; guideImages: string[] }> {
+  await ensureNameplateTables();
+  const [config] = await db.select().from(nameplateConfig).limit(1);
+  const defaultInstruction =
+    "Please take a clear photo of the machine name plate. It is usually on the rear or side panel and includes the model and serial number.";
+  const instructionText = config?.instructionText?.trim() || defaultInstruction;
+
+  const rawIds = Array.isArray(config?.guideImageIds) ? config.guideImageIds : [];
+  const guideIds = rawIds
+    .map((value) => (typeof value === "string" ? value : ""))
+    .filter(Boolean);
+  if (guideIds.length === 0) {
+    return { instructionText, guideImages: [] };
+  }
+
+  const rows = await db
+    .select({ id: nameplateGuideImages.id })
+    .from(nameplateGuideImages)
+    .where(inArray(nameplateGuideImages.id, guideIds));
+  const rowIds = new Set(rows.map((row) => row.id));
+  const guideImages = guideIds
+    .filter((id) => rowIds.has(id))
+    .map((id) => `/api/nameplate-guide-image/${id}`);
+  return { instructionText, guideImages };
+}
+
 export async function POST(request: Request) {
   const formData = await request.formData();
   const sessionIdRaw = (formData.get("sessionId") as string)?.trim() || null;
@@ -102,6 +137,7 @@ export async function POST(request: Request) {
   const stream = new ReadableStream({
     async start(controller) {
       try {
+        await ensureNameplateTables();
         let session = sessionIdRaw
           ? (await db.select().from(diagnosticSessions).where(eq(diagnosticSessions.id, sessionIdRaw)))[0]
           : null;
@@ -114,14 +150,14 @@ export async function POST(request: Request) {
             .insert(diagnosticSessions)
             .values({
               status: "active",
-              machineModel: machineModel ?? null,
+              machineModel: null,
               playbookId: null,
               triageHistory: [],
               triageRound: 0,
               messages: [],
               evidence: {},
               hypotheses: [],
-              phase: "triaging",
+              phase: "nameplate_check",
               turnCount: 0,
             })
             .returning();
@@ -151,14 +187,313 @@ export async function POST(request: Request) {
           }
         }
 
-        messages.push({
-          role: "user",
-          content: message,
-          images: imagePaths.length ? imagePaths : undefined,
-          timestamp: new Date().toISOString(),
-        });
+        const hasUserInput = Boolean(message) || imagePaths.length > 0;
+        if (hasUserInput) {
+          messages.push({
+            role: "user",
+            content: message || "(sent photos)",
+            images: imagePaths.length ? imagePaths : undefined,
+            timestamp: new Date().toISOString(),
+          });
+        }
 
-        const isTriageFlow = isNewSession || session.phase === "triaging";
+        if (session.phase === "nameplate_check") {
+          send(controller, "stage", JSON.stringify({ message: STAGE_MESSAGES.requesting_nameplate }));
+          const { instructionText, guideImages } = await getNameplatePrompt();
+
+          if (imageBuffers.length === 0) {
+            const responseMessage = instructionText;
+            const assistantTurn: ChatMessage & {
+              requests?: PlannerOutput["requests"];
+              guideImages?: string[];
+            } = {
+              role: "assistant",
+              content: responseMessage,
+              timestamp: new Date().toISOString(),
+              requests: [
+                {
+                  type: "photo",
+                  id: "nameplate_photo",
+                  prompt: "Please upload a clear photo of the machine name plate.",
+                  expectedInput: { type: "photo" },
+                },
+              ],
+              guideImages: guideImages.length > 0 ? guideImages : undefined,
+            };
+            messages.push(assistantTurn);
+
+            await db
+              .update(diagnosticSessions)
+              .set({
+                machineModel: machineModel ?? session.machineModel ?? null,
+                messages,
+                phase: "nameplate_check",
+                status: "active",
+                updatedAt: new Date(),
+              })
+              .where(eq(diagnosticSessions.id, sessionId));
+
+            send(
+              controller,
+              "message",
+              JSON.stringify({
+                sessionId,
+                message: responseMessage,
+                phase: "nameplate_check",
+                requests: assistantTurn.requests,
+                guideImages: guideImages.length > 0 ? guideImages : undefined,
+                model: session.machineModel ?? undefined,
+                serialNumber: session.serialNumber ?? undefined,
+                playbookId: session.playbookId ?? undefined,
+              })
+            );
+            controller.close();
+            return;
+          }
+
+          send(controller, "stage", JSON.stringify({ message: STAGE_MESSAGES.analysing_photos }));
+
+          const unsupportedMessage =
+            "Your machine isn't a Spaceman machine. We only support Spaceman machines.";
+
+          try {
+            const extracted = await analyzeNameplate(imageBuffers);
+            const extractedModel = extracted.modelNumber?.trim() ?? "";
+            const extractedSerial = extracted.serialNumber?.trim() ?? "";
+
+            if (!extractedModel || !extractedSerial) {
+              const retryMessage =
+                "I couldn't reliably read the model and serial number from that photo. Please upload a sharper photo of the full name plate.";
+              const assistantTurn: ChatMessage & {
+                requests?: PlannerOutput["requests"];
+                guideImages?: string[];
+              } = {
+                role: "assistant",
+                content: retryMessage,
+                timestamp: new Date().toISOString(),
+                requests: [
+                  {
+                    type: "photo",
+                    id: "nameplate_photo_retry",
+                    prompt: "Please upload another clear photo of the full name plate.",
+                    expectedInput: { type: "photo" },
+                  },
+                ],
+                guideImages: guideImages.length > 0 ? guideImages : undefined,
+              };
+              messages.push(assistantTurn);
+              await db
+                .update(diagnosticSessions)
+                .set({
+                  messages,
+                  phase: "nameplate_check",
+                  status: "active",
+                  updatedAt: new Date(),
+                })
+                .where(eq(diagnosticSessions.id, sessionId));
+
+            send(
+              controller,
+              "message",
+              JSON.stringify({
+                sessionId,
+                message: retryMessage,
+                phase: "nameplate_check",
+                requests: assistantTurn.requests,
+                guideImages: guideImages.length > 0 ? guideImages : undefined,
+                model: session.machineModel ?? undefined,
+                serialNumber: session.serialNumber ?? undefined,
+                playbookId: session.playbookId ?? undefined,
+              })
+            );
+            controller.close();
+            return;
+            }
+
+            const { valid, canonical } = await validateModel(extractedModel);
+            if (!valid) {
+              messages.push({
+                role: "assistant",
+                content: unsupportedMessage,
+                timestamp: new Date().toISOString(),
+              });
+              await db
+                .update(diagnosticSessions)
+                .set({
+                  machineModel: canonical || extractedModel,
+                  serialNumber: extractedSerial,
+                  messages,
+                  phase: "unsupported_model",
+                  status: "resolved",
+                  updatedAt: new Date(),
+                })
+                .where(eq(diagnosticSessions.id, sessionId));
+
+              send(
+                controller,
+                "message",
+                JSON.stringify({
+                  sessionId,
+                  message: unsupportedMessage,
+                  phase: "unsupported_model",
+                  requests: [],
+                  model: session.machineModel ?? undefined,
+                  serialNumber: session.serialNumber ?? undefined,
+                  playbookId: session.playbookId ?? undefined,
+                })
+              );
+              controller.close();
+              return;
+            }
+
+            const manufacturingYear = parseManufacturingYear(extractedSerial);
+          if (manufacturingYear == null) {
+            const retrySerialMessage =
+              "I found the serial number but couldn't read its manufacturing year. Please upload a clearer name plate photo where the serial is fully visible.";
+            const assistantTurn: ChatMessage & {
+              requests?: PlannerOutput["requests"];
+              guideImages?: string[];
+            } = {
+              role: "assistant",
+              content: retrySerialMessage,
+              timestamp: new Date().toISOString(),
+              requests: [
+                {
+                  type: "photo",
+                  id: "nameplate_serial_retry",
+                  prompt: "Please upload a clearer photo of the serial number on the name plate.",
+                  expectedInput: { type: "photo" },
+                },
+              ],
+              guideImages: guideImages.length > 0 ? guideImages : undefined,
+            };
+            messages.push(assistantTurn);
+            await db
+              .update(diagnosticSessions)
+              .set({
+                machineModel: canonical,
+                serialNumber: extractedSerial,
+                messages,
+                phase: "nameplate_check",
+                status: "active",
+                updatedAt: new Date(),
+              })
+              .where(eq(diagnosticSessions.id, sessionId));
+
+            send(
+              controller,
+              "message",
+              JSON.stringify({
+                sessionId,
+                message: retrySerialMessage,
+                phase: "nameplate_check",
+                requests: assistantTurn.requests,
+                guideImages: guideImages.length > 0 ? guideImages : undefined,
+                model: session.machineModel ?? undefined,
+                serialNumber: session.serialNumber ?? undefined,
+                playbookId: session.playbookId ?? undefined,
+              })
+            );
+            controller.close();
+            return;
+          }
+          const currentYear = new Date().getFullYear();
+          const isOlderThanFiveYears =
+            currentYear - manufacturingYear > 5;
+          if (isOlderThanFiveYears) {
+            const escalationMessage =
+              "This machine appears to be more than 5 years old, so I'm connecting you with a technical specialist.";
+            messages.push({
+              role: "assistant",
+              content: escalationMessage,
+              timestamp: new Date().toISOString(),
+            });
+            await db
+              .update(diagnosticSessions)
+              .set({
+                machineModel: canonical,
+                serialNumber: extractedSerial,
+                manufacturingYear,
+                messages,
+                phase: "escalated",
+                status: "escalated",
+                escalationReason: "Machine is more than 5 years old based on serial number.",
+                updatedAt: new Date(),
+              })
+              .where(eq(diagnosticSessions.id, sessionId));
+
+            send(
+              controller,
+              "message",
+              JSON.stringify({
+                sessionId,
+                message: escalationMessage,
+                phase: "escalated",
+                requests: [],
+                escalation_reason: "Machine is more than 5 years old based on serial number.",
+                model: session.machineModel ?? undefined,
+                serialNumber: session.serialNumber ?? undefined,
+                playbookId: session.playbookId ?? undefined,
+              })
+            );
+            controller.close();
+            return;
+          }
+
+          await db
+            .update(diagnosticSessions)
+            .set({
+              machineModel: canonical,
+              serialNumber: extractedSerial,
+              manufacturingYear,
+              phase: "triaging",
+              status: "active",
+              updatedAt: new Date(),
+            })
+            .where(eq(diagnosticSessions.id, sessionId));
+
+          session = {
+            ...session,
+            machineModel: canonical,
+            serialNumber: extractedSerial,
+            manufacturingYear,
+            phase: "triaging",
+            status: "active",
+          };
+          } catch {
+            messages.push({
+              role: "assistant",
+              content: unsupportedMessage,
+              timestamp: new Date().toISOString(),
+            });
+            await db
+              .update(diagnosticSessions)
+              .set({
+                messages,
+                phase: "unsupported_model",
+                status: "resolved",
+                updatedAt: new Date(),
+              })
+              .where(eq(diagnosticSessions.id, sessionId));
+            send(
+              controller,
+              "message",
+              JSON.stringify({
+                sessionId,
+                message: unsupportedMessage,
+                phase: "unsupported_model",
+                requests: [],
+                model: session.machineModel ?? undefined,
+                serialNumber: session.serialNumber ?? undefined,
+                playbookId: session.playbookId ?? undefined,
+              })
+            );
+            controller.close();
+            return;
+          }
+        }
+
+        const isTriageFlow = session.phase === "triaging";
         if (isTriageFlow) {
           send(controller, "stage", JSON.stringify({ message: STAGE_MESSAGES.selecting_playbook }));
           if (imageBuffers.length > 0) {
@@ -264,6 +599,9 @@ export async function POST(request: Request) {
                 escalation_reason: shouldEscalate
                   ? "Unable to confidently identify a playbook after triage follow-ups."
                   : undefined,
+                model: session.machineModel ?? undefined,
+                serialNumber: session.serialNumber ?? undefined,
+                playbookId: session.playbookId ?? undefined,
               })
             );
             controller.close();
@@ -413,6 +751,9 @@ export async function POST(request: Request) {
                     phase: "escalated",
                     requests: [],
                     escalation_reason: "Resolution did not fix the issue",
+                    model: session.machineModel ?? undefined,
+                    serialNumber: session.serialNumber ?? undefined,
+                    playbookId: session.playbookId ?? undefined,
                   })
                 );
                 controller.close();
@@ -446,6 +787,9 @@ export async function POST(request: Request) {
                   message: responseMessage,
                   phase: "resolved_followup",
                   requests: [],
+                  model: session.machineModel ?? undefined,
+                  serialNumber: session.serialNumber ?? undefined,
+                  playbookId: session.playbookId ?? undefined,
                 })
               );
               controller.close();
@@ -748,6 +1092,11 @@ export async function POST(request: Request) {
             resolution: responseToSend.resolution,
             escalation_reason: responseToSend.escalation_reason,
             citations: citations.length > 0 ? citations : undefined,
+            model: session.machineModel ?? undefined,
+            serialNumber: session.serialNumber ?? undefined,
+            playbookId: session.playbookId ?? undefined,
+            playbookTitle: playbook?.title ?? undefined,
+            playbookLabelId: playbook?.labelId ?? undefined,
           })
         );
         controller.close();

@@ -1,17 +1,35 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { db } from "@/lib/db";
-import { labels, referenceImages, documents, playbooks, actions } from "@/lib/db/schema";
+import {
+  labels,
+  referenceImages,
+  documents,
+  playbooks,
+  actions,
+  supportedModels,
+  nameplateConfig,
+} from "@/lib/db/schema";
 import { AdminLoginForm } from "./AdminLoginForm";
 
 async function getCounts() {
   try {
-    const [labelsList, imagesList, docsList, playbooksList, actionsList] = await Promise.all([
+    const [
+      labelsList,
+      imagesList,
+      docsList,
+      playbooksList,
+      actionsList,
+      supportedModelsList,
+      nameplateConfigList,
+    ] = await Promise.all([
       db.select().from(labels),
       db.select().from(referenceImages),
       db.select().from(documents),
       db.select().from(playbooks),
       db.select().from(actions),
+      db.select().from(supportedModels),
+      db.select().from(nameplateConfig),
     ]);
     return {
       labels: labelsList.length,
@@ -20,9 +38,20 @@ async function getCounts() {
       docsReady: docsList.filter((d) => d.status === "READY").length,
       playbooks: playbooksList.length,
       actions: actionsList.length,
+      supportedModels: supportedModelsList.length,
+      nameplateConfigured: nameplateConfigList.length > 0,
     };
   } catch {
-    return { labels: 0, images: 0, docs: 0, docsReady: 0, playbooks: 0, actions: 0 };
+    return {
+      labels: 0,
+      images: 0,
+      docs: 0,
+      docsReady: 0,
+      playbooks: 0,
+      actions: 0,
+      supportedModels: 0,
+      nameplateConfigured: false,
+    };
   }
 }
 
@@ -102,6 +131,32 @@ export default async function AdminDashboardPage({ searchParams }: Props) {
           <p className="mt-2 text-3xl font-bold">{counts.actions}</p>
           <Link
             href="/admin/actions"
+            className="mt-2 inline-block text-sm text-blue-600 hover:underline"
+          >
+            Manage
+          </Link>
+        </div>
+        <div className="rounded-lg border border-gray-200 bg-white p-6 shadow dark:border-gray-700 dark:bg-gray-800">
+          <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400">
+            Supported Models
+          </h2>
+          <p className="mt-2 text-3xl font-bold">{counts.supportedModels}</p>
+          <Link
+            href="/admin/models"
+            className="mt-2 inline-block text-sm text-blue-600 hover:underline"
+          >
+            Manage
+          </Link>
+        </div>
+        <div className="rounded-lg border border-gray-200 bg-white p-6 shadow dark:border-gray-700 dark:bg-gray-800">
+          <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400">
+            Nameplate Config
+          </h2>
+          <p className="mt-2 text-lg font-bold">
+            {counts.nameplateConfigured ? "Configured" : "Not configured"}
+          </p>
+          <Link
+            href="/admin/nameplate"
             className="mt-2 inline-block text-sm text-blue-600 hover:underline"
           >
             Manage

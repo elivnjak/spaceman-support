@@ -35,6 +35,13 @@ export const labels = pgTable("labels", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });
 
+export const supportedModels = pgTable("supported_models", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  modelNumber: text("model_number").notNull().unique(),
+  displayName: text("display_name"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
+
 export const referenceImages = pgTable("reference_images", {
   id: uuid("id").primaryKey().defaultRandom(),
   labelId: text("label_id")
@@ -101,6 +108,21 @@ export const playbooks = pgTable("playbooks", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });
 
+export const nameplateConfig = pgTable("nameplate_config", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  instructionText: text("instruction_text").notNull(),
+  guideImageIds: jsonb("guide_image_ids").notNull().default([]),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+});
+
+export const nameplateGuideImages = pgTable("nameplate_guide_images", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  filePath: text("file_path").notNull(),
+  fileHash: text("file_hash"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
+
 export const supportSessions = pgTable(
   "support_sessions",
   {
@@ -126,6 +148,8 @@ export const diagnosticSessions = pgTable("diagnostic_sessions", {
   id: uuid("id").primaryKey().defaultRandom(),
   status: text("status").notNull().default("active"),
   machineModel: text("machine_model"),
+  serialNumber: text("serial_number"),
+  manufacturingYear: integer("manufacturing_year"),
   playbookId: uuid("playbook_id").references(() => playbooks.id),
   triageHistory: jsonb("triage_history").notNull().default([]),
   triageRound: integer("triage_round").notNull().default(0),
@@ -157,6 +181,8 @@ export const machineSpecs = pgTable("machine_specs", {
 
 export type Label = typeof labels.$inferSelect;
 export type NewLabel = typeof labels.$inferInsert;
+export type SupportedModel = typeof supportedModels.$inferSelect;
+export type NewSupportedModel = typeof supportedModels.$inferInsert;
 export type ReferenceImage = typeof referenceImages.$inferSelect;
 export type NewReferenceImage = typeof referenceImages.$inferInsert;
 export type Document = typeof documents.$inferSelect;
@@ -165,6 +191,10 @@ export type DocChunk = typeof docChunks.$inferSelect;
 export type NewDocChunk = typeof docChunks.$inferInsert;
 export type Action = typeof actions.$inferSelect;
 export type NewAction = typeof actions.$inferInsert;
+export type NameplateConfig = typeof nameplateConfig.$inferSelect;
+export type NewNameplateConfig = typeof nameplateConfig.$inferInsert;
+export type NameplateGuideImage = typeof nameplateGuideImages.$inferSelect;
+export type NewNameplateGuideImage = typeof nameplateGuideImages.$inferInsert;
 export type Playbook = typeof playbooks.$inferSelect;
 export type NewPlaybook = typeof playbooks.$inferInsert;
 export type SupportSession = typeof supportSessions.$inferSelect;

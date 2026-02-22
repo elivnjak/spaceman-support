@@ -28,6 +28,7 @@ type ChatMessage = {
   role: "user" | "assistant";
   content: string;
   images?: string[];
+  guideImages?: string[];
   requests?: RequestItem[];
   resolution?: {
     causeId: string;
@@ -47,6 +48,12 @@ type MessagePayload = {
   resolution?: ChatMessage["resolution"];
   escalation_reason?: string;
   citations?: CitationItem[];
+  guideImages?: string[];
+  model?: string | null;
+  serialNumber?: string | null;
+  playbookId?: string | null;
+  playbookTitle?: string | null;
+  playbookLabelId?: string | null;
 };
 
 const DOC_REF_REGEX =
@@ -81,7 +88,6 @@ export type ChatPageClientProps = { chatApiKey?: string | null };
 
 export function ChatPageClient({ chatApiKey }: ChatPageClientProps) {
   const [sessionId, setSessionId] = useState<string | null>(null);
-  const [machineModel, setMachineModel] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [files, setFiles] = useState<File[]>([]);
@@ -203,7 +209,6 @@ export function ChatPageClient({ chatApiKey }: ChatPageClientProps) {
     const form = new FormData();
     form.set("message", text || "(sent photos)");
     if (sessionId) form.set("sessionId", sessionId);
-    if (machineModel.trim()) form.set("machineModel", machineModel.trim());
     userImages.forEach((f) => form.append("images", f));
 
     setMessages((prev) => [
@@ -251,12 +256,18 @@ export function ChatPageClient({ chatApiKey }: ChatPageClientProps) {
             resolution: payload.resolution,
             escalation_reason: payload.escalation_reason,
             citations: payload.citations?.length ? payload.citations : undefined,
+            guideImages: payload.guideImages?.length ? payload.guideImages : undefined,
           },
         ]);
         setDebugState((s) => ({
           ...s,
           phase: payload!.phase,
           lastRequests: payload!.requests,
+          model: payload!.model ?? s.model,
+          serialNumber: payload!.serialNumber ?? s.serialNumber,
+          playbookId: payload!.playbookId ?? s.playbookId,
+          playbookTitle: payload!.playbookTitle ?? s.playbookTitle,
+          playbookLabelId: payload!.playbookLabelId ?? s.playbookLabelId,
         }));
       }
     } catch (err) {
@@ -281,15 +292,6 @@ export function ChatPageClient({ chatApiKey }: ChatPageClientProps) {
             Session: {sessionId}
           </p>
         )}
-        <div className="mx-auto mt-2 max-w-2xl">
-          <input
-            type="text"
-            placeholder="Machine model (optional)"
-            className="w-full rounded border border-gray-300 px-3 py-1.5 text-sm dark:border-gray-600 dark:bg-gray-800"
-            value={machineModel}
-            onChange={(e) => setMachineModel(e.target.value)}
-          />
-        </div>
       </header>
 
       <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col overflow-hidden p-4">
@@ -302,7 +304,7 @@ export function ChatPageClient({ chatApiKey }: ChatPageClientProps) {
         <div className="flex-1 space-y-4 overflow-y-auto">
           {messages.length === 0 && (
             <p className="rounded-lg border border-dashed border-gray-300 bg-white p-6 text-center text-gray-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-400">
-              Describe your issue and optionally attach photos. We&apos;ll ask follow-up questions to narrow down the cause.
+              Start by taking a clear photo of the machine name plate. We&apos;ll extract the model and serial number before diagnostics.
             </p>
           )}
           {messages.map((m, i) => (
@@ -336,6 +338,19 @@ export function ChatPageClient({ chatApiKey }: ChatPageClientProps) {
                   </p>
                 ) : (
                   <p className="whitespace-pre-wrap">{m.content}</p>
+                )}
+                {m.role === "assistant" && m.guideImages && m.guideImages.length > 0 && (
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    {m.guideImages.map((src, idx) => (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        key={`${src}-${idx}`}
+                        src={src}
+                        alt="Name plate guide"
+                        className="h-28 w-full rounded-md border border-gray-200 object-cover dark:border-gray-600"
+                      />
+                    ))}
+                  </div>
                 )}
                 {m.role === "assistant" && m.requests && m.requests.length > 0 && (() => {
                   const isLatest = i === messages.length - 1 && !loading;

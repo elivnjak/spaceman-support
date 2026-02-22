@@ -28,6 +28,18 @@ export default function AdminLayout({
             Reference images
           </Link>
           <Link
+            href="/admin/models"
+            className="text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
+          >
+            Supported models
+          </Link>
+          <Link
+            href="/admin/nameplate"
+            className="text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
+          >
+            Nameplate config
+          </Link>
+          <Link
             href="/admin/docs"
             className="text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
           >

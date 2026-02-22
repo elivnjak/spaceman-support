@@ -41,22 +41,6 @@ export async function POST(request: Request) {
       { status: 400 }
     );
   }
-  const existingProviderRow = await db.query.referenceImages.findFirst({
-    where: (r, { isNotNull }) => isNotNull(r.embeddingProvider),
-    columns: { embeddingProvider: true },
-  });
-  if (
-    existingProviderRow?.embeddingProvider &&
-    existingProviderRow.embeddingProvider !== provider
-  ) {
-    return NextResponse.json(
-      {
-        error:
-          `Embedding provider mismatch. Existing vectors use ${existingProviderRow.embeddingProvider}, but runtime is configured for ${provider}. Re-embed existing images before switching providers.`,
-      },
-      { status: 400 }
-    );
-  }
 
   for (const file of files) {
     const buffer = Buffer.from(await file.arrayBuffer());
@@ -87,7 +71,6 @@ export async function POST(request: Request) {
         fileHash: hash,
         notes,
         embedding: null,
-        embeddingProvider: provider,
       })
       .returning({ id: referenceImages.id, filePath: referenceImages.filePath });
 
@@ -95,7 +78,7 @@ export async function POST(request: Request) {
       const { embedding } = await embedWithProvider(buffer);
       await db
         .update(referenceImages)
-        .set({ embedding, embeddingProvider: provider })
+        .set({ embedding })
         .where(eq(referenceImages.id, inserted.id));
     } catch (err) {
       console.error("CLIP embed failed for", inserted.id, err);
