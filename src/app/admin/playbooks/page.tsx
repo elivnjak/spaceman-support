@@ -35,12 +35,14 @@ type QuestionItem = {
 };
 type TriggerItem = { trigger: string; reason: string };
 type Action = { id: string; title: string };
+type ProductTypeOption = { id: string; name: string; isOther: boolean };
 
 type Playbook = {
   id: string;
   labelId: string;
   title: string;
   requiresProductType?: boolean;
+  productTypeIds?: string[];
   steps: Step[];
   schemaVersion?: number;
   symptoms?: SymptomItem[] | null;
@@ -55,6 +57,7 @@ type PlaybookFormState = {
   labelId: string;
   title: string;
   requiresProductType: boolean;
+  productTypeIds: string[];
   steps: Step[];
   symptoms: SymptomItem[];
   evidenceChecklist: EvidenceItem[];
@@ -86,6 +89,7 @@ function toFormState(p: Playbook): PlaybookFormState {
     labelId: p.labelId,
     title: p.title,
     requiresProductType: Boolean(p.requiresProductType),
+    productTypeIds: Array.isArray(p.productTypeIds) ? p.productTypeIds : [],
     steps: Array.isArray(p.steps) ? p.steps : [],
     symptoms: Array.isArray(p.symptoms) ? p.symptoms : [],
     evidenceChecklist: Array.isArray(p.evidenceChecklist) ? p.evidenceChecklist : [],
@@ -101,6 +105,7 @@ export default function AdminPlaybooksPage() {
   const focusPlaybookId = params?.id;
   const dedicatedMode = Boolean(focusPlaybookId);
   const [labels, setLabels] = useState<Label[]>([]);
+  const [productTypes, setProductTypes] = useState<ProductTypeOption[]>([]);
   const [actionsList, setActionsList] = useState<Action[]>([]);
   const [playbooks, setPlaybooks] = useState<Playbook[]>([]);
   const [loading, setLoading] = useState(true);
@@ -112,6 +117,7 @@ export default function AdminPlaybooksPage() {
     labelId: "",
     title: "",
     requiresProductType: false,
+    productTypeIds: [] as string[],
     steps: [] as Step[],
     symptoms: [] as SymptomItem[],
     evidenceChecklist: [] as EvidenceItem[],
@@ -130,10 +136,12 @@ export default function AdminPlaybooksPage() {
   useEffect(() => {
     Promise.all([
       fetch("/api/admin/labels").then((r) => r.json()),
+      fetch("/api/admin/product-types").then((r) => r.json()),
       fetch("/api/admin/playbooks").then((r) => r.json()),
       fetch("/api/admin/actions").then((r) => r.json()),
-    ]).then(([l, p, a]) => {
+    ]).then(([l, pt, p, a]) => {
       setLabels(l);
+      setProductTypes(pt);
       setPlaybooks(p);
       setActionsList(a);
       if (focusPlaybookId) {
@@ -289,6 +297,7 @@ export default function AdminPlaybooksPage() {
           labelId: form.labelId,
           title: form.title,
           requiresProductType: form.requiresProductType,
+          productTypeIds: form.requiresProductType ? form.productTypeIds : [],
           steps: form.steps,
           symptoms: form.symptoms.length ? form.symptoms : null,
           evidenceChecklist: form.evidenceChecklist.length
@@ -329,6 +338,7 @@ export default function AdminPlaybooksPage() {
             labelId: "",
             title: "",
             requiresProductType: false,
+            productTypeIds: [],
             steps: [],
             symptoms: [],
             evidenceChecklist: [],
@@ -352,6 +362,7 @@ export default function AdminPlaybooksPage() {
       labelId: labels[0]?.id ?? "",
       title: "",
       requiresProductType: false,
+      productTypeIds: [],
       steps: [],
       symptoms: [],
       evidenceChecklist: [],
@@ -575,6 +586,41 @@ export default function AdminPlaybooksPage() {
                   Require product type before diagnosis
                 </label>
               </div>
+              {form.requiresProductType && (
+                <div className="mb-4 rounded border border-gray-200 p-3 dark:border-gray-700">
+                  <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Applicable product types
+                  </p>
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    Leave empty to apply to all product types.
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-x-4 gap-y-2">
+                    {productTypes.map((productType) => {
+                      const checked = form.productTypeIds.includes(productType.id);
+                      return (
+                        <label
+                          key={productType.id}
+                          className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={(e) => {
+                              setForm((f) => ({
+                                ...f,
+                                productTypeIds: e.target.checked
+                                  ? [...f.productTypeIds, productType.id]
+                                  : f.productTypeIds.filter((id) => id !== productType.id),
+                              }));
+                            }}
+                          />
+                          {productType.name}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
               {editing?.schemaVersion != null && (
                 <p className="text-sm text-gray-500">Schema version: {editing.schemaVersion}</p>
               )}
@@ -1127,6 +1173,8 @@ export default function AdminPlaybooksPage() {
                 setForm({
                   labelId: "",
                   title: "",
+                  requiresProductType: false,
+                  productTypeIds: [],
                   steps: [],
                   symptoms: [],
                   evidenceChecklist: [],

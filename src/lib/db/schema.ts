@@ -9,6 +9,7 @@ import {
   jsonb,
   customType,
   foreignKey,
+  unique,
 } from "drizzle-orm/pg-core";
 
 // pgvector type: stored as string in DB, we pass number[] from JS
@@ -117,6 +118,20 @@ export const playbooks = pgTable("playbooks", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });
 
+export const playbookProductTypes = pgTable(
+  "playbook_product_types",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    playbookId: uuid("playbook_id")
+      .notNull()
+      .references(() => playbooks.id, { onDelete: "cascade" }),
+    productTypeId: uuid("product_type_id")
+      .notNull()
+      .references(() => productTypes.id, { onDelete: "cascade" }),
+  },
+  (self) => [unique("playbook_product_types_unique").on(self.playbookId, self.productTypeId)]
+);
+
 export const nameplateConfig = pgTable("nameplate_config", {
   id: uuid("id").primaryKey().defaultRandom(),
   instructionText: text("instruction_text").notNull(),
@@ -209,6 +224,8 @@ export type NameplateGuideImage = typeof nameplateGuideImages.$inferSelect;
 export type NewNameplateGuideImage = typeof nameplateGuideImages.$inferInsert;
 export type Playbook = typeof playbooks.$inferSelect;
 export type NewPlaybook = typeof playbooks.$inferInsert;
+export type PlaybookProductType = typeof playbookProductTypes.$inferSelect;
+export type NewPlaybookProductType = typeof playbookProductTypes.$inferInsert;
 export type SupportSession = typeof supportSessions.$inferSelect;
 export type NewSupportSession = typeof supportSessions.$inferInsert;
 export type DiagnosticSession = typeof diagnosticSessions.$inferSelect;

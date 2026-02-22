@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import {
   diagnosticSessions,
+  playbookProductTypes,
   playbooks,
   actions,
   labels,
@@ -854,10 +855,71 @@ export async function POST(request: Request) {
             return;
           }
 
+          let playbookIdForSession = session.playbookId ?? null;
+          if (session.playbookId) {
+            const [activePlaybook] = await db
+              .select({ id: playbooks.id, labelId: playbooks.labelId })
+              .from(playbooks)
+              .where(eq(playbooks.id, session.playbookId));
+
+            if (activePlaybook) {
+              const siblingPlaybooks = await db
+                .select({ id: playbooks.id, labelId: playbooks.labelId })
+                .from(playbooks)
+                .where(eq(playbooks.labelId, activePlaybook.labelId));
+              const siblingIds = siblingPlaybooks.map((pb) => pb.id);
+              const siblingAssignments = siblingIds.length
+                ? await db
+                    .select({
+                      playbookId: playbookProductTypes.playbookId,
+                      productTypeName: productTypes.name,
+                    })
+                    .from(playbookProductTypes)
+                    .innerJoin(
+                      productTypes,
+                      eq(playbookProductTypes.productTypeId, productTypes.id)
+                    )
+                    .where(inArray(playbookProductTypes.playbookId, siblingIds))
+                : [];
+              const productTypesByPlaybookId = new Map<string, string[]>();
+              for (const assignment of siblingAssignments) {
+                const existing = productTypesByPlaybookId.get(assignment.playbookId);
+                if (existing) {
+                  existing.push(assignment.productTypeName);
+                } else {
+                  productTypesByPlaybookId.set(assignment.playbookId, [assignment.productTypeName]);
+                }
+              }
+
+              const normalize = (value: string) => value.trim().toLowerCase();
+              const selectedPlaybookTypes = productTypesByPlaybookId.get(activePlaybook.id) ?? [];
+              const selectedPlaybookTypeSet = new Set(selectedPlaybookTypes.map(normalize));
+              const selectedPlaybookAppliesToAll = selectedPlaybookTypes.length === 0;
+              const selectedPlaybookMatchesProductType =
+                selectedPlaybookAppliesToAll ||
+                selectedPlaybookTypeSet.has(normalize(chosenProductType));
+
+              if (!selectedPlaybookMatchesProductType) {
+                const exactMatchSibling = siblingPlaybooks.find((pb) => {
+                  const assignedTypes = productTypesByPlaybookId.get(pb.id) ?? [];
+                  return assignedTypes.map(normalize).includes(normalize(chosenProductType));
+                });
+                const allTypesSibling = siblingPlaybooks.find(
+                  (pb) => (productTypesByPlaybookId.get(pb.id) ?? []).length === 0
+                );
+                const nextPlaybook = exactMatchSibling ?? allTypesSibling ?? null;
+                if (nextPlaybook) {
+                  playbookIdForSession = nextPlaybook.id;
+                }
+              }
+            }
+          }
+
           await db
             .update(diagnosticSessions)
             .set({
               productType: chosenProductType,
+              playbookId: playbookIdForSession,
               messages,
               phase: "gathering_info",
               status: "active",
@@ -867,6 +929,7 @@ export async function POST(request: Request) {
           session = {
             ...session,
             productType: chosenProductType,
+            playbookId: playbookIdForSession,
             phase: "gathering_info",
             status: "active",
           };
@@ -887,17 +950,62 @@ export async function POST(request: Request) {
               requiresProductType: playbooks.requiresProductType,
             })
             .from(playbooks);
+          const playbookProductTypeAssignments = allPlaybooks.length
+            ? await db
+                .select({
+                  playbookId: playbookProductTypes.playbookId,
+                  productTypeName: productTypes.name,
+                })
+                .from(playbookProductTypes)
+                .innerJoin(productTypes, eq(playbookProductTypes.productTypeId, productTypes.id))
+                .where(inArray(playbookProductTypes.playbookId, allPlaybooks.map((pb) => pb.id)))
+            : [];
+          const productTypesByPlaybookId = new Map<string, string[]>();
+          for (const assignment of playbookProductTypeAssignments) {
+            const existing = productTypesByPlaybookId.get(assignment.playbookId);
+            if (existing) {
+              existing.push(assignment.productTypeName);
+            } else {
+              productTypesByPlaybookId.set(assignment.playbookId, [assignment.productTypeName]);
+            }
+          }
           const allLabels = await db.select().from(labels);
           const labelsById = new Map(allLabels.map((l) => [l.id, l]));
-          const triageLabels = allPlaybooks.map((pb) => {
+          const triageLabelsByLabel = new Map<
+            string,
+            {
+              labelId: string;
+              playbookTitle: string;
+              displayName: string;
+              description: string | null;
+              productTypes: Set<string>;
+            }
+          >();
+          for (const pb of allPlaybooks) {
             const labelMeta = labelsById.get(pb.labelId);
-            return {
+            const existing = triageLabelsByLabel.get(pb.labelId);
+            const playbookProductTypesForLabel = productTypesByPlaybookId.get(pb.id) ?? [];
+            if (existing) {
+              for (const name of playbookProductTypesForLabel) {
+                existing.productTypes.add(name);
+              }
+              continue;
+            }
+            triageLabelsByLabel.set(pb.labelId, {
               labelId: pb.labelId,
               playbookTitle: pb.title,
               displayName: labelMeta?.displayName ?? pb.labelId,
               description: labelMeta?.description ?? null,
-            };
-          });
+              productTypes: new Set(playbookProductTypesForLabel),
+            });
+          }
+          const triageLabels = Array.from(triageLabelsByLabel.values()).map((item) => ({
+            labelId: item.labelId,
+            playbookTitle: item.playbookTitle,
+            displayName: item.displayName,
+            description: item.description,
+            productTypes: Array.from(item.productTypes),
+          }));
 
           triageRound += 1;
           const nextTriageHistory: TriageHistoryItem[] = [
@@ -908,14 +1016,33 @@ export async function POST(request: Request) {
             labels: triageLabels,
             triageHistory: nextTriageHistory,
             imageBuffers: imageBuffers.length > 0 ? imageBuffers : undefined,
+            currentProductType: session.productType,
           });
           console.log(
             `[chat] triage (session=${sessionId}) selected_label=${triageResult.selectedLabelId ?? "null"} confidence=${triageResult.confidence.toFixed(2)} candidates=[${triageResult.candidateLabels.join(", ")}]`
           );
 
-          const matchedPlaybook = triageResult.selectedLabelId
-            ? allPlaybooks.find((pb) => pb.labelId === triageResult.selectedLabelId)
-            : null;
+          const matchedPlaybookCandidates = triageResult.selectedLabelId
+            ? allPlaybooks.filter((pb) => pb.labelId === triageResult.selectedLabelId)
+            : [];
+          const normalize = (value: string) => value.trim().toLowerCase();
+          const normalizedSessionProductType = session.productType
+            ? normalize(session.productType)
+            : "";
+          const matchedPlaybook =
+            matchedPlaybookCandidates.length === 0
+              ? null
+              : normalizedSessionProductType
+                ? matchedPlaybookCandidates.find((pb) =>
+                    (productTypesByPlaybookId.get(pb.id) ?? [])
+                      .map(normalize)
+                      .includes(normalizedSessionProductType)
+                  ) ??
+                  matchedPlaybookCandidates.find(
+                    (pb) => (productTypesByPlaybookId.get(pb.id) ?? []).length === 0
+                  ) ??
+                  matchedPlaybookCandidates[0]
+                : matchedPlaybookCandidates[0];
           const canAutoSelect =
             !!matchedPlaybook &&
             triageResult.confidence >= TRIAGE_CONFIG.autoSelectThreshold;

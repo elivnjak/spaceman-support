@@ -14,7 +14,6 @@ export async function POST(request: Request) {
     cssSelector?: string;
     renderJs?: boolean;
     machineModel?: string;
-    labelIds?: string[];
   };
   try {
     body = await request.json();
@@ -36,13 +35,6 @@ export async function POST(request: Request) {
   const cssSelector = (body.cssSelector as string)?.trim() || null;
   const renderJs = Boolean(body.renderJs);
   const machineModel = (body.machineModel as string)?.trim() || null;
-  const labelIds =
-    Array.isArray(body.labelIds) && body.labelIds.length > 0
-      ? body.labelIds
-          .map((v) => String(v).trim())
-          .filter((v) => v.length > 0)
-      : null;
-
   const placeholderTitle = slugFromUrl(url);
 
   const [doc] = await db
@@ -56,7 +48,6 @@ export async function POST(request: Request) {
       cssSelector,
       renderJs,
       machineModel,
-      labelIds,
     })
     .returning();
 

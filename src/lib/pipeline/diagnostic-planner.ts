@@ -22,6 +22,18 @@ export type CandidateCause = {
   cause: string;
   likelihood: "high" | "medium" | "low";
   rulingEvidence: string[];
+  supportRules?: {
+    evidenceId: string;
+    operator: "=" | "!=" | ">" | ">=" | "<" | "<=" | "in" | "not_in" | "contains" | "not_contains";
+    value: unknown;
+    weight?: number;
+  }[];
+  contradictionRules?: {
+    evidenceId: string;
+    operator: "=" | "!=" | ">" | ">=" | "<" | "<=" | "in" | "not_in" | "contains" | "not_contains";
+    value: unknown;
+    weight?: number;
+  }[];
 };
 export type DiagnosticQuestionItem = {
   id: string;

@@ -6,6 +6,7 @@ export type TriageLabelOption = {
   displayName: string;
   description?: string | null;
   playbookTitle: string;
+  productTypes?: string[];
 };
 
 export type TriageHistoryItem = {
@@ -17,6 +18,7 @@ export type PlaybookTriageInput = {
   labels: TriageLabelOption[];
   triageHistory: TriageHistoryItem[];
   imageBuffers?: Buffer[];
+  currentProductType?: string | null;
 };
 
 export type PlaybookTriageResult = {
@@ -52,7 +54,13 @@ export async function runPlaybookTriage(input: PlaybookTriageInput): Promise<Pla
   }
 
   const labelBlock = input.labels
-    .map((l) => `- ${l.labelId}: ${l.displayName}${l.description ? ` (${l.description})` : ""}; playbook="${l.playbookTitle}"`)
+    .map((l) => {
+      const productTypeSummary =
+        l.productTypes && l.productTypes.length > 0
+          ? l.productTypes.join(", ")
+          : "all product types";
+      return `- ${l.labelId}: ${l.displayName}${l.description ? ` (${l.description})` : ""}; playbook="${l.playbookTitle}"; applies_to="${productTypeSummary}"`;
+    })
     .join("\n");
 
   const historyBlock = input.triageHistory
@@ -81,10 +89,12 @@ Rules:
 - Include 2-3 candidate labels when uncertain.
 - If confidence >= 0.8 and a label is clear, set selected_label_id.
 - If uncertain, selected_label_id may be null and follow_up_question should be non-empty.
+- If product type is known, prefer labels tied to that product type; labels with applies_to="all product types" are valid for any product type.
 - Never invent labels not listed above.`;
 
   const userPrompt = `Conversation for triage:
 ${historyBlock || "(empty)"}
+${input.currentProductType ? `\nKnown product type: ${input.currentProductType}` : ""}
 
 Return JSON only.`;
 
