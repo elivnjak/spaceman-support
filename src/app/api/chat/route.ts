@@ -94,6 +94,48 @@ function buildCitations(
   return citations;
 }
 
+const PLACEHOLDER_USER_MESSAGES = new Set(["(sent photos)", "sent photo(s)"]);
+const TRIVIAL_USER_MESSAGE_PATTERNS = [
+  /^(hi|hello|hey|heya|yo|sup|hola)[!.?]*$/i,
+  /^(start|begin|help)[!.?]*$/i,
+  /^(ok|okay|k|thanks|thank you)[!.?]*$/i,
+];
+
+function normalizeUserMessage(content: string): string {
+  return content.trim().toLowerCase();
+}
+
+function isPlaceholderUserMessage(content: string): boolean {
+  return PLACEHOLDER_USER_MESSAGES.has(normalizeUserMessage(content));
+}
+
+function isTrivialMessage(content: string): boolean {
+  const trimmed = content.trim();
+  if (!trimmed) return true;
+  if (isPlaceholderUserMessage(trimmed)) return true;
+  return TRIVIAL_USER_MESSAGE_PATTERNS.some((pattern) => pattern.test(trimmed));
+}
+
+function prependSubstantiveUserHistory(
+  existing: TriageHistoryItem[],
+  chatMessages: ChatMessage[]
+): TriageHistoryItem[] {
+  const existingUserEntries = new Set(
+    existing
+      .filter((item) => item.role === "user")
+      .map((item) => normalizeUserMessage(item.content))
+  );
+
+  const toPrepend = chatMessages
+    .filter((msg) => msg.role === "user")
+    .map((msg) => msg.content?.trim() ?? "")
+    .filter((content) => content && !isPlaceholderUserMessage(content) && !isTrivialMessage(content))
+    .filter((content) => !existingUserEntries.has(normalizeUserMessage(content)))
+    .map((content) => ({ role: "user" as const, content }));
+
+  return toPrepend.length > 0 ? [...toPrepend, ...existing] : existing;
+}
+
 async function getNameplatePrompt(): Promise<{ instructionText: string; guideImages: string[] }> {
   await ensureNameplateTables();
   const [config] = await db.select().from(nameplateConfig).limit(1);
@@ -157,7 +199,7 @@ export async function POST(request: Request) {
               messages: [],
               evidence: {},
               hypotheses: [],
-              phase: "nameplate_check",
+              phase: "collecting_issue",
               turnCount: 0,
             })
             .returning();
@@ -173,7 +215,7 @@ export async function POST(request: Request) {
         }
 
         const messages = (session!.messages as ChatMessage[]) ?? [];
-        const triageHistory = (session!.triageHistory as TriageHistoryItem[] | null) ?? [];
+        let triageHistory = (session!.triageHistory as TriageHistoryItem[] | null) ?? [];
         let triageRound = session!.triageRound ?? 0;
         const imagePaths: string[] = [];
         if (imageBuffers.length > 0 && sessionId) {
@@ -195,6 +237,139 @@ export async function POST(request: Request) {
             images: imagePaths.length ? imagePaths : undefined,
             timestamp: new Date().toISOString(),
           });
+        }
+
+        if (session.phase === "collecting_issue") {
+          const { instructionText, guideImages } = await getNameplatePrompt();
+          const hasSubstantiveIssue =
+            Boolean(message) &&
+            !isPlaceholderUserMessage(message) &&
+            !isTrivialMessage(message);
+
+          if (hasSubstantiveIssue) {
+            console.log(
+              `[chat] phase: collecting_issue -> nameplate_check (session=${sessionId}) symptom="${message.trim().slice(0, 60)}${message.length > 60 ? "…" : ""}"`
+            );
+            send(controller, "stage", JSON.stringify({ message: STAGE_MESSAGES.requesting_nameplate }));
+            const responseMessage = `Thanks. ${instructionText}`;
+            const assistantTurn: ChatMessage & {
+              requests?: PlannerOutput["requests"];
+              guideImages?: string[];
+            } = {
+              role: "assistant",
+              content: responseMessage,
+              timestamp: new Date().toISOString(),
+              requests: [
+                {
+                  type: "photo",
+                  id: "nameplate_photo",
+                  prompt: "Please upload a clear photo of the machine name plate.",
+                  expectedInput: { type: "photo" },
+                },
+              ],
+              guideImages: guideImages.length > 0 ? guideImages : undefined,
+            };
+            messages.push(assistantTurn);
+            triageHistory = [...triageHistory, { role: "user", content: message.trim() }];
+
+            await db
+              .update(diagnosticSessions)
+              .set({
+                messages,
+                triageHistory,
+                phase: "nameplate_check",
+                status: "active",
+                updatedAt: new Date(),
+              })
+              .where(eq(diagnosticSessions.id, sessionId));
+
+            session = {
+              ...session,
+              triageHistory,
+              phase: "nameplate_check",
+              status: "active",
+            };
+
+            send(
+              controller,
+              "message",
+              JSON.stringify({
+                sessionId,
+                message: responseMessage,
+                phase: "nameplate_check",
+                requests: assistantTurn.requests,
+                guideImages: guideImages.length > 0 ? guideImages : undefined,
+                model: session.machineModel ?? undefined,
+                serialNumber: session.serialNumber ?? undefined,
+                playbookId: session.playbookId ?? undefined,
+              })
+            );
+            controller.close();
+            return;
+          }
+
+          if (imageBuffers.length > 0) {
+            console.log(
+              `[chat] phase: collecting_issue -> nameplate_check (session=${sessionId}) photo-only, no substantive text`
+            );
+            await db
+              .update(diagnosticSessions)
+              .set({
+                phase: "nameplate_check",
+                status: "active",
+                updatedAt: new Date(),
+              })
+              .where(eq(diagnosticSessions.id, sessionId));
+            session = {
+              ...session,
+              phase: "nameplate_check",
+              status: "active",
+            };
+          } else {
+            console.log(
+              `[chat] phase: collecting_issue (stay) (session=${sessionId}) trivial/empty message, asking for issue`
+            );
+            send(controller, "stage", JSON.stringify({ message: STAGE_MESSAGES.asking_followup }));
+            const responseMessage = "What issue are you experiencing with the machine?";
+            const assistantTurn: ChatMessage & { requests?: PlannerOutput["requests"] } = {
+              role: "assistant",
+              content: responseMessage,
+              timestamp: new Date().toISOString(),
+              requests: [
+                {
+                  type: "question",
+                  id: "issue_description",
+                  prompt: responseMessage,
+                  expectedInput: { type: "text" },
+                },
+              ],
+            };
+            messages.push(assistantTurn);
+            await db
+              .update(diagnosticSessions)
+              .set({
+                messages,
+                phase: "collecting_issue",
+                status: "active",
+                updatedAt: new Date(),
+              })
+              .where(eq(diagnosticSessions.id, sessionId));
+            send(
+              controller,
+              "message",
+              JSON.stringify({
+                sessionId,
+                message: responseMessage,
+                phase: "collecting_issue",
+                requests: assistantTurn.requests,
+                model: session.machineModel ?? undefined,
+                serialNumber: session.serialNumber ?? undefined,
+                playbookId: session.playbookId ?? undefined,
+              })
+            );
+            controller.close();
+            return;
+          }
         }
 
         if (session.phase === "nameplate_check") {
@@ -440,12 +615,22 @@ export async function POST(request: Request) {
             return;
           }
 
+          triageHistory = prependSubstantiveUserHistory(triageHistory, messages);
+          const triagePreview = triageHistory
+            .filter((h) => h.role === "user")
+            .map((h) => h.content.slice(0, 40))
+            .join(" | ");
+          console.log(
+            `[chat] phase: nameplate_check -> triaging (session=${sessionId}) triageHistory items=${triageHistory.length} user_preview="${triagePreview}${triagePreview.length >= 80 ? "…" : ""}"`
+          );
+
           await db
             .update(diagnosticSessions)
             .set({
               machineModel: canonical,
               serialNumber: extractedSerial,
               manufacturingYear,
+              triageHistory,
               phase: "triaging",
               status: "active",
               updatedAt: new Date(),
@@ -457,6 +642,7 @@ export async function POST(request: Request) {
             machineModel: canonical,
             serialNumber: extractedSerial,
             manufacturingYear,
+            triageHistory,
             phase: "triaging",
             status: "active",
           };
@@ -525,6 +711,9 @@ export async function POST(request: Request) {
             triageHistory: nextTriageHistory,
             imageBuffers: imageBuffers.length > 0 ? imageBuffers : undefined,
           });
+          console.log(
+            `[chat] triage (session=${sessionId}) selected_label=${triageResult.selectedLabelId ?? "null"} confidence=${triageResult.confidence.toFixed(2)} candidates=[${triageResult.candidateLabels.join(", ")}]`
+          );
 
           const matchedPlaybook = triageResult.selectedLabelId
             ? allPlaybooks.find((pb) => pb.labelId === triageResult.selectedLabelId)
@@ -537,7 +726,16 @@ export async function POST(request: Request) {
             triageRound >= TRIAGE_CONFIG.maxRounds &&
             triageResult.confidence >= TRIAGE_CONFIG.confirmThreshold;
 
+          if (canAutoSelect || canConfirmSelect) {
+            console.log(
+              `[chat] playbook assigned (session=${sessionId}) label=${matchedPlaybook?.labelId} title="${matchedPlaybook?.title ?? ""}"`
+            );
+          }
+
           if (!canAutoSelect && !canConfirmSelect) {
+            console.log(
+              `[chat] triage follow-up (session=${sessionId}) round=${triageRound} asking user to disambiguate`
+            );
             send(controller, "stage", JSON.stringify({ message: STAGE_MESSAGES.asking_followup }));
 
             const candidateOptions = triageResult.candidateLabels
@@ -1101,7 +1299,9 @@ export async function POST(request: Request) {
         );
         controller.close();
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
+        console.error("[chat] fatal route error", err);
+        const rawMsg = err instanceof Error ? err.message : String(err);
+        const msg = rawMsg?.trim() ? rawMsg : "Unexpected chat error.";
         send(controller, "error", JSON.stringify({ error: msg }));
         controller.close();
       }

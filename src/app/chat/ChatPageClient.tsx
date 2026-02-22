@@ -86,9 +86,14 @@ function getMessageSegments(
 
 export type ChatPageClientProps = { chatApiKey?: string | null };
 
+const INITIAL_ASSISTANT_MESSAGE =
+  "Hi! What issue are you experiencing with your machine? You can also attach a photo if that helps.";
+
 export function ChatPageClient({ chatApiKey }: ChatPageClientProps) {
   const [sessionId, setSessionId] = useState<string | null>(null);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>([
+    { role: "assistant", content: INITIAL_ASSISTANT_MESSAGE },
+  ]);
   const [input, setInput] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [loading, setLoading] = useState(false);
@@ -302,11 +307,6 @@ export function ChatPageClient({ chatApiKey }: ChatPageClientProps) {
         )}
 
         <div className="flex-1 space-y-4 overflow-y-auto">
-          {messages.length === 0 && (
-            <p className="rounded-lg border border-dashed border-gray-300 bg-white p-6 text-center text-gray-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-400">
-              Start by taking a clear photo of the machine name plate. We&apos;ll extract the model and serial number before diagnostics.
-            </p>
-          )}
           {messages.map((m, i) => (
             <div
               key={i}
