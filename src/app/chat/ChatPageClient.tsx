@@ -329,8 +329,9 @@ export function ChatPageClient({ chatApiKey }: ChatPageClientProps) {
               key={i}
               className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
             >
+             <div className={`flex max-w-[85%] flex-col ${m.role === "assistant" ? "gap-3" : ""}`}>
               <div
-                className={`max-w-[85%] rounded-2xl px-4 py-2 ${m.role === "user"
+                className={`rounded-2xl px-4 py-2 ${m.role === "user"
                     ? "bg-blue-600 text-white"
                     : "bg-white text-gray-900 shadow dark:bg-gray-800 dark:text-gray-100"
                   }`}
@@ -360,162 +361,24 @@ export function ChatPageClient({ chatApiKey }: ChatPageClientProps) {
                   const count = m.guideImages.length;
                   const gridClass =
                     count === 1
-                      ? ""
-                      : count === 3
-                        ? "grid grid-cols-2 gap-2"
-                        : "grid grid-cols-2 gap-2";
+                      ? "grid grid-cols-1"
+                      : "grid grid-cols-3 gap-1.5";
                   const imgClass =
                     count === 1
-                      ? "max-h-64 w-full rounded-lg border border-gray-200 object-contain bg-gray-100 dark:border-gray-600 dark:bg-gray-700"
-                      : "h-40 w-full rounded-lg border border-gray-200 object-contain bg-gray-100 dark:border-gray-600 dark:bg-gray-700";
+                      ? "max-h-48 w-full rounded-md border border-gray-200 object-contain bg-gray-100 dark:border-gray-600 dark:bg-gray-700"
+                      : "h-28 w-full rounded-md border border-gray-200 object-cover bg-gray-100 dark:border-gray-600 dark:bg-gray-700";
                   return (
-                    <div className={`mt-3 ${gridClass}`}>
+                    <div className={`mt-2 ${gridClass}`}>
                       {m.guideImages.map((src, idx) => (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
                           key={`${src}-${idx}`}
                           src={src}
                           alt={`Guide image ${idx + 1} of ${count}`}
-                          className={`${imgClass} ${count === 3 && idx === 0 ? "col-span-2 h-48" : ""} cursor-pointer transition-opacity hover:opacity-90`}
+                          className={`${imgClass} cursor-pointer transition-opacity hover:opacity-90`}
                           onClick={() => setLightbox({ images: m.guideImages!, index: idx })}
                         />
                       ))}
-                    </div>
-                  );
-                })()}
-                {m.role === "assistant" && m.requests && m.requests.length > 0 && (() => {
-                  const isLatest = i === messages.length - 1 && !loading;
-                  const visibleRequests = m.requests.slice(0, 1);
-                  const primaryRequest = visibleRequests[0];
-                  const shouldShowManualSubmit =
-                    primaryRequest != null &&
-                    (() => {
-                      const kind = getRequestInputKind(primaryRequest);
-                      return kind === "text" || kind === "number" || kind === "photo";
-                    })();
-                  const hasAllVisibleAnswers =
-                    visibleRequests.length > 0 &&
-                    visibleRequests.every((req) => Boolean(requestInputs[req.id]?.trim()));
-                  return (
-                    <div className="mt-3 space-y-2 border-t border-gray-200 pt-2 dark:border-gray-600">
-                      {visibleRequests.map((req, j) => {
-                        const inputKind = getRequestInputKind(req);
-                        return (
-                          <div
-                            key={j}
-                            className="rounded-lg border border-gray-200 bg-gray-50 p-2 text-sm dark:border-gray-600 dark:bg-gray-700/50"
-                          >
-                            <p className="font-medium text-gray-700 dark:text-gray-300">
-                              {req.prompt}
-                            </p>
-                            {isLatest && inputKind === "number" && (
-                              <div className="mt-2 flex items-center gap-2">
-                                <input
-                                  type="number"
-                                  placeholder={req.expectedInput?.range ? `${req.expectedInput.range.min}–${req.expectedInput.range.max}` : "Enter value"}
-                                  min={req.expectedInput?.range?.min}
-                                  max={req.expectedInput?.range?.max}
-                                  step="any"
-                                  className="w-32 rounded border border-gray-300 px-2 py-1 text-sm dark:border-gray-500 dark:bg-gray-700"
-                                  value={requestInputs[req.id] ?? ""}
-                                  onChange={(e) => updateRequestInput(req.id, e.target.value)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === "Enter") {
-                                      e.preventDefault();
-                                      submitRequestAnswers(visibleRequests);
-                                    }
-                                  }}
-                                />
-                                {req.expectedInput?.unit && (
-                                  <span className="text-xs text-gray-500">{req.expectedInput.unit}</span>
-                                )}
-                              </div>
-                            )}
-                            {isLatest && inputKind === "options" && (
-                              <div className="mt-2 flex flex-wrap gap-2">
-                                {getRequestOptions(req).map((opt) => (
-                                  <button
-                                    key={opt}
-                                    type="button"
-                                    onClick={() => submitSingleRequestAnswer(req, opt)}
-                                    className={`rounded-full border px-3 py-1 text-xs transition-colors ${
-                                      requestInputs[req.id] === opt
-                                        ? "border-blue-500 bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300"
-                                        : "border-gray-300 hover:bg-gray-100 dark:border-gray-500 dark:hover:bg-gray-600"
-                                    }`}
-                                  >
-                                    {opt}
-                                  </button>
-                                ))}
-                              </div>
-                            )}
-                            {isLatest && inputKind === "boolean" && (
-                              <div className="mt-2 flex gap-2">
-                                {["Yes", "No"].map((opt) => (
-                                  <button
-                                    key={opt}
-                                    type="button"
-                                    onClick={() => submitSingleRequestAnswer(req, opt)}
-                                    className={`rounded border px-3 py-1 text-xs ${
-                                      requestInputs[req.id] === opt
-                                        ? opt === "Yes"
-                                          ? "border-green-500 bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300"
-                                          : "border-red-500 bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300"
-                                        : "border-gray-300 hover:bg-gray-100 dark:border-gray-500 dark:hover:bg-gray-600"
-                                    }`}
-                                  >
-                                    {opt}
-                                  </button>
-                                ))}
-                              </div>
-                            )}
-                            {isLatest && inputKind === "text" && (
-                              <input
-                                type="text"
-                                placeholder="Type your answer..."
-                                className="mt-2 w-full rounded border border-gray-300 px-2 py-1 text-sm dark:border-gray-500 dark:bg-gray-700"
-                                value={requestInputs[req.id] ?? ""}
-                                onChange={(e) => updateRequestInput(req.id, e.target.value)}
-                                onKeyDown={(e) => {
-                                  if (e.key === "Enter") {
-                                    e.preventDefault();
-                                    submitRequestAnswers(visibleRequests);
-                                  }
-                                }}
-                              />
-                            )}
-                            {isLatest && inputKind === "photo" && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setActivePhotoRequestId(req.id);
-                                  requestFileInputRef.current?.click();
-                                }}
-                                className="mt-2 rounded border border-gray-300 bg-white px-3 py-1 text-xs hover:bg-gray-50 dark:border-gray-500 dark:bg-gray-700 dark:hover:bg-gray-600"
-                              >
-                                {files.length > 0 ? `${files.length} photo(s) selected` : "Attach photo"}
-                              </button>
-                            )}
-                            {!isLatest && inputKind === "number" && req.expectedInput && (
-                              <p className="mt-1 text-xs text-gray-500">
-                                {req.expectedInput.unit && `Unit: ${req.expectedInput.unit}`}
-                                {req.expectedInput.range &&
-                                  ` Range: ${req.expectedInput.range.min}–${req.expectedInput.range.max}`}
-                              </p>
-                            )}
-                          </div>
-                        );
-                      })}
-                      {isLatest && shouldShowManualSubmit && (
-                        <button
-                          type="button"
-                          disabled={loading || !hasAllVisibleAnswers}
-                          onClick={() => submitRequestAnswers(visibleRequests)}
-                          className="w-full rounded-lg bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-700 disabled:opacity-50"
-                        >
-                          Submit answers
-                        </button>
-                      )}
                     </div>
                   );
                 })()}
@@ -603,6 +466,141 @@ export function ChatPageClient({ chatApiKey }: ChatPageClientProps) {
                   </div>
                 )}
               </div>
+              {m.role === "assistant" && m.requests && m.requests.length > 0 && (() => {
+                const isLatest = i === messages.length - 1 && !loading;
+                const visibleRequests = m.requests.slice(0, 1);
+                const primaryRequest = visibleRequests[0];
+                const shouldShowManualSubmit =
+                  primaryRequest != null &&
+                  (() => {
+                    const kind = getRequestInputKind(primaryRequest);
+                    return kind === "text" || kind === "number" || kind === "photo";
+                  })();
+                const hasAllVisibleAnswers =
+                  visibleRequests.length > 0 &&
+                  visibleRequests.every((req) => Boolean(requestInputs[req.id]?.trim()));
+                return (
+                  <div className="space-y-3 rounded-xl border-l-4 border-blue-500 bg-blue-50 p-4 shadow-sm dark:border-blue-400 dark:bg-blue-950/40">
+                    {visibleRequests.map((req, j) => {
+                      const inputKind = getRequestInputKind(req);
+                      return (
+                        <div key={j}>
+                          <p className="text-sm font-semibold text-blue-900 dark:text-blue-200">
+                            {req.prompt}
+                          </p>
+                          {isLatest && inputKind === "number" && (
+                            <div className="mt-3 flex items-center gap-2">
+                              <input
+                                type="number"
+                                placeholder={req.expectedInput?.range ? `${req.expectedInput.range.min}–${req.expectedInput.range.max}` : "Enter value"}
+                                min={req.expectedInput?.range?.min}
+                                max={req.expectedInput?.range?.max}
+                                step="any"
+                                className="w-32 rounded-lg border border-blue-200 bg-white px-3 py-1.5 text-sm shadow-sm dark:border-blue-700 dark:bg-gray-800"
+                                value={requestInputs[req.id] ?? ""}
+                                onChange={(e) => updateRequestInput(req.id, e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") {
+                                    e.preventDefault();
+                                    submitRequestAnswers(visibleRequests);
+                                  }
+                                }}
+                              />
+                              {req.expectedInput?.unit && (
+                                <span className="text-xs text-blue-600 dark:text-blue-400">{req.expectedInput.unit}</span>
+                              )}
+                            </div>
+                          )}
+                          {isLatest && inputKind === "options" && (
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              {getRequestOptions(req).map((opt) => (
+                                <button
+                                  key={opt}
+                                  type="button"
+                                  onClick={() => submitSingleRequestAnswer(req, opt)}
+                                  className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                                    requestInputs[req.id] === opt
+                                      ? "border-blue-500 bg-blue-600 text-white"
+                                      : "border-blue-200 bg-white text-blue-800 hover:bg-blue-100 dark:border-blue-700 dark:bg-gray-800 dark:text-blue-300 dark:hover:bg-blue-900/40"
+                                  }`}
+                                >
+                                  {opt}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                          {isLatest && inputKind === "boolean" && (
+                            <div className="mt-3 flex gap-2">
+                              {["Yes", "No"].map((opt) => (
+                                <button
+                                  key={opt}
+                                  type="button"
+                                  onClick={() => submitSingleRequestAnswer(req, opt)}
+                                  className={`rounded-lg border px-4 py-1.5 text-xs font-medium transition-colors ${
+                                    requestInputs[req.id] === opt
+                                      ? opt === "Yes"
+                                        ? "border-green-500 bg-green-500 text-white"
+                                        : "border-red-500 bg-red-500 text-white"
+                                      : "border-blue-200 bg-white text-blue-800 hover:bg-blue-100 dark:border-blue-700 dark:bg-gray-800 dark:text-blue-300 dark:hover:bg-blue-900/40"
+                                  }`}
+                                >
+                                  {opt}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                          {isLatest && inputKind === "text" && (
+                            <input
+                              type="text"
+                              placeholder="Type your answer..."
+                              className="mt-3 w-full rounded-lg border border-blue-200 bg-white px-3 py-1.5 text-sm shadow-sm dark:border-blue-700 dark:bg-gray-800"
+                              value={requestInputs[req.id] ?? ""}
+                              onChange={(e) => updateRequestInput(req.id, e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  e.preventDefault();
+                                  submitRequestAnswers(visibleRequests);
+                                }
+                              }}
+                            />
+                          )}
+                          {isLatest && inputKind === "photo" && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setActivePhotoRequestId(req.id);
+                                requestFileInputRef.current?.click();
+                              }}
+                              className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-white px-3 py-1.5 text-xs font-medium text-blue-700 shadow-sm hover:bg-blue-100 dark:border-blue-700 dark:bg-gray-800 dark:text-blue-300 dark:hover:bg-blue-900/40"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd" /></svg>
+                              {files.length > 0 ? `${files.length} photo(s) selected` : "Attach photo"}
+                            </button>
+                          )}
+                          {!isLatest && inputKind === "number" && req.expectedInput && (
+                            <p className="mt-1 text-xs text-blue-600 dark:text-blue-400">
+                              {req.expectedInput.unit && `Unit: ${req.expectedInput.unit}`}
+                              {req.expectedInput.range &&
+                                ` Range: ${req.expectedInput.range.min}–${req.expectedInput.range.max}`}
+                            </p>
+                          )}
+                        </div>
+                      );
+                    })}
+                    {isLatest && shouldShowManualSubmit && (
+                      <button
+                        type="button"
+                        disabled={loading || !hasAllVisibleAnswers}
+                        onClick={() => submitRequestAnswers(visibleRequests)}
+                        className="w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700 disabled:opacity-50"
+                      >
+                        Submit answers
+                      </button>
+                    )}
+                  </div>
+                );
+              })()}
+             </div>
             </div>
           ))}
           {loading && (
