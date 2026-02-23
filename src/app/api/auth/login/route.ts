@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { users } from "@/lib/db/schema";
+import { users, type User } from "@/lib/db/schema";
 import {
   createSession,
   getSessionCookieName,
@@ -25,11 +25,23 @@ export async function POST(request: Request) {
     );
   }
 
-  const userRows = await db
-    .select()
-    .from(users)
-    .where(eq(users.email, email))
-    .limit(1);
+  let userRows: User[];
+  try {
+    userRows = await db
+      .select()
+      .from(users)
+      .where(eq(users.email, email))
+      .limit(1);
+  } catch (err: unknown) {
+    const msg = err && typeof err === "object" && "message" in err ? String((err as { message: string }).message) : "";
+    if (msg.includes("does not exist") || msg.includes("relation")) {
+      return NextResponse.json(
+        { error: "Database not set up. Run migrations and seed (e.g. npm run railway:setup:prod)." },
+        { status: 503 }
+      );
+    }
+    throw err;
+  }
   const user = userRows[0];
   if (!user || user.role !== "admin") {
     return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });

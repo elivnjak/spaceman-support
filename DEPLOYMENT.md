@@ -33,13 +33,33 @@ You need:
    - In the app service → **Settings** → **Volumes** → add a volume and mount it at `/app/storage` (or another path).
    - Add variable: `STORAGE_PATH=/app/storage` (or the path you chose).
 
-6. **Run DB setup once** (after first deploy):
-   - Use Railway’s **Shell** for the app service, or run locally with `DATABASE_URL` pointing at the deployed DB:
+6. **Run DB setup once** (after first deploy). Railway doesn’t have a “Shell” in the dashboard; use one of these:
+
+   **Option A — From your computer (recommended)**  
+   The app’s `DATABASE_URL` on Railway often uses the **internal** host (`Postgres.railway.internal`), which is only reachable from services running on Railway—not from your machine. So `railway run npm run db:setup` can fail with `getaddrinfo ENOTFOUND Postgres.railway.internal`.
+
+   Use the **TCP Proxy** URL when running setup locally (not the Public Networking domain). Domains like `*.up.railway.app` are for HTTP and will timeout for Postgres:
+   1. In Railway: **Postgres** service → **Settings** → **Networking** → **TCP Proxy**. If none exists, add one for internal port `5432`.
+   2. Note the **TCP Proxy** host (e.g. `monorail.proxy.rlwy.net`) and **port** (e.g. `12345`). In `.env.production` set `POSTGRES_HOST` to that host and `POSTGRES_PORT` to that port, then run `npm run railway:setup:prod`.
+   After that, your deployed app can keep using the internal URL; only this one-off setup uses the TCP proxy.
+
+   **Option B — Shell inside the deployed app**  
+   From your machine: `railway ssh` to open a shell in the running container, then:
    ```bash
-   npm run db:push
-   npx tsx scripts/init-vector-extension.ts
-   npm run db:seed
+   npm run db:setup
    ```
+
+   **Option C — Run automatically on every deploy**  
+   In the dashboard: your app service → **Settings** → **Deploy** → **Pre-deploy Steps** → add:
+   ```bash
+   npm run db:setup
+   ```
+   (Migrations and seed are safe to run repeatedly.)
+
+   `db:setup` runs migrations, enables pgvector, and seeds the admin user from `ADMIN_EMAIL` / `ADMIN_PASSWORD`.
+
+   **If the app returns 500 or “relation users does not exist”**  
+   The app is using a different database than the one you migrated. In Railway, open the **app** service → **Variables** → `DATABASE_URL` and note the **database name** in the URL (e.g. `.../railway` → name is `railway`). In `.env.production`, set `POSTGRES_DB` to that exact name, then run `npm run railway:setup:prod` again.
 
 7. Deploy; Railway will build and run the app. Use the generated URL for the app and admin.
 

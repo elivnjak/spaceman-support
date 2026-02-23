@@ -12,6 +12,11 @@
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "db:init": "npx tsx scripts/init-vector-extension.ts",
+    "db:setup": "npx tsx scripts/init-vector-extension.ts && npm run db:migrate && npm run db:seed",
+    "railway:link": "railway link",
+    "railway:setup": "railway run npm run db:setup",
+    "railway:setup:prod": "npx tsx scripts/run-with-production-env.ts npm run db:setup",
+    "railway:prod": "npx tsx scripts/run-with-production-env.ts",
     "eval": "npx tsx scripts/eval.ts",
     "db:seed": "npx tsx scripts/setup-db.ts",
     "types:audit": "npx tsx scripts/audit-input-types.ts",
@@ -36,6 +41,7 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@railway/cli": "^4.30.3",
     "@types/bcryptjs": "^2.4.6",
     "@types/jsdom": "^27.0.0",
     "@types/node": "^22.0.0",
