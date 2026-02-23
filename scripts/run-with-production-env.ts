@@ -43,7 +43,7 @@ try {
     stdio: "inherit",
     env: process.env,
     shell: true,
-  });
+  } as unknown as import("child_process").ExecSyncOptions);
 } catch (err: unknown) {
   const code = err && typeof err === "object" && "status" in err ? (err as { status: number }).status : 1;
   const signal = err && typeof err === "object" && "signal" in err ? (err as { signal: string }).signal : null;
