@@ -86,7 +86,6 @@ function getMessageSegments(
 }
 
 export type ChatPageClientProps = {
-  chatApiKey?: string | null;
   /** When true, hide the "Back" link (e.g. when chat is on the front page). */
   isHomePage?: boolean;
 };
@@ -99,7 +98,7 @@ type InitialPhase = "idle" | "typing" | "done";
 /** Delay before showing the first message so it feels like it was just sent. */
 const FIRST_MESSAGE_DELAY_MS = 1500;
 
-export function ChatPageClient({ chatApiKey, isHomePage }: ChatPageClientProps) {
+export function ChatPageClient({ isHomePage }: ChatPageClientProps) {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [chatStarted, setChatStarted] = useState(false);
   const [initialPhase, setInitialPhase] = useState<InitialPhase>("idle");
@@ -281,9 +280,7 @@ export function ChatPageClient({ chatApiKey, isHomePage }: ChatPageClientProps) 
     ]);
 
     try {
-      const headers: HeadersInit = {};
-      if (chatApiKey) headers.Authorization = `Bearer ${chatApiKey}`;
-      const res = await fetch("/api/chat", { method: "POST", headers, body: form });
+      const res = await fetch("/api/chat", { method: "POST", body: form });
       if (!res.body) throw new Error("No response");
       const reader = res.body.getReader();
       const decoder = new TextDecoder();

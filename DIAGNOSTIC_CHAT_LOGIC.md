@@ -329,8 +329,8 @@ From the chat page, when user clicks Send:
 
 For `/api/chat`:
 
-- If `CHAT_API_KEY` is set, request must include correct Bearer token.
-- POST requests are rate-limited by client IP.
+- POST requests are rate-limited by client IP; cross-origin POSTs are rejected (Origin check).
+- Chat is publicly accessible; per-session rate limiting is applied in the route handler.
 
 ### 3) Backend checks if this is a new session
 

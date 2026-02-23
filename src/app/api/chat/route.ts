@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { getSessionFromRequest } from "@/lib/auth";
+import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { db } from "@/lib/db";
 import {
   diagnosticSessions,
@@ -100,6 +102,9 @@ function buildCitations(
   }
   return citations;
 }
+
+/** Max length for user message to prevent token abuse. */
+const MAX_MESSAGE_LENGTH = 4000;
 
 const PLACEHOLDER_USER_MESSAGES = new Set(["(sent photos)", "sent photo(s)"]);
 const TRIVIAL_USER_MESSAGE_PATTERNS = [
@@ -217,6 +222,38 @@ export async function POST(request: Request) {
   const message = (formData.get("message") as string)?.trim() ?? "";
   const machineModel = (formData.get("machineModel") as string)?.trim() || null;
   const files = formData.getAll("images") as File[];
+
+  if (message.length > MAX_MESSAGE_LENGTH) {
+    return NextResponse.json(
+      { error: `Message must be at most ${MAX_MESSAGE_LENGTH} characters.` },
+      { status: 400 }
+    );
+  }
+
+  const session = await getSessionFromRequest(request);
+  const isAdmin = session?.user?.role === "admin";
+
+  // Per-session rate limit (skip when admin is logged in, e.g. for testing)
+  if (sessionIdRaw && !isAdmin) {
+    const { chatPerSession } = RATE_LIMITS;
+    const result = checkRateLimit(
+      `session:${sessionIdRaw}`,
+      chatPerSession.maxRequests,
+      chatPerSession.windowMs
+    );
+    if (!result.allowed) {
+      return NextResponse.json(
+        { error: "Too many requests. Please wait before trying again." },
+        {
+          status: 429,
+          headers: {
+            "Retry-After": String(Math.ceil(result.resetMs / 1000)),
+            "X-RateLimit-Remaining": "0",
+          },
+        }
+      );
+    }
+  }
 
   const imageBuffers: Buffer[] = [];
   for (const file of files) {

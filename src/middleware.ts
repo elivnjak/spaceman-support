@@ -40,40 +40,51 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // --- Chat + Analyse API routes: Bearer token + rate limiting ---
+  // --- Chat + Analyse API routes: CORS, rate limiting ---
   if (pathname.startsWith("/api/chat") || pathname.startsWith("/api/analyse")) {
-    const chatKey = process.env.CHAT_API_KEY;
-    if (chatKey) {
-      const authHeader = request.headers.get("Authorization");
-      const token = authHeader?.startsWith("Bearer ")
-        ? authHeader.slice(7)
-        : null;
-      if (token !== chatKey) {
-        return NextResponse.json(
-          { error: "Invalid or missing chat API key" },
-          { status: 401 }
-        );
-      }
-    }
-
-    // Rate limit by IP
+    // Reject cross-origin POSTs (only allow same-origin or configured base URL)
     if (request.method === "POST") {
-      const ip = getClientIp(request);
-      const limit = pathname.startsWith("/api/chat")
-        ? RATE_LIMITS.chatPerIp
-        : RATE_LIMITS.analysePerIp;
-      const result = checkRateLimit(`ip:${pathname}:${ip}`, limit.maxRequests, limit.windowMs);
-      if (!result.allowed) {
-        return NextResponse.json(
-          { error: "Too many requests. Please wait before trying again." },
-          {
-            status: 429,
-            headers: {
-              "Retry-After": String(Math.ceil(result.resetMs / 1000)),
-              "X-RateLimit-Remaining": "0",
-            },
+      const allowedOrigin =
+        process.env.NEXT_PUBLIC_BASE_URL != null && process.env.NEXT_PUBLIC_BASE_URL !== ""
+          ? new URL(process.env.NEXT_PUBLIC_BASE_URL).origin
+          : request.nextUrl.origin;
+      const origin = request.headers.get("Origin");
+      if (origin) {
+        try {
+          const requestOrigin = new URL(origin).origin;
+          if (requestOrigin !== allowedOrigin) {
+            return NextResponse.json(
+              { error: "Forbidden" },
+              { status: 403 }
+            );
           }
-        );
+        } catch {
+          return NextResponse.json(
+            { error: "Forbidden" },
+            { status: 403 }
+          );
+        }
+      }
+
+      // Rate limit by IP (skip when admin is logged in, e.g. for testing)
+      if (!sessionToken) {
+        const ip = getClientIp(request);
+        const limit = pathname.startsWith("/api/chat")
+          ? RATE_LIMITS.chatPerIp
+          : RATE_LIMITS.analysePerIp;
+        const result = checkRateLimit(`ip:${pathname}:${ip}`, limit.maxRequests, limit.windowMs);
+        if (!result.allowed) {
+          return NextResponse.json(
+            { error: "Too many requests. Please wait before trying again." },
+            {
+              status: 429,
+              headers: {
+                "Retry-After": String(Math.ceil(result.resetMs / 1000)),
+                "X-RateLimit-Remaining": "0",
+              },
+            }
+          );
+        }
       }
     }
 
