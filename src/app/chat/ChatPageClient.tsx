@@ -119,7 +119,10 @@ export function ChatPageClient({ chatApiKey, isHomePage }: ChatPageClientProps) 
   const [requestInputs, setRequestInputs] = useState<Record<string, string>>({});
   const requestFileInputRef = useRef<HTMLInputElement>(null);
   const [activePhotoRequestId, setActivePhotoRequestId] = useState<string | null>(null);
+  const messagesRef = useRef<ChatMessage[]>([]);
   const SNIPPET_LENGTH = 280;
+
+  messagesRef.current = messages;
 
   // After user clicks Start: show typing indicator, then show first message.
   useEffect(() => {
@@ -239,6 +242,19 @@ export function ChatPageClient({ chatApiKey, isHomePage }: ChatPageClientProps) 
     return () => window.removeEventListener("keydown", onKey);
   }, [lightbox]);
 
+  // Revoke object URLs for user message images on unmount to avoid memory leaks
+  useEffect(() => {
+    return () => {
+      messagesRef.current.forEach((m) => {
+        if (m.role === "user" && m.images) {
+          m.images.forEach((url) => {
+            if (url.startsWith("blob:")) URL.revokeObjectURL(url);
+          });
+        }
+      });
+    };
+  }, []);
+
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     const text = input.trim();
@@ -256,9 +272,12 @@ export function ChatPageClient({ chatApiKey, isHomePage }: ChatPageClientProps) 
     if (sessionId) form.set("sessionId", sessionId);
     userImages.forEach((f) => form.append("images", f));
 
+    const imageUrls = userImages.length
+      ? userImages.map((f) => URL.createObjectURL(f))
+      : undefined;
     setMessages((prev) => [
       ...prev,
-      { role: "user", content: text || "Sent photo(s)", images: userImages.length ? [] : undefined },
+      { role: "user", content: text || "Sent photo(s)", images: imageUrls },
     ]);
 
     try {
@@ -426,6 +445,27 @@ export function ChatPageClient({ chatApiKey, isHomePage }: ChatPageClientProps) 
                                 alt={`Guide image ${idx + 1} of ${count}`}
                                 className={`${imgClass} cursor-pointer transition-opacity hover:opacity-90`}
                                 onClick={() => setLightbox({ images: m.guideImages!, index: idx })}
+                              />
+                            ))}
+                          </div>
+                        );
+                      })()}
+                      {m.role === "user" && m.images && m.images.length > 0 && (() => {
+                        const count = m.images!.length;
+                        const gridClass =
+                          count === 1
+                            ? "grid grid-cols-1"
+                            : "grid grid-cols-3 gap-1.5";
+                        return (
+                          <div className={`mt-2 ${gridClass}`}>
+                            {m.images!.map((src, idx) => (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                key={`${src}-${idx}`}
+                                src={src}
+                                alt={`Photo ${idx + 1} of ${count}`}
+                                className="max-h-24 w-full cursor-pointer rounded-md border border-white/30 object-cover transition-opacity hover:opacity-90"
+                                onClick={() => setLightbox({ images: m.images!, index: idx })}
                               />
                             ))}
                           </div>
@@ -669,7 +709,11 @@ export function ChatPageClient({ chatApiKey, isHomePage }: ChatPageClientProps) 
                 accept="image/*"
                 multiple
                 className="hidden"
-                onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
+                onChange={(e) => {
+                  const newFiles = Array.from(e.target.files ?? []);
+                  setFiles((prev) => [...prev, ...newFiles]);
+                  e.target.value = "";
+                }}
               />
               <input
                 type="file"
@@ -680,6 +724,7 @@ export function ChatPageClient({ chatApiKey, isHomePage }: ChatPageClientProps) 
                 onChange={(e) => {
                   const newFiles = Array.from(e.target.files ?? []);
                   setFiles((prev) => [...prev, ...newFiles]);
+                  e.target.value = "";
                   if (activePhotoRequestId) {
                     updateRequestInput(activePhotoRequestId, `${newFiles.length} photo(s) attached`);
                     setActivePhotoRequestId(null);
@@ -708,7 +753,7 @@ export function ChatPageClient({ chatApiKey, isHomePage }: ChatPageClientProps) 
               />
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || (!input.trim() && files.length === 0)}
                 className="rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-50"
               >
                 Send

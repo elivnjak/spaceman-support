@@ -32,6 +32,7 @@ import { ensureNameplateTables } from "@/lib/db/ensure-nameplate-tables";
 import { ensureClearanceTables } from "@/lib/db/ensure-clearance-tables";
 import {
   writeStorageFile,
+  readStorageFile,
   diagnosticSessionImagePath,
 } from "@/lib/storage";
 import { buildEscalationHandoff, sendEscalationWebhook } from "@/lib/escalation";
@@ -1144,10 +1145,27 @@ export async function POST(request: Request) {
             ...triageHistory,
             { role: "user", content: message || "(sent photos)" },
           ];
+          // Include images from session (e.g. first message photo + text) for playbook selection
+          const sessionImageBuffers: Buffer[] = [];
+          for (const m of messages) {
+            if (m.role === "user" && m.images?.length) {
+              for (const relPath of m.images) {
+                try {
+                  sessionImageBuffers.push(await readStorageFile(relPath));
+                } catch {
+                  // skip missing or unreadable session images
+                }
+              }
+            }
+          }
+          const allTriageImageBuffers =
+            sessionImageBuffers.length > 0 || imageBuffersForLlm.length > 0
+              ? [...sessionImageBuffers, ...imageBuffersForLlm]
+              : undefined;
           const triageResult = await runPlaybookTriage({
             labels: triageLabels,
             triageHistory: nextTriageHistory,
-            imageBuffers: imageBuffersForLlm.length > 0 ? imageBuffersForLlm : undefined,
+            imageBuffers: allTriageImageBuffers,
             currentProductType: session.productType,
           });
           console.log(
