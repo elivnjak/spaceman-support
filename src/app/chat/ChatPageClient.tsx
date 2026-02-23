@@ -326,16 +326,8 @@ export function ChatPageClient({ chatApiKey, isHomePage }: ChatPageClientProps) 
   return (
     <main className="flex min-h-screen flex-col bg-gray-50 dark:bg-gray-900">
       <header className="border-b border-gray-200 bg-white px-4 py-3 dark:border-gray-700 dark:bg-gray-800">
-        <div className="mx-auto flex max-w-2xl items-center justify-between">
-          {isHomePage ? (
-            <div className="w-16" />
-          ) : (
-            <Link href="/" className="text-blue-600 hover:underline">
-              ← Back
-            </Link>
-          )}
-          <h1 className="text-lg font-semibold">Diagnostic chat</h1>
-          <div className="w-16" />
+        <div className="mx-auto flex max-w-2xl items-center justify-center">
+          <h1 className="text-lg font-semibold">Kuhlberg Support</h1>
         </div>
         {sessionId && (
           <p className="mx-auto mt-1 max-w-2xl truncate text-xs text-gray-500 dark:text-gray-400">
@@ -354,7 +346,7 @@ export function ChatPageClient({ chatApiKey, isHomePage }: ChatPageClientProps) 
         {!chatStarted ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-6">
             <p className="text-center text-gray-600 dark:text-gray-400">
-              Describe your issue and upload photos to get a diagnosis and step-by-step fix.
+              Welcome to Kuhlberg support chat. Click Start to get started.
             </p>
             <button
               type="button"
@@ -382,348 +374,346 @@ export function ChatPageClient({ chatApiKey, isHomePage }: ChatPageClientProps) 
                 </div>
               )}
               {messages.map((m, i) => (
-            <div
-              key={i}
-              className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
-            >
-             <div className={`flex max-w-[85%] flex-col ${m.role === "assistant" ? "gap-3" : ""}`}>
-              <div
-                className={`rounded-2xl px-4 py-2 ${m.role === "user"
-                    ? "bg-blue-600 text-white"
-                    : "bg-white text-gray-900 shadow dark:bg-gray-800 dark:text-gray-100"
-                  }`}
-              >
-                {m.role === "assistant" && m.citations && m.citations.length > 0 ? (
-                  <p className="whitespace-pre-wrap">
-                    {getMessageSegments(m.content, m.citations).map((seg, k) =>
-                      seg.type === "text" ? (
-                        <span key={k}>{seg.value}</span>
+                <div
+                  key={i}
+                  className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
+                >
+                  <div className={`flex max-w-[85%] flex-col ${m.role === "assistant" ? "gap-3" : ""}`}>
+                    <div
+                      className={`rounded-2xl px-4 py-2 ${m.role === "user"
+                        ? "bg-blue-600 text-white"
+                        : "bg-white text-gray-900 shadow dark:bg-gray-800 dark:text-gray-100"
+                        }`}
+                    >
+                      {m.role === "assistant" && m.citations && m.citations.length > 0 ? (
+                        <p className="whitespace-pre-wrap">
+                          {getMessageSegments(m.content, m.citations).map((seg, k) =>
+                            seg.type === "text" ? (
+                              <span key={k}>{seg.value}</span>
+                            ) : (
+                              <button
+                                key={k}
+                                type="button"
+                                onClick={() => openCitationModal(i, seg.chunkId)}
+                                className="mx-0.5 inline-flex align-baseline rounded border border-blue-400/60 bg-blue-500/20 px-1.5 py-0.5 font-mono text-xs text-blue-700 hover:bg-blue-500/30 dark:border-blue-400/50 dark:bg-blue-500/30 dark:text-blue-300 dark:hover:bg-blue-500/40"
+                                title="View referenced content"
+                              >
+                                [doc]
+                              </button>
+                            )
+                          )}
+                        </p>
                       ) : (
-                        <button
-                          key={k}
-                          type="button"
-                          onClick={() => openCitationModal(i, seg.chunkId)}
-                          className="mx-0.5 inline-flex align-baseline rounded border border-blue-400/60 bg-blue-500/20 px-1.5 py-0.5 font-mono text-xs text-blue-700 hover:bg-blue-500/30 dark:border-blue-400/50 dark:bg-blue-500/30 dark:text-blue-300 dark:hover:bg-blue-500/40"
-                          title="View referenced content"
-                        >
-                          [doc]
-                        </button>
-                      )
-                    )}
-                  </p>
-                ) : (
-                  <p className="whitespace-pre-wrap">{m.content}</p>
-                )}
-                {m.role === "assistant" && m.guideImages && m.guideImages.length > 0 && (() => {
-                  const count = m.guideImages.length;
-                  const gridClass =
-                    count === 1
-                      ? "grid grid-cols-1"
-                      : "grid grid-cols-3 gap-1.5";
-                  const imgClass =
-                    count === 1
-                      ? "max-h-48 w-full rounded-md border border-gray-200 object-contain bg-gray-100 dark:border-gray-600 dark:bg-gray-700"
-                      : "h-28 w-full rounded-md border border-gray-200 object-cover bg-gray-100 dark:border-gray-600 dark:bg-gray-700";
-                  return (
-                    <div className={`mt-2 ${gridClass}`}>
-                      {m.guideImages.map((src, idx) => (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          key={`${src}-${idx}`}
-                          src={src}
-                          alt={`Guide image ${idx + 1} of ${count}`}
-                          className={`${imgClass} cursor-pointer transition-opacity hover:opacity-90`}
-                          onClick={() => setLightbox({ images: m.guideImages!, index: idx })}
-                        />
-                      ))}
-                    </div>
-                  );
-                })()}
-                {m.role === "assistant" && Boolean(m.resolution?.diagnosis) && (
-                  <div className="mt-3 space-y-2 border-t border-green-200 pt-2 dark:border-green-800">
-                    <p className="font-medium text-green-800 dark:text-green-300">
-                      Diagnosis: {m.resolution?.diagnosis}
-                    </p>
-                    {(m.resolution?.steps?.length ?? 0) > 0 && (
-                      <ol className="list-inside list-decimal space-y-1 text-sm">
-                        {(m.resolution?.steps ?? []).map((s, k) => (
-                          <li key={k}>{s.instruction}</li>
-                        ))}
-                      </ol>
-                    )}
-                    {m.resolution?.why && (
-                      <p className="text-xs text-gray-600 dark:text-gray-400">
-                        Why: {m.resolution?.why}
-                      </p>
-                    )}
-                  </div>
-                )}
-                {m.role === "assistant" && m.escalation_reason && (
-                  <div className="mt-3 border-t border-amber-200 pt-2">
-                    <p className="text-xs font-medium text-amber-800 dark:text-amber-300">
-                      Connecting to support: {m.escalation_reason}
-                    </p>
-                  </div>
-                )}
-                {m.role === "assistant" && m.citations && m.citations.length > 0 && (
-                  <div className="mt-3 space-y-2 border-t border-gray-200 pt-2 dark:border-gray-600">
-                    <p className="text-xs font-medium text-gray-500 dark:text-gray-400">
-                      Referenced content
-                    </p>
-                    {m.citations.map((cit, j) => {
-                      const key = `msg-${i}-cit-${j}`;
-                      const isLong = cit.content.length > SNIPPET_LENGTH;
-                      const expanded = expandedCitations.has(key);
-                      const snippet = isLong && !expanded
-                        ? `${cit.content.slice(0, SNIPPET_LENGTH)}…`
-                        : cit.content;
-                      return (
-                        <div
-                          key={j}
-                          id={`citation-msg-${i}-cit-${j}`}
-                          className="rounded-lg border border-gray-200 bg-gray-50 p-2 text-sm dark:border-gray-600 dark:bg-gray-700/50"
-                        >
-                          <p className="whitespace-pre-wrap text-gray-700 dark:text-gray-300">
-                            {snippet}
+                        <p className="whitespace-pre-wrap">{m.content}</p>
+                      )}
+                      {m.role === "assistant" && m.guideImages && m.guideImages.length > 0 && (() => {
+                        const count = m.guideImages.length;
+                        const gridClass =
+                          count === 1
+                            ? "grid grid-cols-1"
+                            : "grid grid-cols-3 gap-1.5";
+                        const imgClass =
+                          count === 1
+                            ? "max-h-48 w-full rounded-md border border-gray-200 object-contain bg-gray-100 dark:border-gray-600 dark:bg-gray-700"
+                            : "h-28 w-full rounded-md border border-gray-200 object-cover bg-gray-100 dark:border-gray-600 dark:bg-gray-700";
+                        return (
+                          <div className={`mt-2 ${gridClass}`}>
+                            {m.guideImages.map((src, idx) => (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                key={`${src}-${idx}`}
+                                src={src}
+                                alt={`Guide image ${idx + 1} of ${count}`}
+                                className={`${imgClass} cursor-pointer transition-opacity hover:opacity-90`}
+                                onClick={() => setLightbox({ images: m.guideImages!, index: idx })}
+                              />
+                            ))}
+                          </div>
+                        );
+                      })()}
+                      {m.role === "assistant" && Boolean(m.resolution?.diagnosis) && (
+                        <div className="mt-3 space-y-2 border-t border-green-200 pt-2 dark:border-green-800">
+                          <p className="font-medium text-green-800 dark:text-green-300">
+                            Diagnosis: {m.resolution?.diagnosis}
                           </p>
-                          {cit.reason && (
-                            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                              {cit.reason}
+                          {(m.resolution?.steps?.length ?? 0) > 0 && (
+                            <ol className="list-inside list-decimal space-y-1 text-sm">
+                              {(m.resolution?.steps ?? []).map((s, k) => (
+                                <li key={k}>{s.instruction}</li>
+                              ))}
+                            </ol>
+                          )}
+                          {m.resolution?.why && (
+                            <p className="text-xs text-gray-600 dark:text-gray-400">
+                              Why: {m.resolution?.why}
                             </p>
                           )}
-                          <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-gray-100 pt-2 dark:border-gray-600">
-                            {cit.documentId ? (
-                              <Link
-                                href={`/admin/docs/${cit.documentId}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="truncate font-mono text-xs text-blue-600 hover:underline dark:text-blue-400"
-                                title="View document"
-                              >
-                                {cit.chunkId}
-                              </Link>
-                            ) : (
-                              <p className="truncate font-mono text-xs text-gray-400 dark:text-gray-500" title={cit.chunkId}>
-                                {cit.chunkId}
-                              </p>
-                            )}
-                            {isLong && (
-                              <button
-                                type="button"
-                                onClick={() => toggleCitation(key)}
-                                className="ml-3 text-xs text-blue-600 hover:underline dark:text-blue-400"
-                              >
-                                {expanded ? "Show less" : "Show more"}
-                              </button>
-                            )}
-                          </div>
                         </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-              {m.role === "assistant" && m.requests && m.requests.length > 0 && (() => {
-                const isLatest = i === messages.length - 1 && !loading;
-                const visibleRequests = m.requests.slice(0, 1);
-                const primaryRequest = visibleRequests[0];
-                const shouldShowManualSubmit =
-                  primaryRequest != null &&
-                  (() => {
-                    const kind = getRequestInputKind(primaryRequest);
-                    return kind === "text" || kind === "number" || kind === "photo";
-                  })();
-                const hasAllVisibleAnswers =
-                  visibleRequests.length > 0 &&
-                  visibleRequests.every((req) => Boolean(requestInputs[req.id]?.trim()));
-                return (
-                  <div className="space-y-3 rounded-xl border-l-4 border-blue-500 bg-blue-50 p-4 shadow-sm dark:border-blue-400 dark:bg-blue-950/40">
-                    {visibleRequests.map((req, j) => {
-                      const inputKind = getRequestInputKind(req);
-                      return (
-                        <div key={j}>
-                          <p className="text-sm font-semibold text-blue-900 dark:text-blue-200">
-                            {req.prompt}
+                      )}
+                      {m.role === "assistant" && m.escalation_reason && (
+                        <div className="mt-3 border-t border-amber-200 pt-2">
+                          <p className="text-xs font-medium text-amber-800 dark:text-amber-300">
+                            Connecting to support: {m.escalation_reason}
                           </p>
-                          {isLatest && inputKind === "number" && (
-                            <div className="mt-3 flex items-center gap-2">
-                              <input
-                                type="number"
-                                placeholder={req.expectedInput?.range ? `${req.expectedInput.range.min}–${req.expectedInput.range.max}` : "Enter value"}
-                                min={req.expectedInput?.range?.min}
-                                max={req.expectedInput?.range?.max}
-                                step="any"
-                                className="w-32 rounded-lg border border-blue-200 bg-white px-3 py-1.5 text-sm shadow-sm dark:border-blue-700 dark:bg-gray-800"
-                                value={requestInputs[req.id] ?? ""}
-                                onChange={(e) => updateRequestInput(req.id, e.target.value)}
-                                onKeyDown={(e) => {
-                                  if (e.key === "Enter") {
-                                    e.preventDefault();
-                                    submitRequestAnswers(visibleRequests);
-                                  }
-                                }}
-                              />
-                              {req.expectedInput?.unit && (
-                                <span className="text-xs text-blue-600 dark:text-blue-400">{req.expectedInput.unit}</span>
-                              )}
-                            </div>
-                          )}
-                          {isLatest && inputKind === "options" && (
-                            <div className="mt-3 flex flex-wrap gap-2">
-                              {getRequestOptions(req).map((opt) => (
-                                <button
-                                  key={opt}
-                                  type="button"
-                                  onClick={() => submitSingleRequestAnswer(req, opt)}
-                                  className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
-                                    requestInputs[req.id] === opt
-                                      ? "border-blue-500 bg-blue-600 text-white"
-                                      : "border-blue-200 bg-white text-blue-800 hover:bg-blue-100 dark:border-blue-700 dark:bg-gray-800 dark:text-blue-300 dark:hover:bg-blue-900/40"
-                                  }`}
-                                >
-                                  {opt}
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                          {isLatest && inputKind === "boolean" && (
-                            <div className="mt-3 flex gap-2">
-                              {["Yes", "No"].map((opt) => (
-                                <button
-                                  key={opt}
-                                  type="button"
-                                  onClick={() => submitSingleRequestAnswer(req, opt)}
-                                  className={`rounded-lg border px-4 py-1.5 text-xs font-medium transition-colors ${
-                                    requestInputs[req.id] === opt
-                                      ? opt === "Yes"
-                                        ? "border-green-500 bg-green-500 text-white"
-                                        : "border-red-500 bg-red-500 text-white"
-                                      : "border-blue-200 bg-white text-blue-800 hover:bg-blue-100 dark:border-blue-700 dark:bg-gray-800 dark:text-blue-300 dark:hover:bg-blue-900/40"
-                                  }`}
-                                >
-                                  {opt}
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                          {isLatest && inputKind === "text" && (
-                            <input
-                              type="text"
-                              placeholder="Type your answer..."
-                              className="mt-3 w-full rounded-lg border border-blue-200 bg-white px-3 py-1.5 text-sm shadow-sm dark:border-blue-700 dark:bg-gray-800"
-                              value={requestInputs[req.id] ?? ""}
-                              onChange={(e) => updateRequestInput(req.id, e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter") {
-                                  e.preventDefault();
-                                  submitRequestAnswers(visibleRequests);
-                                }
-                              }}
-                            />
-                          )}
-                          {isLatest && inputKind === "photo" && (
+                        </div>
+                      )}
+                      {m.role === "assistant" && m.citations && m.citations.length > 0 && (
+                        <div className="mt-3 space-y-2 border-t border-gray-200 pt-2 dark:border-gray-600">
+                          <p className="text-xs font-medium text-gray-500 dark:text-gray-400">
+                            Referenced content
+                          </p>
+                          {m.citations.map((cit, j) => {
+                            const key = `msg-${i}-cit-${j}`;
+                            const isLong = cit.content.length > SNIPPET_LENGTH;
+                            const expanded = expandedCitations.has(key);
+                            const snippet = isLong && !expanded
+                              ? `${cit.content.slice(0, SNIPPET_LENGTH)}…`
+                              : cit.content;
+                            return (
+                              <div
+                                key={j}
+                                id={`citation-msg-${i}-cit-${j}`}
+                                className="rounded-lg border border-gray-200 bg-gray-50 p-2 text-sm dark:border-gray-600 dark:bg-gray-700/50"
+                              >
+                                <p className="whitespace-pre-wrap text-gray-700 dark:text-gray-300">
+                                  {snippet}
+                                </p>
+                                {cit.reason && (
+                                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                                    {cit.reason}
+                                  </p>
+                                )}
+                                <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-gray-100 pt-2 dark:border-gray-600">
+                                  {cit.documentId ? (
+                                    <Link
+                                      href={`/admin/docs/${cit.documentId}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="truncate font-mono text-xs text-blue-600 hover:underline dark:text-blue-400"
+                                      title="View document"
+                                    >
+                                      {cit.chunkId}
+                                    </Link>
+                                  ) : (
+                                    <p className="truncate font-mono text-xs text-gray-400 dark:text-gray-500" title={cit.chunkId}>
+                                      {cit.chunkId}
+                                    </p>
+                                  )}
+                                  {isLong && (
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleCitation(key)}
+                                      className="ml-3 text-xs text-blue-600 hover:underline dark:text-blue-400"
+                                    >
+                                      {expanded ? "Show less" : "Show more"}
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                    {m.role === "assistant" && m.requests && m.requests.length > 0 && (() => {
+                      const isLatest = i === messages.length - 1 && !loading;
+                      const visibleRequests = m.requests.slice(0, 1);
+                      const primaryRequest = visibleRequests[0];
+                      const shouldShowManualSubmit =
+                        primaryRequest != null &&
+                        (() => {
+                          const kind = getRequestInputKind(primaryRequest);
+                          return kind === "text" || kind === "number" || kind === "photo";
+                        })();
+                      const hasAllVisibleAnswers =
+                        visibleRequests.length > 0 &&
+                        visibleRequests.every((req) => Boolean(requestInputs[req.id]?.trim()));
+                      return (
+                        <div className="space-y-3 rounded-xl border-l-4 border-blue-500 bg-blue-50 p-4 shadow-sm dark:border-blue-400 dark:bg-blue-950/40">
+                          {visibleRequests.map((req, j) => {
+                            const inputKind = getRequestInputKind(req);
+                            return (
+                              <div key={j}>
+                                <p className="text-sm font-semibold text-blue-900 dark:text-blue-200">
+                                  {req.prompt}
+                                </p>
+                                {isLatest && inputKind === "number" && (
+                                  <div className="mt-3 flex items-center gap-2">
+                                    <input
+                                      type="number"
+                                      placeholder={req.expectedInput?.range ? `${req.expectedInput.range.min}–${req.expectedInput.range.max}` : "Enter value"}
+                                      min={req.expectedInput?.range?.min}
+                                      max={req.expectedInput?.range?.max}
+                                      step="any"
+                                      className="w-32 rounded-lg border border-blue-200 bg-white px-3 py-1.5 text-sm shadow-sm dark:border-blue-700 dark:bg-gray-800"
+                                      value={requestInputs[req.id] ?? ""}
+                                      onChange={(e) => updateRequestInput(req.id, e.target.value)}
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Enter") {
+                                          e.preventDefault();
+                                          submitRequestAnswers(visibleRequests);
+                                        }
+                                      }}
+                                    />
+                                    {req.expectedInput?.unit && (
+                                      <span className="text-xs text-blue-600 dark:text-blue-400">{req.expectedInput.unit}</span>
+                                    )}
+                                  </div>
+                                )}
+                                {isLatest && inputKind === "options" && (
+                                  <div className="mt-3 flex flex-wrap gap-2">
+                                    {getRequestOptions(req).map((opt) => (
+                                      <button
+                                        key={opt}
+                                        type="button"
+                                        onClick={() => submitSingleRequestAnswer(req, opt)}
+                                        className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${requestInputs[req.id] === opt
+                                          ? "border-blue-500 bg-blue-600 text-white"
+                                          : "border-blue-200 bg-white text-blue-800 hover:bg-blue-100 dark:border-blue-700 dark:bg-gray-800 dark:text-blue-300 dark:hover:bg-blue-900/40"
+                                          }`}
+                                      >
+                                        {opt}
+                                      </button>
+                                    ))}
+                                  </div>
+                                )}
+                                {isLatest && inputKind === "boolean" && (
+                                  <div className="mt-3 flex gap-2">
+                                    {["Yes", "No"].map((opt) => (
+                                      <button
+                                        key={opt}
+                                        type="button"
+                                        onClick={() => submitSingleRequestAnswer(req, opt)}
+                                        className={`rounded-lg border px-4 py-1.5 text-xs font-medium transition-colors ${requestInputs[req.id] === opt
+                                          ? opt === "Yes"
+                                            ? "border-green-500 bg-green-500 text-white"
+                                            : "border-red-500 bg-red-500 text-white"
+                                          : "border-blue-200 bg-white text-blue-800 hover:bg-blue-100 dark:border-blue-700 dark:bg-gray-800 dark:text-blue-300 dark:hover:bg-blue-900/40"
+                                          }`}
+                                      >
+                                        {opt}
+                                      </button>
+                                    ))}
+                                  </div>
+                                )}
+                                {isLatest && inputKind === "text" && (
+                                  <input
+                                    type="text"
+                                    placeholder="Type your answer..."
+                                    className="mt-3 w-full rounded-lg border border-blue-200 bg-white px-3 py-1.5 text-sm shadow-sm dark:border-blue-700 dark:bg-gray-800"
+                                    value={requestInputs[req.id] ?? ""}
+                                    onChange={(e) => updateRequestInput(req.id, e.target.value)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Enter") {
+                                        e.preventDefault();
+                                        submitRequestAnswers(visibleRequests);
+                                      }
+                                    }}
+                                  />
+                                )}
+                                {isLatest && inputKind === "photo" && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setActivePhotoRequestId(req.id);
+                                      requestFileInputRef.current?.click();
+                                    }}
+                                    className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-white px-3 py-1.5 text-xs font-medium text-blue-700 shadow-sm hover:bg-blue-100 dark:border-blue-700 dark:bg-gray-800 dark:text-blue-300 dark:hover:bg-blue-900/40"
+                                  >
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd" /></svg>
+                                    {files.length > 0 ? `${files.length} photo(s) selected` : "Attach photo"}
+                                  </button>
+                                )}
+                                {!isLatest && inputKind === "number" && req.expectedInput && (
+                                  <p className="mt-1 text-xs text-blue-600 dark:text-blue-400">
+                                    {req.expectedInput.unit && `Unit: ${req.expectedInput.unit}`}
+                                    {req.expectedInput.range &&
+                                      ` Range: ${req.expectedInput.range.min}–${req.expectedInput.range.max}`}
+                                  </p>
+                                )}
+                              </div>
+                            );
+                          })}
+                          {isLatest && shouldShowManualSubmit && (
                             <button
                               type="button"
-                              onClick={() => {
-                                setActivePhotoRequestId(req.id);
-                                requestFileInputRef.current?.click();
-                              }}
-                              className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-white px-3 py-1.5 text-xs font-medium text-blue-700 shadow-sm hover:bg-blue-100 dark:border-blue-700 dark:bg-gray-800 dark:text-blue-300 dark:hover:bg-blue-900/40"
+                              disabled={loading || !hasAllVisibleAnswers}
+                              onClick={() => submitRequestAnswers(visibleRequests)}
+                              className="w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700 disabled:opacity-50"
                             >
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd" /></svg>
-                              {files.length > 0 ? `${files.length} photo(s) selected` : "Attach photo"}
+                              Submit answers
                             </button>
-                          )}
-                          {!isLatest && inputKind === "number" && req.expectedInput && (
-                            <p className="mt-1 text-xs text-blue-600 dark:text-blue-400">
-                              {req.expectedInput.unit && `Unit: ${req.expectedInput.unit}`}
-                              {req.expectedInput.range &&
-                                ` Range: ${req.expectedInput.range.min}–${req.expectedInput.range.max}`}
-                            </p>
                           )}
                         </div>
                       );
-                    })}
-                    {isLatest && shouldShowManualSubmit && (
-                      <button
-                        type="button"
-                        disabled={loading || !hasAllVisibleAnswers}
-                        onClick={() => submitRequestAnswers(visibleRequests)}
-                        className="w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700 disabled:opacity-50"
-                      >
-                        Submit answers
-                      </button>
-                    )}
+                    })()}
                   </div>
-                );
-              })()}
-             </div>
+                </div>
+              ))}
+              {loading && (
+                <div className="flex justify-start">
+                  <div className="rounded-2xl bg-white px-4 py-2 shadow dark:bg-gray-800">
+                    <p className="text-gray-500 dark:text-gray-400">
+                      {stage || "Thinking…"}
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
-          ))}
-          {loading && (
-            <div className="flex justify-start">
-              <div className="rounded-2xl bg-white px-4 py-2 shadow dark:bg-gray-800">
-                <p className="text-gray-500 dark:text-gray-400">
-                  {stage || "Thinking…"}
-                </p>
-              </div>
-            </div>
-          )}
-        </div>
-        <div ref={messagesEndRef} />
+            <div ref={messagesEndRef} />
 
-        <form onSubmit={sendMessage} className="mt-4 flex gap-2">
-          <input
-            type="file"
-            ref={fileInputRef}
-            accept="image/*"
-            multiple
-            className="hidden"
-            onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
-          />
-          <input
-            type="file"
-            ref={requestFileInputRef}
-            accept="image/*"
-            multiple
-            className="hidden"
-            onChange={(e) => {
-              const newFiles = Array.from(e.target.files ?? []);
-              setFiles((prev) => [...prev, ...newFiles]);
-              if (activePhotoRequestId) {
-                updateRequestInput(activePhotoRequestId, `${newFiles.length} photo(s) attached`);
-                setActivePhotoRequestId(null);
-              }
-            }}
-          />
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:hover:bg-gray-700"
-          >
-            Photo
-          </button>
-          {files.length > 0 && (
-            <span className="flex items-center text-sm text-gray-500">
-              {files.length} file(s)
-            </span>
-          )}
-          <input
-            type="text"
-            placeholder="Type your message..."
-            className="flex-1 rounded-lg border border-gray-300 px-4 py-2 dark:border-gray-600 dark:bg-gray-800"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            disabled={loading}
-          />
-          <button
-            type="submit"
-            disabled={loading}
-            className="rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-50"
-          >
-            Send
-          </button>
-        </form>
+            <form onSubmit={sendMessage} className="mt-4 flex gap-2">
+              <input
+                type="file"
+                ref={fileInputRef}
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
+              />
+              <input
+                type="file"
+                ref={requestFileInputRef}
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={(e) => {
+                  const newFiles = Array.from(e.target.files ?? []);
+                  setFiles((prev) => [...prev, ...newFiles]);
+                  if (activePhotoRequestId) {
+                    updateRequestInput(activePhotoRequestId, `${newFiles.length} photo(s) attached`);
+                    setActivePhotoRequestId(null);
+                  }
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:hover:bg-gray-700"
+              >
+                Photo
+              </button>
+              {files.length > 0 && (
+                <span className="flex items-center text-sm text-gray-500">
+                  {files.length} file(s)
+                </span>
+              )}
+              <input
+                type="text"
+                placeholder="Type your message..."
+                className="flex-1 rounded-lg border border-gray-300 px-4 py-2 dark:border-gray-600 dark:bg-gray-800"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                disabled={loading}
+              />
+              <button
+                type="submit"
+                disabled={loading}
+                className="rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-50"
+              >
+                Send
+              </button>
+            </form>
           </>
         )}
       </div>
