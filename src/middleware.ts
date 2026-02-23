@@ -9,6 +9,27 @@ function getClientIp(request: NextRequest): string {
   );
 }
 
+/** Origin the client sees (use behind proxies e.g. Railway). */
+function getRequestOrigin(request: NextRequest): string {
+  if (
+    process.env.NEXT_PUBLIC_BASE_URL != null &&
+    process.env.NEXT_PUBLIC_BASE_URL !== ""
+  ) {
+    return new URL(process.env.NEXT_PUBLIC_BASE_URL).origin;
+  }
+  const proto =
+    request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim() ??
+    request.nextUrl.protocol.replace(":", "");
+  const host =
+    request.headers.get("x-forwarded-host")?.split(",")[0]?.trim() ??
+    request.headers.get("host") ??
+    request.nextUrl.host;
+  if (proto && host) {
+    return `${proto}://${host}`;
+  }
+  return request.nextUrl.origin;
+}
+
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const sessionToken = request.cookies.get("session_token")?.value?.trim() ?? "";
@@ -44,10 +65,7 @@ export function middleware(request: NextRequest) {
   if (pathname.startsWith("/api/chat") || pathname.startsWith("/api/analyse")) {
     // Reject cross-origin POSTs (only allow same-origin or configured base URL)
     if (request.method === "POST") {
-      const allowedOrigin =
-        process.env.NEXT_PUBLIC_BASE_URL != null && process.env.NEXT_PUBLIC_BASE_URL !== ""
-          ? new URL(process.env.NEXT_PUBLIC_BASE_URL).origin
-          : request.nextUrl.origin;
+      const allowedOrigin = getRequestOrigin(request);
       const origin = request.headers.get("Origin");
       if (origin) {
         try {
