@@ -1,5 +1,5 @@
-import { ChatPageClient } from "./ChatPageClient";
+import { redirect } from "next/navigation";
 
 export default function ChatPage() {
-  return <ChatPageClient chatApiKey={process.env.CHAT_API_KEY ?? undefined} />;
+  redirect("/");
 }

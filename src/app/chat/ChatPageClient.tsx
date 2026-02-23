@@ -85,16 +85,25 @@ function getMessageSegments(
   return segments.length > 0 ? segments : [{ type: "text", value: content }];
 }
 
-export type ChatPageClientProps = { chatApiKey?: string | null };
+export type ChatPageClientProps = {
+  chatApiKey?: string | null;
+  /** When true, hide the "Back" link (e.g. when chat is on the front page). */
+  isHomePage?: boolean;
+};
 
 const INITIAL_ASSISTANT_MESSAGE =
   "Hi! What issue are you experiencing with your machine? You can also attach a photo if that helps.";
 
-export function ChatPageClient({ chatApiKey }: ChatPageClientProps) {
+type InitialPhase = "idle" | "typing" | "done";
+
+/** Delay before showing the first message so it feels like it was just sent. */
+const FIRST_MESSAGE_DELAY_MS = 1500;
+
+export function ChatPageClient({ chatApiKey, isHomePage }: ChatPageClientProps) {
   const [sessionId, setSessionId] = useState<string | null>(null);
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    { role: "assistant", content: INITIAL_ASSISTANT_MESSAGE },
-  ]);
+  const [chatStarted, setChatStarted] = useState(false);
+  const [initialPhase, setInitialPhase] = useState<InitialPhase>("idle");
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [loading, setLoading] = useState(false);
@@ -111,6 +120,16 @@ export function ChatPageClient({ chatApiKey }: ChatPageClientProps) {
   const requestFileInputRef = useRef<HTMLInputElement>(null);
   const [activePhotoRequestId, setActivePhotoRequestId] = useState<string | null>(null);
   const SNIPPET_LENGTH = 280;
+
+  // After user clicks Start: show typing indicator, then show first message.
+  useEffect(() => {
+    if (initialPhase !== "typing") return;
+    const t = setTimeout(() => {
+      setMessages([{ role: "assistant", content: INITIAL_ASSISTANT_MESSAGE }]);
+      setInitialPhase("done");
+    }, FIRST_MESSAGE_DELAY_MS);
+    return () => clearTimeout(t);
+  }, [initialPhase]);
 
   const updateRequestInput = (id: string, value: string) => {
     setRequestInputs((prev) => ({ ...prev, [id]: value }));
@@ -193,6 +212,11 @@ export function ChatPageClient({ chatApiKey }: ChatPageClientProps) {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  useEffect(() => {
+    if (!chatStarted) return;
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [chatStarted, initialPhase]);
 
   useEffect(() => {
     if (!lightbox) return;
@@ -303,9 +327,13 @@ export function ChatPageClient({ chatApiKey }: ChatPageClientProps) {
     <main className="flex min-h-screen flex-col bg-gray-50 dark:bg-gray-900">
       <header className="border-b border-gray-200 bg-white px-4 py-3 dark:border-gray-700 dark:bg-gray-800">
         <div className="mx-auto flex max-w-2xl items-center justify-between">
-          <Link href="/" className="text-blue-600 hover:underline">
-            ← Back
-          </Link>
+          {isHomePage ? (
+            <div className="w-16" />
+          ) : (
+            <Link href="/" className="text-blue-600 hover:underline">
+              ← Back
+            </Link>
+          )}
           <h1 className="text-lg font-semibold">Diagnostic chat</h1>
           <div className="w-16" />
         </div>
@@ -323,8 +351,37 @@ export function ChatPageClient({ chatApiKey }: ChatPageClientProps) {
           </div>
         )}
 
-        <div className="flex-1 space-y-4 overflow-y-auto">
-          {messages.map((m, i) => (
+        {!chatStarted ? (
+          <div className="flex flex-1 flex-col items-center justify-center gap-6">
+            <p className="text-center text-gray-600 dark:text-gray-400">
+              Describe your issue and upload photos to get a diagnosis and step-by-step fix.
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setChatStarted(true);
+                setInitialPhase("typing");
+              }}
+              className="rounded-xl bg-blue-600 px-8 py-3 text-lg font-medium text-white shadow-lg transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900"
+            >
+              Start
+            </button>
+          </div>
+        ) : (
+          <>
+            <div className="flex-1 space-y-4 overflow-y-auto">
+              {initialPhase === "typing" && (
+                <div className="flex justify-start">
+                  <div className="rounded-2xl bg-white px-4 py-3 shadow dark:bg-gray-800">
+                    <div className="flex gap-1.5">
+                      <span className="h-2 w-2 animate-bounce rounded-full bg-gray-500 [animation-delay:0ms]" />
+                      <span className="h-2 w-2 animate-bounce rounded-full bg-gray-500 [animation-delay:150ms]" />
+                      <span className="h-2 w-2 animate-bounce rounded-full bg-gray-500 [animation-delay:300ms]" />
+                    </div>
+                  </div>
+                </div>
+              )}
+              {messages.map((m, i) => (
             <div
               key={i}
               className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
@@ -667,6 +724,8 @@ export function ChatPageClient({ chatApiKey }: ChatPageClientProps) {
             Send
           </button>
         </form>
+          </>
+        )}
       </div>
 
       <div className="border-t border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">

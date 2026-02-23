@@ -70,7 +70,7 @@ export function AdminLoginForm({ next }: { next?: string }) {
           disabled={loading}
           className="rounded bg-amber-600 px-4 py-2 text-white hover:bg-amber-700 disabled:opacity-50"
         >
-          {loading ? "Checking…" : "Unlock"}
+          {loading ? "Checking…" : "Login"}
         </button>
       </div>
       {error && (
