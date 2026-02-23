@@ -383,11 +383,11 @@ export function ChatPageClient({ chatApiKey, isHomePage }: ChatPageClientProps) 
             <div className="flex-1 space-y-4 overflow-y-auto">
               {initialPhase === "typing" && (
                 <div className="flex justify-start">
-                  <div className="rounded-2xl bg-white px-4 py-3 shadow dark:bg-gray-800">
-                    <div className="flex gap-1.5">
-                      <span className="h-2 w-2 animate-bounce rounded-full bg-gray-500 [animation-delay:0ms]" />
-                      <span className="h-2 w-2 animate-bounce rounded-full bg-gray-500 [animation-delay:150ms]" />
-                      <span className="h-2 w-2 animate-bounce rounded-full bg-gray-500 [animation-delay:300ms]" />
+                  <div className="rounded-[1.25rem] bg-[#2C323B] px-4 py-3 shadow">
+                    <div className="flex gap-2">
+                      <span className="h-2 w-2 animate-bounce rounded-full bg-[#6B7480] [animation-delay:0ms]" />
+                      <span className="h-2 w-2 animate-bounce rounded-full bg-[#6B7480] [animation-delay:150ms]" />
+                      <span className="h-2 w-2 animate-bounce rounded-full bg-[#6B7480] [animation-delay:300ms]" />
                     </div>
                   </div>
                 </div>
@@ -692,10 +692,12 @@ export function ChatPageClient({ chatApiKey, isHomePage }: ChatPageClientProps) 
               ))}
               {loading && (
                 <div className="flex justify-start">
-                  <div className="rounded-2xl bg-white px-4 py-2 shadow dark:bg-gray-800">
-                    <p className="text-gray-500 dark:text-gray-400">
-                      {stage || "Thinking…"}
-                    </p>
+                  <div className="rounded-[1.25rem] bg-[#2C323B] px-4 py-3 shadow">
+                    <div className="flex gap-2">
+                      <span className="h-2 w-2 animate-bounce rounded-full bg-[#6B7480] [animation-delay:0ms]" />
+                      <span className="h-2 w-2 animate-bounce rounded-full bg-[#6B7480] [animation-delay:150ms]" />
+                      <span className="h-2 w-2 animate-bounce rounded-full bg-[#6B7480] [animation-delay:300ms]" />
+                    </div>
                   </div>
                 </div>
               )}
