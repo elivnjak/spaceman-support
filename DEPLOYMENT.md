@@ -33,7 +33,12 @@ You need:
    - In the app service → **Settings** → **Volumes** → add a volume and mount it at `/app/storage` (or another path).
    - Add variable: `STORAGE_PATH=/app/storage` (or the path you chose).
 
-6. **Run DB setup once** (after first deploy). Railway doesn’t have a “Shell” in the dashboard; use one of these:
+6. **Migrations run automatically on Railway deploy/start**
+   - This repo includes `railway.json` with `startCommand: npm run railway:start`.
+   - `railway:start` runs `db:setup` (pgvector + migrations + seed) and then starts Next.js.
+   - Because setup is idempotent, this is safe on repeated deploys/restarts.
+
+   If you need to run setup manually (for recovery/debugging), Railway doesn’t have a “Shell” in the dashboard; use one of these:
 
    **Option A — From your computer (recommended)**  
    The app’s `DATABASE_URL` on Railway often uses the **internal** host (`Postgres.railway.internal`), which is only reachable from services running on Railway—not from your machine. So `railway run npm run db:setup` can fail with `getaddrinfo ENOTFOUND Postgres.railway.internal`.
