@@ -55,6 +55,24 @@ const STAGE_MESSAGES: Record<string, string> = {
   searching_manuals: "Searching knowledge base…",
   thinking: "Thinking…",
 };
+const VERIFICATION_REQUEST_ID = "_verification";
+const VERIFICATION_REQUEST_OPTIONS = ["Yes, it's fixed", "No, still having issues"];
+const ESCALATION_OFFER_REQUEST_ID = "_escalation_offer";
+const SKIP_SIGNAL = "__skip__";
+
+type InputSource = "chat" | "structured" | "skip" | "note";
+
+function buildVerificationRequest(): PlannerOutput["requests"][number] {
+  return {
+    type: "question",
+    id: VERIFICATION_REQUEST_ID,
+    prompt: "Did that fix the issue?",
+    expectedInput: {
+      type: "boolean",
+      options: [...VERIFICATION_REQUEST_OPTIONS],
+    },
+  };
+}
 
 function send(controller: ReadableStreamDefaultController<Uint8Array>, event: string, data: string) {
   const encoder = new TextEncoder();
@@ -158,6 +176,34 @@ function isTrivialMessage(content: string): boolean {
   return TRIVIAL_USER_MESSAGE_PATTERNS.some((pattern) => pattern.test(trimmed));
 }
 
+function isSkipSignal(content: string): boolean {
+  return normalizeUserMessage(content) === SKIP_SIGNAL;
+}
+
+function countConsecutiveSkipTurns(messages: ChatMessage[]): number {
+  let count = 0;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    if (msg.role !== "user") continue;
+    if (isSkipSignal(msg.content)) {
+      count += 1;
+      continue;
+    }
+    break;
+  }
+  return count;
+}
+
+function messageContainsEscalationIntent(content: string): boolean {
+  const normalized = normalizeUserMessage(content);
+  if (!normalized) return false;
+  return (
+    /\b(talk to (a )?(person|human|agent|technician|support))\b/.test(normalized) ||
+    /\b(connect me|escalat(e|ion)|real person|human support)\b/.test(normalized) ||
+    /\b(this isn't helping|not helping|this is not helping|frustrat(ed|ing))\b/.test(normalized)
+  );
+}
+
 function prependSubstantiveUserHistory(
   existing: TriageHistoryItem[],
   chatMessages: ChatMessage[]
@@ -250,6 +296,13 @@ export async function POST(request: Request) {
   const formData = await request.formData();
   const sessionIdRaw = (formData.get("sessionId") as string)?.trim() || null;
   const message = (formData.get("message") as string)?.trim() ?? "";
+  const inputSourceRaw = (formData.get("inputSource") as string)?.trim().toLowerCase() ?? "";
+  const inputSource: InputSource =
+    inputSourceRaw === "structured" ||
+    inputSourceRaw === "skip" ||
+    inputSourceRaw === "note"
+      ? inputSourceRaw
+      : "chat";
   const machineModel = (formData.get("machineModel") as string)?.trim() || null;
   const files = formData.getAll("images") as File[];
 
@@ -530,6 +583,59 @@ export async function POST(request: Request) {
           audit.logPhasePath("nameplate_check");
           sendEvent("stage", JSON.stringify({ message: STAGE_MESSAGES.requesting_nameplate }));
           const { instructionText, guideImages } = await getNameplatePrompt();
+
+          if (imageBuffers.length === 0 && isSkipSignal(message)) {
+            const escalationMessage =
+              "We need the machine name plate to proceed with diagnosis. I'm connecting you with a technician who can help without it.";
+            messages.push({
+              role: "assistant",
+              content: escalationMessage,
+              timestamp: new Date().toISOString(),
+            });
+            const evidence = (session.evidence as Record<string, unknown>) ?? {};
+            const hypotheses = (session.hypotheses as unknown[]) ?? [];
+            const escalationHandoff = buildEscalationHandoff({
+              sessionId,
+              machineModel: session.machineModel ?? null,
+              escalationReason: "User does not have a photo of the machine name plate.",
+              playbookTitle: "Pre-diagnosis",
+              labelId: "nameplate_skip",
+              turnCount: session.turnCount ?? 0,
+              evidence: evidence as Parameters<typeof buildEscalationHandoff>[0]["evidence"],
+              hypotheses: hypotheses as Parameters<typeof buildEscalationHandoff>[0]["hypotheses"],
+              messages,
+            });
+            await db
+              .update(diagnosticSessions)
+              .set({
+                messages,
+                phase: "escalated",
+                status: "escalated",
+                escalationReason: "User does not have a photo of the machine name plate.",
+                escalationHandoff: escalationHandoff,
+                updatedAt: new Date(),
+              })
+              .where(eq(diagnosticSessions.id, sessionId));
+
+            sendEvent(
+              controller,
+              "message",
+              JSON.stringify({
+                sessionId,
+                message: escalationMessage,
+                phase: "escalated",
+                requests: [],
+                escalation_reason: "User does not have a photo of the machine name plate.",
+                model: session.machineModel ?? undefined,
+                serialNumber: session.serialNumber ?? undefined,
+                productType: session.productType ?? undefined,
+                playbookId: session.playbookId ?? undefined,
+              })
+            );
+            sendEscalationWebhook(escalationHandoff).catch(() => {});
+            controller.close();
+            return;
+          }
 
           if (imageBuffers.length === 0) {
             const responseMessage = instructionText;
@@ -1450,6 +1556,13 @@ export async function POST(request: Request) {
           (lastAssistantMessage as { requests?: { id: string }[] } | undefined)?.requests?.map(
             (r) => r.id
           ) ?? [];
+        const lastUserWasSkip = inputSource === "skip" || isSkipSignal(message);
+        const skipEvidenceIds = (playbook.evidenceChecklist ?? [])
+          .map((item) => item.id)
+          .filter((id) => outstandingRequestIds.includes(id));
+        const escalationOfferOutstanding = outstandingRequestIds.includes(ESCALATION_OFFER_REQUEST_ID);
+        const userAskedForEscalationInNote =
+          inputSource === "note" && messageContainsEscalationIntent(message);
 
         let plannerOutput: PlannerOutput;
         let plannerLogged = false;
@@ -1465,13 +1578,17 @@ export async function POST(request: Request) {
           audit.logPhasePath("resolved_followup");
           const lastResolution = (lastAssistantMessage as { resolution?: PlannerOutput["resolution"] } | undefined)?.resolution;
           const hasOutcome = session.resolutionOutcome != null;
+          const verificationRequested =
+            outstandingRequestIds.includes(VERIFICATION_REQUEST_ID);
 
           // Parse verification feedback from user's message
           if (!hasOutcome) {
             const lower = message.toLowerCase();
-            const positive = /\b(yes|fixed|worked|resolved|better|good|great|perfect|thanks|thank)\b/.test(lower);
+            const positive = verificationRequested
+              ? /\b(yes|fixed|worked|resolved)\b/.test(lower)
+              : /\b(yes|fixed|worked|resolved|better|good|great|perfect|thanks|thank)\b/.test(lower);
             const negative = /\b(no|not fixed|didn'?t work|still|same|worse|problem)\b/.test(lower);
-            const partial = /\b(partially|somewhat|a bit|little|slightly)\b/.test(lower);
+            const partial = !verificationRequested && /\b(partially|somewhat|a bit|little|slightly)\b/.test(lower);
 
             let outcome: string;
             let responseMessage: string;
@@ -1485,7 +1602,41 @@ export async function POST(request: Request) {
               outcome = "not_fixed";
               responseMessage = "I'm sorry the steps didn't fully resolve the issue. Let me connect you with a technician who can help further.";
             } else {
-              // Ambiguous — treat as follow-up question, ask for verification
+              // Ambiguous response while answering verification request: keep asking the same yes/no confirmation.
+              if (verificationRequested) {
+                const clarificationMessage =
+                  "Please confirm so I can track the outcome: did the steps fix the issue?";
+                const verificationRequest = buildVerificationRequest();
+                messages.push({
+                  role: "assistant",
+                  content: clarificationMessage,
+                  timestamp: new Date().toISOString(),
+                  requests: [verificationRequest],
+                } as ChatMessage & { requests?: PlannerOutput["requests"] });
+                await db
+                  .update(diagnosticSessions)
+                  .set({ messages, phase: "resolved_followup", updatedAt: new Date() })
+                  .where(eq(diagnosticSessions.id, sessionId));
+
+                sendEvent(
+                  controller,
+                  "message",
+                  JSON.stringify({
+                    sessionId,
+                    message: clarificationMessage,
+                    phase: "resolved_followup",
+                    requests: [verificationRequest],
+                    model: session.machineModel ?? undefined,
+                    serialNumber: session.serialNumber ?? undefined,
+                    productType: session.productType ?? undefined,
+                    playbookId: session.playbookId ?? undefined,
+                  })
+                );
+                controller.close();
+                return;
+              }
+
+              // Ambiguous — treat as follow-up question.
               outcome = "";
               responseMessage = "";
             }
@@ -1493,7 +1644,11 @@ export async function POST(request: Request) {
             if (outcome) {
               await db
                 .update(diagnosticSessions)
-                .set({ resolutionOutcome: outcome, updatedAt: new Date() })
+                .set({
+                  resolutionOutcome: outcome,
+                  verificationRespondedAt: new Date(),
+                  updatedAt: new Date(),
+                })
                 .where(eq(diagnosticSessions.id, sessionId));
 
               if (outcome === "not_fixed") {
@@ -1582,17 +1737,21 @@ export async function POST(request: Request) {
 
           // Either already have outcome or ambiguous message — answer as follow-up
           sendEvent("stage", JSON.stringify({ message: STAGE_MESSAGES.searching_manuals }));
-          const queryText = `${message} ${playbook.labelId} troubleshooting steps causes`;
+          const queryText = message;
+          const keywordQuery = `${playbook.labelId} troubleshooting steps causes`;
           const queryEmbedding = await openaiTextEmbedder.embed(queryText);
           const chunks = await searchDocChunks(
             queryEmbedding,
             8,
-            session.machineModel ?? undefined
+            session.machineModel ?? undefined,
+            undefined,
+            keywordQuery
           );
           audit.logRagRetrieval({
             query: queryText,
             chunksReturned: chunks.length,
             chunkIds: chunks.map((c) => c.id),
+            documentIds: [...new Set(chunks.map((c) => c.documentId))],
             topSimilarity: chunks[0]?.similarity,
           });
           chunksForTurn = chunks.map((c) => ({
@@ -1626,34 +1785,59 @@ export async function POST(request: Request) {
           };
         } else {
           audit.logPhasePath("diagnostic_loop");
-          const escalationFromTrigger = checkEscalationTriggers(
-            message,
-            playbook.escalationTriggers
-          );
-          /** Only enforce turn cap as a safety net; normal end is resolve or planner/stall escalation. */
-          const overSafetyTurnCap = turnCount > DIAGNOSTIC_CONFIG.maxTurns;
+          let handledEscalationOffer = false;
+          let plannerUserMessage = message;
+          if (escalationOfferOutstanding) {
+            const normalized = normalizeUserMessage(message);
+            const wantsEscalation =
+              normalized === "yes" ||
+              normalized === "yes, connect me" ||
+              /\b(yes|connect|technician|support)\b/.test(normalized);
+            if (wantsEscalation) {
+              phase = "escalated";
+              plannerOutput = {
+                message: "Understood. I'm connecting you with a technician now.",
+                phase: "escalated",
+                requests: [],
+                hypotheses_update: hypotheses,
+                evidence_extracted: [],
+                escalation_reason: "User requested escalation after repeated skipped questions",
+              };
+            } else {
+              plannerUserMessage =
+                "User chose not to escalate and wants to continue troubleshooting with an alternate check.";
+            }
+            handledEscalationOffer = wantsEscalation;
+          }
+          if (!handledEscalationOffer) {
+            const escalationFromTrigger = checkEscalationTriggers(
+              message,
+              playbook.escalationTriggers
+            );
+            /** Only enforce turn cap as a safety net; normal end is resolve or planner/stall escalation. */
+            const overSafetyTurnCap = turnCount > DIAGNOSTIC_CONFIG.maxTurns;
 
-          if (escalationFromTrigger.triggered) {
-            phase = "escalated";
-            plannerOutput = {
-              message: `For your safety we're connecting you with a technician. ${escalationFromTrigger.matched?.reason ?? "Please describe what you're seeing to support."}`,
-              phase: "escalated",
-              requests: [],
-              hypotheses_update: hypotheses,
-              evidence_extracted: [],
-              escalation_reason: escalationFromTrigger.matched?.reason ?? "Safety trigger detected",
-            };
-          } else if (overSafetyTurnCap) {
-            phase = "escalated";
-            plannerOutput = {
-              message: "This session has reached its maximum length. Connecting you with a technician who can help further.",
-              phase: "escalated",
-              requests: [],
-              hypotheses_update: hypotheses,
-              evidence_extracted: [],
-              escalation_reason: "Session length limit reached",
-            };
-          } else {
+            if (escalationFromTrigger.triggered) {
+              phase = "escalated";
+              plannerOutput = {
+                message: `For your safety we're connecting you with a technician. ${escalationFromTrigger.matched?.reason ?? "Please describe what you're seeing to support."}`,
+                phase: "escalated",
+                requests: [],
+                hypotheses_update: hypotheses,
+                evidence_extracted: [],
+                escalation_reason: escalationFromTrigger.matched?.reason ?? "Safety trigger detected",
+              };
+            } else if (overSafetyTurnCap) {
+              phase = "escalated";
+              plannerOutput = {
+                message: "This session has reached its maximum length. Connecting you with a technician who can help further.",
+                phase: "escalated",
+                requests: [],
+                hypotheses_update: hypotheses,
+                evidence_extracted: [],
+                escalation_reason: "Session length limit reached",
+              };
+            } else {
             const actionIds = new Set<string>();
             playbook.evidenceChecklist?.forEach((e) => e.actionId && actionIds.add(e.actionId));
             const actionIdsArr = Array.from(actionIds);
@@ -1672,17 +1856,25 @@ export async function POST(request: Request) {
             );
 
             sendEvent("stage", JSON.stringify({ message: STAGE_MESSAGES.searching_manuals }));
-            const queryText = `${message} ${playbook.labelId} troubleshooting steps causes`;
+            const plannerLastUserMessage = lastUserWasSkip
+              ? `User replied "I don't know" and skipped answering outstanding request IDs: ${outstandingRequestIds.join(", ") || "(none)"}.`
+              : userAskedForEscalationInNote
+                ? `${plannerUserMessage}\n\n[Context: user entered this in the optional note field and appears to be asking for human help. Show empathy, try one alternate troubleshooting path before escalating unless unsafe.]`
+                : plannerUserMessage;
+            const queryText = `${plannerLastUserMessage} ${playbook.labelId} troubleshooting steps causes`;
             const queryEmbedding = await openaiTextEmbedder.embed(queryText);
             const chunks = await searchDocChunks(
               queryEmbedding,
               8,
-              session.machineModel ?? undefined
+              session.machineModel ?? undefined,
+              undefined,
+              plannerLastUserMessage
             );
             audit.logRagRetrieval({
               query: queryText,
               chunksReturned: chunks.length,
               chunkIds: chunks.map((c) => c.id),
+              documentIds: [...new Set(chunks.map((c) => c.documentId))],
               topSimilarity: chunks[0]?.similarity,
             });
             chunksForTurn = chunks.map((c) => ({
@@ -1702,9 +1894,10 @@ export async function POST(request: Request) {
               recentMessages: messages.slice(0, -1),
               docChunks: chunksForTurn,
               actions: Array.from(actionsById.values()),
-              lastUserMessage: message,
+              lastUserMessage: plannerLastUserMessage,
               machineModel: session.machineModel ?? undefined,
               outstandingRequestIds,
+              inputSource,
               imageBuffers: imageBuffersForLlm.length > 0 ? imageBuffersForLlm : undefined,
             }, audit);
 
@@ -1738,10 +1931,23 @@ export async function POST(request: Request) {
               }
             }
           }
+          }
         }
 
         if (!plannerLogged) {
           audit.logPlannerOutput(plannerOutput);
+        }
+
+        if (lastUserWasSkip && skipEvidenceIds.length > 0) {
+          const extractedIds = new Set(plannerOutput.evidence_extracted.map((item) => item.evidenceId));
+          for (const evidenceId of skipEvidenceIds) {
+            if (extractedIds.has(evidenceId)) continue;
+            plannerOutput.evidence_extracted.push({
+              evidenceId,
+              value: null,
+              confidence: "uncertain",
+            });
+          }
         }
 
         const now = new Date().toISOString();
@@ -1778,22 +1984,60 @@ export async function POST(request: Request) {
         let status = session.status;
         let resolvedCauseId: string | null = null;
         let escalationReason: string | null = null;
+        let verificationRequestedAt: Date | null | undefined = undefined;
+        let verificationRespondedAt: Date | null | undefined = undefined;
         if (phase === "resolving") {
           status = "resolved";
           resolvedCauseId = plannerOutput.resolution?.causeId ?? null;
+          verificationRequestedAt = new Date();
+          verificationRespondedAt = null;
           // Append verification question
           const verificationSuffix = "\n\nAfter trying these steps, please let me know: did that fix the issue?";
+          const verificationRequest = buildVerificationRequest();
           plannerOutput = {
             ...plannerOutput,
             message: plannerOutput.message + verificationSuffix,
+            requests: [verificationRequest],
           };
           assistantMessage.content = plannerOutput.message;
+          assistantMessage.requests = plannerOutput.requests;
         } else if (phase === "escalated") {
           status = "escalated";
           escalationReason = plannerOutput.escalation_reason ?? null;
         }
 
         let responseToSend = plannerOutput;
+        const consecutiveSkips = countConsecutiveSkipTurns(messages);
+        const shouldOfferEscalationAfterSkips =
+          status === "active" &&
+          !escalationOfferOutstanding &&
+          lastUserWasSkip &&
+          consecutiveSkips >= DIAGNOSTIC_CONFIG.consecutiveSkipsBeforeEscalationOffer &&
+          (phase === "gathering_info" || phase === "diagnosing");
+        if (shouldOfferEscalationAfterSkips) {
+          const offerMessage =
+            "It looks like these checks are difficult to answer. Would you like me to connect you with a technician?";
+          const offerRequest = {
+            type: "question" as const,
+            id: ESCALATION_OFFER_REQUEST_ID,
+            prompt: offerMessage,
+            expectedInput: {
+              type: "enum",
+              options: ["Yes, connect me", "No, continue troubleshooting"],
+            },
+          };
+          responseToSend = {
+            ...plannerOutput,
+            message: offerMessage,
+            phase,
+            requests: [offerRequest],
+          };
+          messages[messages.length - 1] = {
+            ...messages[messages.length - 1],
+            content: offerMessage,
+            requests: [offerRequest],
+          } as ChatMessage & { requests?: PlannerOutput["requests"] };
+        }
 
         // If planner left us in "diagnosing" with no requests and we have substantial evidence, force escalation so the user gets a clear outcome instead of being stuck
         const evidenceCount = Object.keys(evidence).length;
@@ -1877,6 +2121,8 @@ export async function POST(request: Request) {
             status,
             resolvedCauseId,
             escalationReason,
+            verificationRequestedAt,
+            verificationRespondedAt,
             escalationHandoff: escalationHandoff ?? undefined,
             updatedAt: new Date(),
           })
@@ -1887,7 +2133,9 @@ export async function POST(request: Request) {
           sendEscalationWebhook(escalationHandoff).catch(() => {});
         }
 
-        const validChunkIds = new Set(chunksForTurn.map((c) => c.id.toLowerCase()));
+        const validChunkIds = isAdmin
+          ? new Set(chunksForTurn.map((c) => c.id.toLowerCase()))
+          : new Set<string>();
         const sanitizedMessage = stripInvalidCitationMarkers(
           responseToSend.message,
           validChunkIds
@@ -1898,7 +2146,7 @@ export async function POST(request: Request) {
           (lastMsg as { content: string }).content = sanitizedMessage;
         }
 
-        const citations = buildCitations(responseToSend.message, chunksForTurn);
+        const citations = isAdmin ? buildCitations(responseToSend.message, chunksForTurn) : [];
 
         const responsePayload = {
           sessionId,
@@ -1907,7 +2155,7 @@ export async function POST(request: Request) {
           requests: responseToSend.requests,
           resolution: responseToSend.resolution,
           escalation_reason: responseToSend.escalation_reason,
-          citations: citations.length > 0 ? citations : undefined,
+          citations: isAdmin && citations.length > 0 ? citations : undefined,
           model: session.machineModel ?? undefined,
           serialNumber: session.serialNumber ?? undefined,
           productType: session.productType ?? undefined,

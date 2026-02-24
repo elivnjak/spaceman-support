@@ -221,6 +221,10 @@ export const diagnosticSessions = pgTable("diagnostic_sessions", {
   escalationReason: text("escalation_reason"),
   /** "confirmed" | "not_fixed" | "partially_fixed" | null (awaiting feedback) */
   resolutionOutcome: text("resolution_outcome"),
+  /** Timestamp when a structured resolution verification prompt was sent */
+  verificationRequestedAt: timestamp("verification_requested_at", { withTimezone: true }),
+  /** Timestamp when the user replied to the resolution verification prompt */
+  verificationRespondedAt: timestamp("verification_responded_at", { withTimezone: true }),
   /** Structured handoff data sent to external ticketing system on escalation */
   escalationHandoff: jsonb("escalation_handoff"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),

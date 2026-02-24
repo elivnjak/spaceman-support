@@ -10,7 +10,8 @@ export const CONFIDENCE_CONFIG = {
   highThreshold: 0.4,
   lowThreshold: 0.2,
   labelGapMinimum: 0.05,
-  minChunkScore: 0.3,
+  /** Min similarity for RAG chunk inclusion; 0.25 keeps spec/electrical chunks that sit just below 0.3. */
+  minChunkScore: 0.25,
   unknownThreshold: 0.15,
   /** When confidence below this or labelGap below visionLabelGapThreshold, run GPT-4o vision tie-breaker. */
   visionTieBreakerThreshold: 0.4,
@@ -27,6 +28,8 @@ export const CONFIDENCE_CONFIG = {
 export const RETRIEVAL_CONFIG = {
   imageTopK: 5,
   textTopN: 8,
+  /** When machine model is set, reserve this many slots for chunks from machine-matched documents. */
+  textMachineMatchedReserve: 4,
   candidateLabelsCount: 3,
   /** Include labels whose score is within this delta of top score (catches near-ties). */
   candidateScoreMargin: 0.05,
@@ -55,6 +58,7 @@ export const DIAGNOSTIC_CONFIG = {
   recentMessagesWindow: 5,
   stallTurnsWithoutNewEvidence: 2,
   requiredEvidenceTurnsBeforeEscalation: 4,
+  consecutiveSkipsBeforeEscalationOffer: getNumberEnv("DIAGNOSTIC_CONSECUTIVE_SKIPS_BEFORE_ESCALATION_OFFER", 3),
 } as const;
 
 export const TRIAGE_CONFIG = {

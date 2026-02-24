@@ -32,6 +32,7 @@ export type RagRetrievalEntry = {
   query: string;
   chunksReturned: number;
   chunkIds: string[];
+  documentIds?: string[];
   topSimilarity?: number;
 };
 

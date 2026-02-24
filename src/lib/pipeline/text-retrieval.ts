@@ -51,48 +51,77 @@ export async function searchDocChunks(
     ? sql`CASE WHEN LOWER(dc.content) LIKE ${keywordPattern} THEN ${sql.raw(String(RETRIEVAL_CONFIG.textExactMatchBoost))} ELSE 0 END`
     : sql`0`;
 
-  const runHybridQuery = async (useIndexedSearchVector: boolean) => {
+  const runHybridQuery = async (
+    useIndexedSearchVector: boolean,
+    machineMatchOnly: boolean
+  ): Promise<{ rows: Record<string, unknown>[] }> => {
     const ftsRankExpr = buildFtsRankExpr(useIndexedSearchVector);
     const hybridScoreExpr = sql`${similarityExpr} + (${ftsRankExpr} * ${sql.raw(String(RETRIEVAL_CONFIG.textKeywordRankWeight))}) + ${literalBoostExpr}`;
-    return machineModel != null && machineModel !== ""
-      ? db.execute(sql`
-          SELECT dc.id, dc.document_id, dc.chunk_index, dc.content, dc.metadata,
-                 ${similarityExpr} AS similarity
-          FROM doc_chunks dc
-          LEFT JOIN documents d ON d.id = dc.document_id
-          WHERE dc.embedding IS NOT NULL
-            AND ${similarityExpr} >= ${minChunkScore}
-            ${labelFilter}
-          ORDER BY CASE WHEN ${likeCanonical} OR ${likeWithPrefix} THEN 0 ELSE 1 END,
-                   ${hybridScoreExpr} DESC,
-                   ${similarityExpr} DESC
-          LIMIT ${limit}
-        `)
-      : db.execute(sql`
-          SELECT dc.id, dc.document_id, dc.chunk_index, dc.content, dc.metadata,
-                 ${similarityExpr} AS similarity
-          FROM doc_chunks dc
-          LEFT JOIN documents d ON d.id = dc.document_id
-          WHERE dc.embedding IS NOT NULL
-            AND ${similarityExpr} >= ${minChunkScore}
-            ${labelFilter}
-          ORDER BY ${hybridScoreExpr} DESC,
-                   ${similarityExpr} DESC
-          LIMIT ${limit}
-        `);
+    const baseWhere = sql`dc.embedding IS NOT NULL AND ${similarityExpr} >= ${minChunkScore} ${labelFilter}`;
+    const machineMatchFilter =
+      machineMatchOnly && canonical
+        ? sql`AND (${likeCanonical} OR ${likeWithPrefix})`
+        : sql``;
+
+    const result = await db.execute(sql`
+      SELECT dc.id, dc.document_id, dc.chunk_index, dc.content, dc.metadata,
+             ${similarityExpr} AS similarity
+      FROM doc_chunks dc
+      LEFT JOIN documents d ON d.id = dc.document_id
+      WHERE ${baseWhere}
+        ${machineMatchFilter}
+      ORDER BY ${hybridScoreExpr} DESC, ${similarityExpr} DESC
+      LIMIT ${machineMatchOnly ? RETRIEVAL_CONFIG.textMachineMatchedReserve : limit}
+    `);
+    const rows = Array.isArray(result)
+      ? result
+      : (result as { rows?: Record<string, unknown>[] }).rows ?? [];
+    return { rows };
   };
 
-  let raw: unknown;
+  const runQueries = async (useIndexedSearchVector: boolean) => {
+    const hasMachine = machineModel != null && machineModel !== "";
+    const reserve = hasMachine ? RETRIEVAL_CONFIG.textMachineMatchedReserve : 0;
+
+    if (reserve > 0) {
+      const [machineRaw, allRaw] = await Promise.all([
+        runHybridQuery(useIndexedSearchVector, true),
+        runHybridQuery(useIndexedSearchVector, false),
+      ]);
+      const machineRows = machineRaw.rows;
+      const allRows = allRaw.rows;
+      const seen = new Set<string>();
+      const merged: Record<string, unknown>[] = [];
+      for (const r of machineRows) {
+        const id = r.id as string;
+        if (!seen.has(id)) {
+          seen.add(id);
+          merged.push(r);
+        }
+      }
+      for (const r of allRows) {
+        if (merged.length >= limit) break;
+        const id = r.id as string;
+        if (!seen.has(id)) {
+          seen.add(id);
+          merged.push(r);
+        }
+      }
+      return merged;
+    }
+
+    const { rows } = await runHybridQuery(useIndexedSearchVector, false);
+    return rows;
+  };
+
+  let rows: Record<string, unknown>[];
   try {
-    raw = await runHybridQuery(true);
+    rows = await runQueries(true);
   } catch (error) {
     const pgCode = (error as { code?: string } | undefined)?.code;
     if (pgCode !== "42703") throw error; // undefined_column
-    raw = await runHybridQuery(false);
+    rows = await runQueries(false);
   }
-  const rows = Array.isArray(raw)
-    ? raw
-    : (raw as { rows?: Record<string, unknown>[] }).rows ?? [];
 
   return rows
     .map((r: Record<string, unknown>) => ({

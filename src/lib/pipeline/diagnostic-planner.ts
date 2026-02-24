@@ -145,7 +145,17 @@ export type DiagnosticPlannerInput = {
   imageBuffers?: Buffer[];
   /** Outstanding request IDs from previous turn (so LLM can map user reply to evidence) */
   outstandingRequestIds?: string[];
+  /** Source of latest user text, used to tune planner behavior. */
+  inputSource?: "chat" | "structured" | "skip" | "note";
 };
+
+function getChunkPromptContent(chunk: { content: string; metadata?: unknown }): string {
+  if (chunk.metadata && typeof chunk.metadata === "object") {
+    const kv = (chunk.metadata as Record<string, unknown>).kv_content;
+    if (typeof kv === "string" && kv.trim()) return kv;
+  }
+  return chunk.content;
+}
 
 function buildStateSummary(input: DiagnosticPlannerInput): string {
   const lines: string[] = [];
@@ -236,7 +246,7 @@ You must respond with valid JSON only, no other text. Schema:
   "escalation_reason": "string (only when phase is escalated)",
   "suggested_label_switch": "string (optional: if the user's symptoms clearly indicate a DIFFERENT issue category than this playbook covers, set this to the label_id that would be more appropriate. Only use this when evidence strongly contradicts the current playbook's scope.)"
 }
-Rules: Max 3 items in requests. When phase is "resolving", resolution.steps must only use step_ids from the playbook. When phase is "escalated", set escalation_reason. Extract evidence from the user's last message into evidence_extracted when they answered a request. When you are still gathering info or diagnosing and there are more evidence items or checks from the playbook to do, always include at least one request and make the message lead into it (e.g. "Thanks for checking. Next, please…"). Do not end the turn with only a meta-comment about updating hypotheses.
+Rules: Max 3 items in requests. When phase is "resolving", the requests array MUST be empty and resolution.steps must only use step_ids from the playbook. Do not ask follow-up questions in the same turn as a diagnosis. If you still need more evidence, keep phase as "gathering_info" or "diagnosing" and do not set a resolution. When phase is "escalated", set escalation_reason. Extract evidence from the user's last message into evidence_extracted when they answered a request. When you are still gathering info or diagnosing and there are more evidence items or checks from the playbook to do, always include at least one request and make the message lead into it (e.g. "Thanks for checking. Next, please…"). Do not end the turn with only a meta-comment about updating hypotheses.
 
 Critical: When you have gathered enough evidence (e.g. most of the evidence checklist is filled) and are ready to conclude, you MUST output either (a) phase "resolving" with a full "resolution" object (causeId, diagnosis, steps, why), or (b) phase "escalated" with escalation_reason. Never respond with phase "diagnosing" and empty "requests" and a message like "let's evaluate" or "we will evaluate causes"—deliver the actual conclusion (resolution or escalation) in this same response.`;
 
@@ -252,19 +262,25 @@ export async function runDiagnosticPlanner(
     .map((m) => `${m.role}: ${m.content}`)
     .join("\n");
   const chunksText = input.docChunks
-    .map((c) => `[${c.id}]\n${c.content.slice(0, 500)}`)
+    .map((c) => `[${c.id}]\n${getChunkPromptContent(c).slice(0, 2000)}`)
     .join("\n\n") || "(No documentation available)";
 
   const systemPrompt = `You are a diagnostic support assistant. You help users troubleshoot issues by gathering evidence and narrowing down root causes. Use the diagnostic playbook to know what evidence to collect and what causes to consider. Output structured JSON every turn.
 
 Keep the "message" field strictly user-facing: the user should always know what you understood and what you want them to do next (or what the resolution is). Do not write internal reasoning (e.g. "we update the possible causes") in the message.
 
-When your message references a fact from the document chunks, cite the source by its ID using the format (document <id>). For example: "The maximum output is 200 serves per hour (document 5e68ed0e-e094-421d-8291-b1d5afb3c631)." Always cite when stating specific numbers, procedures, or specifications from the documentation.
+When your message references a fact from the document chunks, cite the source by its ID using the format (document <id>). For example: "According to the documentation, the maximum output is [value from the chunk] (document <chunk-id>)." Use the actual values and chunk IDs from the provided chunks—never use example numbers or IDs from this instruction as if they were real. Always cite when stating specific numbers, procedures, or specifications from the documentation.
 
 Grounding rules:
 - Only state technical facts, numbers, procedures, or specifications that are present in the provided document chunks or in the diagnostic playbook content included in the prompt.
 - If the document chunks are empty or do not contain enough information, say you do not have that information in the available documentation and continue with playbook-driven troubleshooting or escalate.
 - Never invent part numbers, measurements, thresholds, maintenance procedures, or documentation details. If uncertain, ask for more evidence or escalate.
+
+If the user's latest message includes a factual question (for example specs, capacities, or procedures), answer that question briefly using the documentation with citations, then continue the diagnostic workflow in the same user-facing message (for example by asking for the next required evidence item when needed).
+
+If the latest user input came from the optional "Add a note" field and expresses frustration or asks for a human, acknowledge it empathetically and try one alternative troubleshooting path before escalating, unless safety rules require immediate escalation.
+
+If the user explicitly skipped a requested item ("I don't know"), treat that as uncertain evidence for the outstanding request IDs and continue with alternate evidence collection where possible.
 
 When enough evidence has been collected to narrow down causes, you must conclude in this turn: output phase "resolving" with a resolution (diagnosis + steps), or phase "escalated" if you cannot determine the cause. Do not leave the user with a message like "let's evaluate" and no resolution—provide the diagnosis or escalate in this same response.
 
@@ -311,6 +327,7 @@ ${input.lastUserMessage}
 ${input.machineModel ? `\nMachine model: ${input.machineModel}` : ""}
 
 ${input.outstandingRequestIds?.length ? `Outstanding request IDs from your previous turn: ${input.outstandingRequestIds.join(", ")}. Map the user's reply to evidence_extracted using these IDs.` : ""}
+${input.inputSource ? `Latest input source: ${input.inputSource}.` : ""}
 ${photoContextBlock ? `\n\n${photoContextBlock}` : ""}
 
 Respond with JSON only.`;
@@ -368,6 +385,7 @@ export async function runFollowUpAnswer(input: {
   imageBuffers?: Buffer[];
 }, audit?: AuditLogger): Promise<string> {
   const systemPrompt = `You are a helpful support assistant. A diagnosis has already been provided to the user. Answer the user's follow-up question using the provided documentation. Be direct and specific. Do not repeat the full diagnosis or resolution steps unless the user explicitly asks for them.
+Do not ask the user any questions or request additional information. Your role here is only to answer the follow-up question, not continue the diagnostic workflow.
 
 When your answer references a fact from the documentation, cite the source by its ID using the format (document <id>). For example: "The serving size is 80 grams (document 5e68ed0e-e094-421d-8291-b1d5afb3c631)." Always cite when stating specific numbers, procedures, or specifications.
 
@@ -390,7 +408,7 @@ Why: ${input.resolution.why}
     .join("\n");
 
   const chunksText = input.docChunks
-    .map((c) => `[${c.id}]\n${c.content.slice(0, 500)}`)
+    .map((c) => `[${c.id}]\n${getChunkPromptContent(c).slice(0, 2000)}`)
     .join("\n\n") || "(No documentation available)";
 
   const userPrompt = `${resolutionBlock ?? ""}
@@ -404,7 +422,7 @@ ${chunksText}
 ${input.machineModel ? `Machine model: ${input.machineModel}\n\n` : ""}## User's follow-up question
 ${input.lastUserMessage}
 
-Answer the user's question in one or two short paragraphs. Answer strictly from the documentation above. If the documentation does not cover the user's question, say so clearly instead of guessing. Cite each source you use with (document <id>).`;
+Answer the user's question in one or two short paragraphs. Answer strictly from the documentation above. If the documentation does not cover the user's question, say so clearly instead of guessing. Cite each source you use with (document <id>). Do not ask the user any follow-up questions or request additional information.`;
 
   const hasImages = (input.imageBuffers?.length ?? 0) > 0;
   const userContent: OpenAI.Chat.Completions.ChatCompletionContentPart[] = hasImages
@@ -449,6 +467,11 @@ export function validateAndSanitizePlannerOutput(
 ): { output: PlannerOutput; errors: string[] } {
   const errors: string[] = [];
   const sanitized = { ...output, requests: [...output.requests] };
+
+  if (sanitized.phase === "resolving" && sanitized.resolution && sanitized.requests.length > 0) {
+    errors.push("Stripped requests from resolving turn: resolution and requests are mutually exclusive");
+    sanitized.requests = [];
+  }
 
   const maxRequestsForChat = 1;
   const allowedMax = Math.min(

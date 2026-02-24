@@ -3,6 +3,8 @@
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 
+const SKIP_SIGNAL = "__SKIP__";
+
 type RequestItem = {
   type: "question" | "photo" | "action" | "reading";
   id: string;
@@ -108,6 +110,7 @@ export function ChatPageClient({ isHomePage }: ChatPageClientProps) {
   const [loading, setLoading] = useState(false);
   const [stage, setStage] = useState("");
   const [error, setError] = useState("");
+  const [currentPhase, setCurrentPhase] = useState("collecting_issue");
   const [debugOpen, setDebugOpen] = useState(false);
   const [debugState, setDebugState] = useState<Record<string, unknown>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -118,6 +121,9 @@ export function ChatPageClient({ isHomePage }: ChatPageClientProps) {
   const [requestInputs, setRequestInputs] = useState<Record<string, string>>({});
   const requestFileInputRef = useRef<HTMLInputElement>(null);
   const [activePhotoRequestId, setActivePhotoRequestId] = useState<string | null>(null);
+  const [addNoteOpen, setAddNoteOpen] = useState(false);
+  const [inputSource, setInputSource] = useState<"chat" | "structured" | "skip" | "note">("chat");
+  const formRef = useRef<HTMLFormElement>(null);
   const messagesRef = useRef<ChatMessage[]>([]);
   const SNIPPET_LENGTH = 280;
 
@@ -171,10 +177,11 @@ export function ChatPageClient({ isHomePage }: ChatPageClientProps) {
     if (loading) return;
     const built = buildResponseFromInputs(requests);
     if (!built) return;
+    setInputSource("structured");
     setInput(built);
     setRequestInputs({});
     setTimeout(() => {
-      const form = document.querySelector("main form");
+      const form = formRef.current;
       if (form instanceof HTMLFormElement) {
         form.requestSubmit();
       }
@@ -184,10 +191,11 @@ export function ChatPageClient({ isHomePage }: ChatPageClientProps) {
   const submitSingleRequestAnswer = (req: RequestItem, value: string) => {
     if (loading) return;
     setRequestInputs((prev) => ({ ...prev, [req.id]: value }));
+    setInputSource(value === SKIP_SIGNAL ? "skip" : "structured");
     setInput(value);
     setRequestInputs({});
     setTimeout(() => {
-      const form = document.querySelector("main form");
+      const form = formRef.current;
       if (form instanceof HTMLFormElement) {
         form.requestSubmit();
       }
@@ -268,6 +276,7 @@ export function ChatPageClient({ isHomePage }: ChatPageClientProps) {
 
     const form = new FormData();
     form.set("message", text || "(sent photos)");
+    form.set("inputSource", inputSource);
     if (sessionId) form.set("sessionId", sessionId);
     userImages.forEach((f) => form.append("images", f));
 
@@ -276,7 +285,14 @@ export function ChatPageClient({ isHomePage }: ChatPageClientProps) {
       : undefined;
     setMessages((prev) => [
       ...prev,
-      { role: "user", content: text || "Sent photo(s)", images: imageUrls },
+      {
+        role: "user",
+        content:
+          text === SKIP_SIGNAL
+            ? "I don't know"
+            : text || "Sent photo(s)",
+        images: imageUrls,
+      },
     ]);
 
     try {
@@ -331,13 +347,32 @@ export function ChatPageClient({ isHomePage }: ChatPageClientProps) {
           playbookTitle: payload!.playbookTitle ?? s.playbookTitle,
           playbookLabelId: payload!.playbookLabelId ?? s.playbookLabelId,
         }));
+        setCurrentPhase(payload.phase);
+        setAddNoteOpen(false);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
+      setInputSource("chat");
     }
   };
+
+  const isDiagnosticStructuredPhase =
+    currentPhase === "nameplate_check" ||
+    currentPhase === "product_type_check" ||
+    currentPhase === "clearance_check" ||
+    currentPhase === "gathering_info" ||
+    currentPhase === "diagnosing";
+  const latestAssistantWithRequests = [...messages]
+    .reverse()
+    .find((m) => m.role === "assistant" && (m.requests?.length ?? 0) > 0);
+  const hasPendingStructuredRequest = Boolean(latestAssistantWithRequests) && !loading;
+  const allowAddNote = currentPhase === "gathering_info" || currentPhase === "diagnosing";
+  const showFullInput = currentPhase === "collecting_issue" && !hasPendingStructuredRequest;
+  const showTextOnlyInput =
+    (currentPhase === "resolved_followup" || currentPhase === "escalated") &&
+    !hasPendingStructuredRequest;
 
   return (
     <main className="flex min-h-screen flex-col bg-gray-50 dark:bg-gray-900">
@@ -648,18 +683,29 @@ export function ChatPageClient({ isHomePage }: ChatPageClientProps) {
                                     }}
                                   />
                                 )}
-                                {isLatest && inputKind === "photo" && (
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setActivePhotoRequestId(req.id);
-                                      requestFileInputRef.current?.click();
-                                    }}
-                                    className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-white px-3 py-1.5 text-xs font-medium text-blue-700 shadow-sm hover:bg-blue-100 dark:border-blue-700 dark:bg-gray-800 dark:text-blue-300 dark:hover:bg-blue-900/40"
-                                  >
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd" /></svg>
-                                    {files.length > 0 ? `${files.length} photo(s) selected` : "Attach photo"}
-                                  </button>
+                                {isLatest && (
+                                  <div className="mt-3 flex items-center gap-3">
+                                    {inputKind === "photo" && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setActivePhotoRequestId(req.id);
+                                          requestFileInputRef.current?.click();
+                                        }}
+                                        className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-white px-3 py-1.5 text-xs font-medium text-blue-700 shadow-sm hover:bg-blue-100 dark:border-blue-700 dark:bg-gray-800 dark:text-blue-300 dark:hover:bg-blue-900/40"
+                                      >
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd" /></svg>
+                                        {files.length > 0 ? `${files.length} photo(s) selected` : "Attach photo"}
+                                      </button>
+                                    )}
+                                    <button
+                                      type="button"
+                                      onClick={() => submitSingleRequestAnswer(req, SKIP_SIGNAL)}
+                                      className="text-xs font-medium text-blue-400 hover:text-blue-300 dark:text-blue-400 dark:hover:text-blue-300"
+                                    >
+                                      {inputKind === "photo" ? "I don't have a photo" : "I don't know"}
+                                    </button>
+                                  </div>
                                 )}
                                 {!isLatest && inputKind === "number" && req.expectedInput && (
                                   <p className="mt-1 text-xs text-blue-600 dark:text-blue-400">
@@ -687,6 +733,55 @@ export function ChatPageClient({ isHomePage }: ChatPageClientProps) {
                   </div>
                 </div>
               ))}
+              {showFullInput && initialPhase === "done" && (
+                <div className="flex justify-start">
+                  <div className="w-full max-w-[85%] rounded-xl border-l-4 border-blue-500 bg-blue-50 p-3 shadow-sm dark:border-blue-400 dark:bg-blue-950/40">
+                    {files.length > 0 && (
+                      <p className="mb-2 text-xs text-blue-700 dark:text-blue-300">
+                        {files.length} photo{files.length > 1 ? "s" : ""} attached
+                      </p>
+                    )}
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="shrink-0 rounded-lg border border-blue-300 bg-white p-2 text-blue-600 shadow-sm transition-colors hover:bg-blue-50 dark:border-blue-600 dark:bg-gray-700 dark:text-blue-400 dark:hover:bg-gray-600"
+                        title="Attach photo"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd" />
+                        </svg>
+                      </button>
+                      <input
+                        type="text"
+                        placeholder="Describe your issue..."
+                        className="min-w-0 flex-1 rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm shadow-sm dark:border-blue-700 dark:bg-gray-800 dark:text-gray-100"
+                        value={input}
+                        onChange={(e) => setInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            setInputSource("chat");
+                            formRef.current?.requestSubmit();
+                          }
+                        }}
+                        disabled={loading}
+                      />
+                      <button
+                        type="button"
+                        disabled={loading || (!input.trim() && files.length === 0)}
+                        onClick={() => {
+                          setInputSource("chat");
+                          formRef.current?.requestSubmit();
+                        }}
+                        className="shrink-0 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                      >
+                        Send
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
               {loading && (
                 <div className="flex justify-start">
                   <div className="rounded-[1.25rem] bg-[#2C323B] px-4 py-3 shadow">
@@ -701,7 +796,11 @@ export function ChatPageClient({ isHomePage }: ChatPageClientProps) {
             </div>
             <div ref={messagesEndRef} />
 
-            <form onSubmit={sendMessage} className="mt-4 flex gap-2">
+            <form
+              ref={formRef}
+              onSubmit={sendMessage}
+              className={`${showFullInput ? "" : "mt-4"} flex gap-2`}
+            >
               <input
                 type="file"
                 ref={fileInputRef}
@@ -730,33 +829,60 @@ export function ChatPageClient({ isHomePage }: ChatPageClientProps) {
                   }
                 }}
               />
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:hover:bg-gray-700"
-              >
-                Photo
-              </button>
-              {files.length > 0 && (
-                <span className="flex items-center text-sm text-gray-500">
-                  {files.length} file(s)
-                </span>
+              {showTextOnlyInput && (
+                <>
+                  <input
+                    type="text"
+                    placeholder="Type your message..."
+                    className="flex-1 rounded-lg border border-gray-300 px-4 py-2 dark:border-gray-600 dark:bg-gray-800"
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    disabled={loading}
+                  />
+                  <button
+                    type="submit"
+                    disabled={loading || !input.trim()}
+                    onClick={() => setInputSource("chat")}
+                    className="rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    Send
+                  </button>
+                </>
               )}
-              <input
-                type="text"
-                placeholder="Type your message..."
-                className="flex-1 rounded-lg border border-gray-300 px-4 py-2 dark:border-gray-600 dark:bg-gray-800"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                disabled={loading}
-              />
-              <button
-                type="submit"
-                disabled={loading || (!input.trim() && files.length === 0)}
-                className="rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-50"
-              >
-                Send
-              </button>
+              {allowAddNote && !addNoteOpen && !showTextOnlyInput && !showFullInput && (
+                <button
+                  type="button"
+                  onClick={() => setAddNoteOpen(true)}
+                  className="text-sm text-blue-700 underline underline-offset-2 hover:text-blue-900 dark:text-blue-300 dark:hover:text-blue-200"
+                >
+                  Have something to add?
+                </button>
+              )}
+              {allowAddNote && addNoteOpen && (
+                <>
+                  <input
+                    type="text"
+                    placeholder="Add a note..."
+                    className="flex-1 rounded-lg border border-gray-300 px-4 py-2 dark:border-gray-600 dark:bg-gray-800"
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    disabled={loading}
+                  />
+                  <button
+                    type="submit"
+                    disabled={loading || !input.trim()}
+                    onClick={() => setInputSource("note")}
+                    className="rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    Send note
+                  </button>
+                </>
+              )}
+              {!showFullInput && !showTextOnlyInput && !allowAddNote && isDiagnosticStructuredPhase && (
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  Answer the question above to continue.
+                </p>
+              )}
             </form>
           </>
         )}
