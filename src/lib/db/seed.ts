@@ -1,15 +1,75 @@
 import { sql } from "drizzle-orm";
 import { db } from "./index";
-import { labels, actions, playbooks, users } from "./schema";
+import { labels, actions, playbooks, users, supportedModels } from "./schema";
 import { eq } from "drizzle-orm";
 import { loadActionCatalogRows } from "@/lib/actions/catalog";
 import { hashPassword } from "@/lib/auth";
+import { toCanonicalModel } from "@/lib/ingestion/extract-machine-model";
 
 const DEFAULT_LABELS = [
   { id: "good_texture", displayName: "Good texture", description: "Normal, desired consistency" },
   { id: "too_runny", displayName: "Too runny", description: "Watery, thin, melts too fast" },
   { id: "too_icy", displayName: "Too icy", description: "Crystalline, icy texture" },
   { id: "too_thick", displayName: "Too thick", description: "Overly dense or stiff" },
+];
+
+/** Spaceman Soft Serve Ice Cream Machines — https://spaceman.com.au/products/soft-serve-ice-cream-machines/ */
+const SPACEMAN_SOFT_SERVE_MODELS = [
+  "6220",
+  "6220E",
+  "6250-C",
+  "6250A-C",
+  "6235-C",
+  "6235A-C",
+  "6210-C",
+  "6210A-C",
+  "6218",
+  "6236-C",
+  "6236A-C",
+  "6228-C",
+  "6228A-C",
+  "6234-C",
+  "6234A-C",
+  "6378-C",
+  "6378A-C",
+  "6368-C",
+  "6368A-C",
+  "6210B-C",
+  "6210AB-C",
+  "6228B-C",
+  "6228AB-C",
+  "6234B-C",
+  "6234AB-C",
+  "6236B-C",
+  "6236AB-C",
+  "6235B-C",
+  "6235AB-C",
+  "6368B-C",
+  "6368AB-C",
+  "6338-C",
+  "6338A-C",
+  "6240",
+  "6240A",
+  "6268",
+  "6225",
+  "6225A",
+  "6378B-C",
+  "6378AB-C",
+  "6338B-C",
+  "6338AB-C",
+];
+
+/** Spaceman Frozen Beverage Machines — https://spaceman.com.au/products/frozen-beverage-machines/ */
+const SPACEMAN_FROZEN_BEVERAGE_MODELS = [
+  "6450-C",
+  "6450-CL",
+  "6690-C",
+  "6690-CL",
+  "6695-C",
+  "6695-CL",
+  "6455-C",
+  "6795-C",
+  "6795-CL",
 ];
 
 export async function ensureVectorExtension(): Promise<void> {
@@ -77,6 +137,22 @@ export async function seedAdminUser(): Promise<void> {
         updatedAt: new Date(),
       },
     });
+}
+
+export async function seedSupportedModels(): Promise<void> {
+  const rawModels = [...SPACEMAN_SOFT_SERVE_MODELS, ...SPACEMAN_FROZEN_BEVERAGE_MODELS];
+  const canonicalModels = Array.from(
+    new Set(
+      rawModels
+        .map((value) => toCanonicalModel(value))
+        .filter((value): value is string => Boolean(value))
+    )
+  );
+  if (canonicalModels.length === 0) return;
+  await db
+    .insert(supportedModels)
+    .values(canonicalModels.map((modelNumber) => ({ modelNumber })))
+    .onConflictDoNothing({ target: supportedModels.modelNumber });
 }
 
 const DEFAULT_ACTIONS = [

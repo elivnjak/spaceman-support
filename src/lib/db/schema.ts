@@ -227,6 +227,16 @@ export const diagnosticSessions = pgTable("diagnostic_sessions", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });
 
+export const auditLogs = pgTable("audit_logs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  sessionId: uuid("session_id")
+    .notNull()
+    .references(() => diagnosticSessions.id, { onDelete: "cascade" }),
+  turnNumber: integer("turn_number").notNull(),
+  payload: jsonb("payload").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
+
 export const machineSpecs = pgTable("machine_specs", {
   id: uuid("id").primaryKey().defaultRandom(),
   machineModel: text("machine_model").notNull().unique(),
@@ -272,5 +282,7 @@ export type SupportSession = typeof supportSessions.$inferSelect;
 export type NewSupportSession = typeof supportSessions.$inferInsert;
 export type DiagnosticSession = typeof diagnosticSessions.$inferSelect;
 export type NewDiagnosticSession = typeof diagnosticSessions.$inferInsert;
+export type AuditLog = typeof auditLogs.$inferSelect;
+export type NewAuditLog = typeof auditLogs.$inferInsert;
 export type MachineSpec = typeof machineSpecs.$inferSelect;
 export type NewMachineSpec = typeof machineSpecs.$inferInsert;

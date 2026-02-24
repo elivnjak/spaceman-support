@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 import { LLM_CONFIG, DIAGNOSTIC_CONFIG } from "@/lib/config";
 import { validateGrounding, enforcePlaybookInstructions, type PlaybookStep, type LLMStep } from "./validate-grounding";
+import type { AuditLogger } from "@/lib/audit";
 
 function getOpenAI() {
   const key = process.env.OPENAI_API_KEY;
@@ -239,7 +240,10 @@ Rules: Max 3 items in requests. When phase is "resolving", resolution.steps must
 
 Critical: When you have gathered enough evidence (e.g. most of the evidence checklist is filled) and are ready to conclude, you MUST output either (a) phase "resolving" with a full "resolution" object (causeId, diagnosis, steps, why), or (b) phase "escalated" with escalation_reason. Never respond with phase "diagnosing" and empty "requests" and a message like "let's evaluate" or "we will evaluate causes"—deliver the actual conclusion (resolution or escalation) in this same response.`;
 
-export async function runDiagnosticPlanner(input: DiagnosticPlannerInput): Promise<PlannerOutput> {
+export async function runDiagnosticPlanner(
+  input: DiagnosticPlannerInput,
+  audit?: AuditLogger
+): Promise<PlannerOutput> {
   const stateSummary = buildStateSummary(input);
   const playbookBlock = buildPlaybookBlock(input.playbook);
   const actionsBlock = buildActionsBlock(input.actions);
@@ -316,6 +320,7 @@ Respond with JSON only.`;
       ]
     : [{ type: "text" as const, text: userPrompt }];
 
+  const llmStart = Date.now();
   const res = await getOpenAI().chat.completions.create({
     model: LLM_CONFIG.diagnosticPlannerModel,
     messages: [
@@ -334,6 +339,17 @@ Respond with JSON only.`;
   }
   if (!Array.isArray(parsed.hypotheses_update)) parsed.hypotheses_update = [];
   if (!Array.isArray(parsed.evidence_extracted)) parsed.evidence_extracted = [];
+  audit?.logLlmCall({
+    name: "diagnostic_planner",
+    model: LLM_CONFIG.diagnosticPlannerModel,
+    systemPrompt,
+    userPrompt,
+    imageCount: input.imageBuffers?.length ?? 0,
+    rawResponse: text,
+    parsedResponse: parsed,
+    tokensUsed: res.usage,
+    durationMs: Date.now() - llmStart,
+  });
   return parsed;
 }
 
@@ -345,7 +361,7 @@ export async function runFollowUpAnswer(input: {
   resolution: PlannerOutput["resolution"];
   machineModel?: string | null;
   imageBuffers?: Buffer[];
-}): Promise<string> {
+}, audit?: AuditLogger): Promise<string> {
   const systemPrompt = `You are a helpful support assistant. A diagnosis has already been provided to the user. Answer the user's follow-up question using the provided documentation. Be direct and specific. Do not repeat the full diagnosis or resolution steps unless the user explicitly asks for them.
 
 When your answer references a fact from the documentation, cite the source by its ID using the format (document <id>). For example: "The serving size is 80 grams (document 5e68ed0e-e094-421d-8291-b1d5afb3c631)." Always cite when stating specific numbers, procedures, or specifications.`;
@@ -391,6 +407,7 @@ Answer the user's question in one or two short paragraphs. Use only the document
       ]
     : [{ type: "text" as const, text: userPrompt }];
 
+  const llmStart = Date.now();
   const res = await getOpenAI().chat.completions.create({
     model: LLM_CONFIG.diagnosticPlannerModel,
     messages: [
@@ -399,6 +416,17 @@ Answer the user's question in one or two short paragraphs. Use only the document
     ],
   });
   const text = res.choices[0]?.message?.content?.trim();
+  audit?.logLlmCall({
+    name: "follow_up_answer",
+    model: LLM_CONFIG.diagnosticPlannerModel,
+    systemPrompt,
+    userPrompt,
+    imageCount: input.imageBuffers?.length ?? 0,
+    rawResponse: text,
+    parsedResponse: text,
+    tokensUsed: res.usage,
+    durationMs: Date.now() - llmStart,
+  });
   return text ?? "I don't have specific information on that in the documentation. If you need more detail, please contact support.";
 }
 

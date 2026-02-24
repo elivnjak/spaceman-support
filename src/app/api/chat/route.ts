@@ -44,6 +44,7 @@ import {
   parseManufacturingYear,
   validateModel,
 } from "@/lib/pipeline/nameplate-analysis";
+import { AuditLogger } from "@/lib/audit";
 
 const STAGE_MESSAGES: Record<string, string> = {
   requesting_nameplate: "Collecting machine details…",
@@ -75,6 +76,35 @@ function extractChunkIdsFromMessage(message: string): string[] {
     if (id) ids.add(id);
   }
   return Array.from(ids);
+}
+
+/**
+ * Remove citation markers whose ID is not in the set of retrieved chunk IDs.
+ * Prevents the LLM from showing "(document <uuid>)" or "[uuid]" for non-existent
+ * documents when RAG is empty or the model hallucinates an ID.
+ */
+function stripInvalidCitationMarkers(
+  message: string,
+  validChunkIds: Set<string>
+): string {
+  if (validChunkIds.size === 0) {
+    // No valid chunks: strip all citation-style UUIDs so we never show a fake doc ref
+    const re = new RegExp(
+      `\\s*\\[(?:id:\\s*)?${UUID_PATTERN}\\]|\\s*\\((?:document\\s+)?${UUID_PATTERN}\\)`,
+      "gi"
+    );
+    return message.replace(re, "").replace(/\s{2,}/g, " ").trim();
+  }
+  let out = message;
+  const re = new RegExp(
+    `(\\s*)(\\[(?:id:\\s*)?(${UUID_PATTERN})\\]|\\((?:document\\s+)?(${UUID_PATTERN})\\))`,
+    "gi"
+  );
+  out = out.replace(re, (_, space, marker, id1, id2) => {
+    const id = (id1 ?? id2 ?? "").toLowerCase();
+    return validChunkIds.has(id) ? space + marker : space;
+  });
+  return out.replace(/\s{2,}/g, " ").trim();
 }
 
 export type CitationPayload = {
@@ -264,6 +294,23 @@ export async function POST(request: Request) {
 
   const stream = new ReadableStream({
     async start(controller) {
+      let audit: AuditLogger | null = null;
+      const sendEvent = (
+        ...args:
+          | [string, string]
+          | [ReadableStreamDefaultController<Uint8Array>, string, string]
+      ) => {
+        const event = args.length === 3 ? args[1] : args[0];
+        const data = args.length === 3 ? args[2] : args[1];
+        if (event === "message") {
+          try {
+            audit?.logApiResponse(JSON.parse(data));
+          } catch {
+            audit?.logApiResponse(data);
+          }
+        }
+        send(controller, event, data);
+      };
       try {
         await ensureNameplateTables();
         await ensureClearanceTables();
@@ -294,12 +341,23 @@ export async function POST(request: Request) {
           sessionId = session.id;
         } else {
           if (!session) {
-            send(controller, "error", JSON.stringify({ error: "Session not found." }));
+            sendEvent("error", JSON.stringify({ error: "Session not found." }));
             controller.close();
             return;
           }
           sessionId = session.id;
         }
+
+        audit = new AuditLogger(sessionId, (session.turnCount ?? 0) + 1);
+        audit.logSessionState("before", {
+          phase: session.phase,
+          turnCount: session.turnCount ?? 0,
+          status: session.status,
+          machineModel: session.machineModel,
+          playbookId: session.playbookId,
+          evidenceKeys: Object.keys((session.evidence as Record<string, unknown>) ?? {}),
+          hypothesesCount: ((session.hypotheses as unknown[]) ?? []).length,
+        });
 
         const messages = (session!.messages as ChatMessage[]) ?? [];
         let imageBuffersForLlm = imageBuffers;
@@ -318,6 +376,12 @@ export async function POST(request: Request) {
         }
 
         const hasUserInput = Boolean(message) || imagePaths.length > 0;
+        audit.logUserInput({
+          message: message || "",
+          imageCount: imageBuffers.length,
+          imageSizes: imageBuffers.map((buf) => buf.length),
+          imagePaths,
+        });
         if (hasUserInput) {
           messages.push({
             role: "user",
@@ -328,6 +392,7 @@ export async function POST(request: Request) {
         }
 
         if (session.phase === "collecting_issue") {
+          audit.logPhasePath("collecting_issue");
           const { instructionText, guideImages } = await getNameplatePrompt();
           const hasSubstantiveIssue =
             Boolean(message) &&
@@ -338,7 +403,7 @@ export async function POST(request: Request) {
             console.log(
               `[chat] phase: collecting_issue -> nameplate_check (session=${sessionId}) symptom="${message.trim().slice(0, 60)}${message.length > 60 ? "…" : ""}"`
             );
-            send(controller, "stage", JSON.stringify({ message: STAGE_MESSAGES.requesting_nameplate }));
+            sendEvent("stage", JSON.stringify({ message: STAGE_MESSAGES.requesting_nameplate }));
             const responseMessage = `Thanks. ${instructionText}`;
             const assistantTurn: ChatMessage & {
               requests?: PlannerOutput["requests"];
@@ -378,8 +443,7 @@ export async function POST(request: Request) {
               status: "active",
             };
 
-            send(
-              controller,
+            sendEvent(
               "message",
               JSON.stringify({
                 sessionId,
@@ -418,7 +482,7 @@ export async function POST(request: Request) {
             console.log(
               `[chat] phase: collecting_issue (stay) (session=${sessionId}) trivial/empty message, asking for issue`
             );
-            send(controller, "stage", JSON.stringify({ message: STAGE_MESSAGES.asking_followup }));
+            sendEvent("stage", JSON.stringify({ message: STAGE_MESSAGES.asking_followup }));
             const responseMessage = "What issue are you experiencing with the machine?";
             const assistantTurn: ChatMessage & { requests?: PlannerOutput["requests"] } = {
               role: "assistant",
@@ -443,7 +507,7 @@ export async function POST(request: Request) {
                 updatedAt: new Date(),
               })
               .where(eq(diagnosticSessions.id, sessionId));
-            send(
+            sendEvent(
               controller,
               "message",
               JSON.stringify({
@@ -463,7 +527,8 @@ export async function POST(request: Request) {
         }
 
         if (session.phase === "nameplate_check") {
-          send(controller, "stage", JSON.stringify({ message: STAGE_MESSAGES.requesting_nameplate }));
+          audit.logPhasePath("nameplate_check");
+          sendEvent("stage", JSON.stringify({ message: STAGE_MESSAGES.requesting_nameplate }));
           const { instructionText, guideImages } = await getNameplatePrompt();
 
           if (imageBuffers.length === 0) {
@@ -498,7 +563,7 @@ export async function POST(request: Request) {
               })
               .where(eq(diagnosticSessions.id, sessionId));
 
-            send(
+            sendEvent(
               controller,
               "message",
               JSON.stringify({
@@ -517,13 +582,13 @@ export async function POST(request: Request) {
             return;
           }
 
-          send(controller, "stage", JSON.stringify({ message: STAGE_MESSAGES.analysing_photos }));
+          sendEvent("stage", JSON.stringify({ message: STAGE_MESSAGES.analysing_photos }));
 
           const unsupportedMessage =
             "Your machine isn't a Spaceman machine. We only support Spaceman machines.";
 
           try {
-            const extracted = await analyzeNameplate(imageBuffers);
+            const extracted = await analyzeNameplate(imageBuffers, audit);
             const extractedModel = extracted.modelNumber?.trim() ?? "";
             const extractedSerial = extracted.serialNumber?.trim() ?? "";
 
@@ -558,7 +623,7 @@ export async function POST(request: Request) {
                 })
                 .where(eq(diagnosticSessions.id, sessionId));
 
-            send(
+            sendEvent(
               controller,
               "message",
               JSON.stringify({
@@ -596,7 +661,7 @@ export async function POST(request: Request) {
                 })
                 .where(eq(diagnosticSessions.id, sessionId));
 
-              send(
+              sendEvent(
                 controller,
                 "message",
                 JSON.stringify({
@@ -648,7 +713,7 @@ export async function POST(request: Request) {
               })
               .where(eq(diagnosticSessions.id, sessionId));
 
-            send(
+            sendEvent(
               controller,
               "message",
               JSON.stringify({
@@ -691,7 +756,7 @@ export async function POST(request: Request) {
               })
               .where(eq(diagnosticSessions.id, sessionId));
 
-            send(
+            sendEvent(
               controller,
               "message",
               JSON.stringify({
@@ -761,7 +826,7 @@ export async function POST(request: Request) {
             status: "active",
           };
 
-          send(
+          sendEvent(
             controller,
             "message",
             JSON.stringify({
@@ -792,7 +857,7 @@ export async function POST(request: Request) {
                 updatedAt: new Date(),
               })
               .where(eq(diagnosticSessions.id, sessionId));
-            send(
+            sendEvent(
               controller,
               "message",
               JSON.stringify({
@@ -812,6 +877,7 @@ export async function POST(request: Request) {
         }
 
         if (session.phase === "product_type_check") {
+          audit.logPhasePath("product_type_check");
           const availableProductTypes = await getProductTypeOptions();
           const productTypeOptions = availableProductTypes.map((item) => item.name);
           const otherOption = availableProductTypes.find((item) => item.isOther);
@@ -855,7 +921,7 @@ export async function POST(request: Request) {
               })
               .where(eq(diagnosticSessions.id, sessionId));
 
-            send(
+            sendEvent(
               controller,
               "message",
               JSON.stringify({
@@ -899,7 +965,7 @@ export async function POST(request: Request) {
               })
               .where(eq(diagnosticSessions.id, sessionId));
 
-            send(
+            sendEvent(
               controller,
               "message",
               JSON.stringify({
@@ -943,7 +1009,7 @@ export async function POST(request: Request) {
               })
               .where(eq(diagnosticSessions.id, sessionId));
 
-            send(
+            sendEvent(
               controller,
               "message",
               JSON.stringify({
@@ -1009,7 +1075,7 @@ export async function POST(request: Request) {
             })
             .where(eq(diagnosticSessions.id, sessionId));
 
-          send(
+          sendEvent(
             controller,
             "message",
             JSON.stringify({
@@ -1029,7 +1095,8 @@ export async function POST(request: Request) {
         }
 
         if (session.phase === "clearance_check") {
-          send(controller, "stage", JSON.stringify({ message: STAGE_MESSAGES.requesting_clearance }));
+          audit.logPhasePath("clearance_check");
+          sendEvent("stage", JSON.stringify({ message: STAGE_MESSAGES.requesting_clearance }));
           const { instructionText, guideImages } = await getClearancePrompt();
 
           if (imageBuffers.length === 0) {
@@ -1063,7 +1130,7 @@ export async function POST(request: Request) {
               })
               .where(eq(diagnosticSessions.id, sessionId));
 
-            send(
+            sendEvent(
               controller,
               "message",
               JSON.stringify({
@@ -1108,9 +1175,9 @@ export async function POST(request: Request) {
 
         const isTriageFlow = session.phase === "triaging";
         if (isTriageFlow) {
-          send(controller, "stage", JSON.stringify({ message: STAGE_MESSAGES.selecting_playbook }));
+          sendEvent("stage", JSON.stringify({ message: STAGE_MESSAGES.selecting_playbook }));
           if (imageBuffersForLlm.length > 0) {
-            send(controller, "stage", JSON.stringify({ message: STAGE_MESSAGES.analysing_photos }));
+            sendEvent("stage", JSON.stringify({ message: STAGE_MESSAGES.analysing_photos }));
           }
 
           const allPlaybooks = await db
@@ -1204,7 +1271,7 @@ export async function POST(request: Request) {
             triageHistory: nextTriageHistory,
             imageBuffers: allTriageImageBuffers,
             currentProductType: session.productType,
-          });
+          }, audit);
           console.log(
             `[chat] triage (session=${sessionId}) selected_label=${triageResult.selectedLabelId ?? "null"} confidence=${triageResult.confidence.toFixed(2)} candidates=[${triageResult.candidateLabels.join(", ")}]`
           );
@@ -1248,7 +1315,7 @@ export async function POST(request: Request) {
             console.log(
               `[chat] triage follow-up (session=${sessionId}) round=${triageRound} asking user to disambiguate`
             );
-            send(controller, "stage", JSON.stringify({ message: STAGE_MESSAGES.asking_followup }));
+            sendEvent("stage", JSON.stringify({ message: STAGE_MESSAGES.asking_followup }));
 
             const candidateOptions = triageResult.candidateLabels
               .map((id) => labelsById.get(id)?.displayName ?? id)
@@ -1298,7 +1365,7 @@ export async function POST(request: Request) {
               })
               .where(eq(diagnosticSessions.id, sessionId));
 
-            send(
+            sendEvent(
               controller,
               "message",
               JSON.stringify({
@@ -1356,7 +1423,7 @@ export async function POST(request: Request) {
           ? (await db.select().from(playbooks).where(eq(playbooks.id, session.playbookId)))[0]
           : null;
         if (!playbookRow) {
-          send(controller, "error", JSON.stringify({ error: "No playbook found for this session." }));
+          sendEvent("error", JSON.stringify({ error: "No playbook found for this session." }));
           controller.close();
           return;
         }
@@ -1385,6 +1452,7 @@ export async function POST(request: Request) {
           ) ?? [];
 
         let plannerOutput: PlannerOutput;
+        let plannerLogged = false;
         let chunksForTurn: {
           id: string;
           content: string;
@@ -1394,6 +1462,7 @@ export async function POST(request: Request) {
 
         // Post-resolution: capture verification feedback, then answer follow-ups
         if (session.status === "resolved") {
+          audit.logPhasePath("resolved_followup");
           const lastResolution = (lastAssistantMessage as { resolution?: PlannerOutput["resolution"] } | undefined)?.resolution;
           const hasOutcome = session.resolutionOutcome != null;
 
@@ -1454,7 +1523,7 @@ export async function POST(request: Request) {
                   })
                   .where(eq(diagnosticSessions.id, sessionId));
 
-                send(
+                sendEvent(
                   controller,
                   "message",
                   JSON.stringify({
@@ -1492,7 +1561,7 @@ export async function POST(request: Request) {
                 .set({ messages, phase, updatedAt: new Date() })
                 .where(eq(diagnosticSessions.id, sessionId));
 
-              send(
+              sendEvent(
                 controller,
                 "message",
                 JSON.stringify({
@@ -1512,7 +1581,7 @@ export async function POST(request: Request) {
           }
 
           // Either already have outcome or ambiguous message — answer as follow-up
-          send(controller, "stage", JSON.stringify({ message: STAGE_MESSAGES.searching_manuals }));
+          sendEvent("stage", JSON.stringify({ message: STAGE_MESSAGES.searching_manuals }));
           const queryText = `${message} ${playbook.labelId} troubleshooting steps causes`;
           const queryEmbedding = await openaiTextEmbedder.embed(queryText);
           const chunks = await searchDocChunks(
@@ -1520,13 +1589,19 @@ export async function POST(request: Request) {
             8,
             session.machineModel ?? undefined
           );
+          audit.logRagRetrieval({
+            query: queryText,
+            chunksReturned: chunks.length,
+            chunkIds: chunks.map((c) => c.id),
+            topSimilarity: chunks[0]?.similarity,
+          });
           chunksForTurn = chunks.map((c) => ({
             id: c.id,
             content: c.content,
             metadata: c.metadata,
             documentId: c.documentId,
           }));
-          send(controller, "stage", JSON.stringify({ message: STAGE_MESSAGES.thinking }));
+          sendEvent("stage", JSON.stringify({ message: STAGE_MESSAGES.thinking }));
           const followUpMessage = await runFollowUpAnswer({
             recentMessages: messages.slice(0, -1),
             docChunks: chunksForTurn,
@@ -1534,7 +1609,7 @@ export async function POST(request: Request) {
             resolution: lastResolution,
             machineModel: session.machineModel ?? undefined,
             imageBuffers: imageBuffersForLlm.length > 0 ? imageBuffersForLlm : undefined,
-          });
+          }, audit);
           phase = "resolved_followup";
           plannerOutput = {
             message: followUpMessage,
@@ -1544,6 +1619,7 @@ export async function POST(request: Request) {
             evidence_extracted: [],
           };
         } else {
+          audit.logPhasePath("diagnostic_loop");
           const escalationFromTrigger = checkEscalationTriggers(
             message,
             playbook.escalationTriggers
@@ -1589,7 +1665,7 @@ export async function POST(request: Request) {
               })
             );
 
-            send(controller, "stage", JSON.stringify({ message: STAGE_MESSAGES.searching_manuals }));
+            sendEvent("stage", JSON.stringify({ message: STAGE_MESSAGES.searching_manuals }));
             const queryText = `${message} ${playbook.labelId} troubleshooting steps causes`;
             const queryEmbedding = await openaiTextEmbedder.embed(queryText);
             const chunks = await searchDocChunks(
@@ -1597,6 +1673,12 @@ export async function POST(request: Request) {
               8,
               session.machineModel ?? undefined
             );
+            audit.logRagRetrieval({
+              query: queryText,
+              chunksReturned: chunks.length,
+              chunkIds: chunks.map((c) => c.id),
+              topSimilarity: chunks[0]?.similarity,
+            });
             chunksForTurn = chunks.map((c) => ({
               id: c.id,
               content: c.content,
@@ -1604,7 +1686,7 @@ export async function POST(request: Request) {
               documentId: c.documentId,
             }));
 
-            send(controller, "stage", JSON.stringify({ message: STAGE_MESSAGES.thinking }));
+            sendEvent("stage", JSON.stringify({ message: STAGE_MESSAGES.thinking }));
             plannerOutput = await runDiagnosticPlanner({
               playbook,
               evidence,
@@ -1618,14 +1700,16 @@ export async function POST(request: Request) {
               machineModel: session.machineModel ?? undefined,
               outstandingRequestIds,
               imageBuffers: imageBuffersForLlm.length > 0 ? imageBuffersForLlm : undefined,
-            });
+            }, audit);
 
-            const { output: sanitized } = validateAndSanitizePlannerOutput(
+            const { output: sanitized, errors: sanitizeErrors } = validateAndSanitizePlannerOutput(
               plannerOutput,
               playbook,
               actionsById,
               true
             );
+            audit.logPlannerOutput(plannerOutput, sanitized, sanitizeErrors);
+            plannerLogged = true;
             plannerOutput = sanitized;
 
             // Handle playbook switch suggestion
@@ -1648,6 +1732,10 @@ export async function POST(request: Request) {
               }
             }
           }
+        }
+
+        if (!plannerLogged) {
+          audit.logPlannerOutput(plannerOutput);
         }
 
         const now = new Date().toISOString();
@@ -1793,34 +1881,54 @@ export async function POST(request: Request) {
           sendEscalationWebhook(escalationHandoff).catch(() => {});
         }
 
+        const validChunkIds = new Set(chunksForTurn.map((c) => c.id.toLowerCase()));
+        const sanitizedMessage = stripInvalidCitationMarkers(
+          responseToSend.message,
+          validChunkIds
+        );
+        responseToSend = { ...responseToSend, message: sanitizedMessage };
+        const lastMsg = messages[messages.length - 1];
+        if (lastMsg && lastMsg.role === "assistant" && "content" in lastMsg) {
+          (lastMsg as { content: string }).content = sanitizedMessage;
+        }
+
         const citations = buildCitations(responseToSend.message, chunksForTurn);
 
-        send(
-          controller,
-          "message",
-          JSON.stringify({
-            sessionId,
-            message: responseToSend.message,
-            phase: responseToSend.phase,
-            requests: responseToSend.requests,
-            resolution: responseToSend.resolution,
-            escalation_reason: responseToSend.escalation_reason,
-            citations: citations.length > 0 ? citations : undefined,
-            model: session.machineModel ?? undefined,
-            serialNumber: session.serialNumber ?? undefined,
-            productType: session.productType ?? undefined,
-            playbookId: session.playbookId ?? undefined,
-            playbookTitle: playbook?.title ?? undefined,
-            playbookLabelId: playbook?.labelId ?? undefined,
-          })
-        );
+        const responsePayload = {
+          sessionId,
+          message: responseToSend.message,
+          phase: responseToSend.phase,
+          requests: responseToSend.requests,
+          resolution: responseToSend.resolution,
+          escalation_reason: responseToSend.escalation_reason,
+          citations: citations.length > 0 ? citations : undefined,
+          model: session.machineModel ?? undefined,
+          serialNumber: session.serialNumber ?? undefined,
+          productType: session.productType ?? undefined,
+          playbookId: session.playbookId ?? undefined,
+          playbookTitle: playbook?.title ?? undefined,
+          playbookLabelId: playbook?.labelId ?? undefined,
+        };
+        audit.logSessionState("after", {
+          phase,
+          turnCount,
+          status,
+          machineModel: session.machineModel,
+          playbookId: session.playbookId,
+          evidenceKeys: Object.keys(evidence),
+          hypothesesCount: hypotheses.length,
+        });
+        sendEvent(controller, "message", JSON.stringify(responsePayload));
         controller.close();
       } catch (err) {
         console.error("[chat] fatal route error", err);
         const rawMsg = err instanceof Error ? err.message : String(err);
         const msg = rawMsg?.trim() ? rawMsg : "Unexpected chat error.";
-        send(controller, "error", JSON.stringify({ error: msg }));
+        audit?.logError(msg);
+        sendEvent("error", JSON.stringify({ error: msg }));
         controller.close();
+      } finally {
+        audit?.flush().catch(() => {});
       }
     },
   });

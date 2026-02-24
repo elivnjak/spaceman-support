@@ -105,10 +105,8 @@ export async function ingestDocument(documentId: string): Promise<void> {
     .where(eq(documents.id, documentId));
 
   try {
-    const { readStorageFile } = await import("@/lib/storage");
-    const relativePath = doc.filePath.includes("storage/")
-      ? doc.filePath.replace(/^.*storage[/]/, "")
-      : doc.filePath;
+    const { readStorageFile, getStorageRelativePath } = await import("@/lib/storage");
+    const relativePath = getStorageRelativePath(doc.filePath);
     const buffer = await readStorageFile(relativePath);
 
     const isPdf = doc.filePath.toLowerCase().endsWith(".pdf");

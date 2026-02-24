@@ -15,6 +15,7 @@ const navItems = [
   { href: "/admin/clearance", label: "Clearance config" },
   { href: "/admin/docs", label: "Documents" },
   { href: "/admin/playbooks", label: "Playbooks" },
+  { href: "/admin/audit-logs", label: "Audit logs" },
   { href: "/admin/test", label: "Test console" },
 ] as const;
 

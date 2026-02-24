@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import { LLM_CONFIG } from "@/lib/config";
+import type { AuditLogger } from "@/lib/audit";
 
 export type TriageLabelOption = {
   labelId: string;
@@ -42,7 +43,10 @@ function clamp01(value: number): number {
   return value;
 }
 
-export async function runPlaybookTriage(input: PlaybookTriageInput): Promise<PlaybookTriageResult> {
+export async function runPlaybookTriage(
+  input: PlaybookTriageInput,
+  audit?: AuditLogger
+): Promise<PlaybookTriageResult> {
   if (input.labels.length === 0) {
     return {
       selectedLabelId: null,
@@ -109,6 +113,7 @@ Return JSON only.`;
       ]
     : [{ type: "text" as const, text: userPrompt }];
 
+  const llmStart = Date.now();
   const res = await getOpenAI().chat.completions.create({
     model: LLM_CONFIG.classificationModel,
     messages: [
@@ -147,12 +152,25 @@ Return JSON only.`;
     ? parsed.selected_label_id
     : null;
   const candidateLabels = (parsed.candidate_labels ?? []).filter((id) => validLabelIds.has(id)).slice(0, 3);
-
-  return {
+  const result: PlaybookTriageResult = {
     selectedLabelId,
     confidence: clamp01(Number(parsed.confidence ?? 0)),
     reasoning: parsed.reasoning?.trim() || "No rationale provided.",
     followUpQuestion: parsed.follow_up_question?.trim() || null,
     candidateLabels,
   };
+
+  audit?.logLlmCall({
+    name: "playbook_triage",
+    model: LLM_CONFIG.classificationModel,
+    systemPrompt,
+    userPrompt,
+    imageCount: input.imageBuffers?.length ?? 0,
+    rawResponse: text,
+    parsedResponse: result,
+    tokensUsed: res.usage,
+    durationMs: Date.now() - llmStart,
+  });
+
+  return result;
 }

@@ -4,6 +4,7 @@ import { LLM_CONFIG } from "@/lib/config";
 import { db } from "@/lib/db";
 import { supportedModels } from "@/lib/db/schema";
 import { toCanonicalModel } from "@/lib/ingestion/extract-machine-model";
+import type { AuditLogger } from "@/lib/audit";
 
 export interface NameplateResult {
   modelNumber: string | null;
@@ -25,7 +26,10 @@ function clamp01(value: number): number {
   return value;
 }
 
-export async function analyzeNameplate(imageBuffers: Buffer[]): Promise<NameplateResult> {
+export async function analyzeNameplate(
+  imageBuffers: Buffer[],
+  audit?: AuditLogger
+): Promise<NameplateResult> {
   if (imageBuffers.length === 0) {
     return {
       modelNumber: null,
@@ -57,6 +61,7 @@ Rules:
     { type: "text" as const, text: "Extract model and serial number from this machine name plate." },
   ];
 
+  const llmStart = Date.now();
   const res = await getOpenAI().chat.completions.create({
     model: LLM_CONFIG.classificationModel,
     messages: [
@@ -82,12 +87,26 @@ Rules:
   const modelNumber = parsed.model_number?.trim() || null;
   const serialNumber = parsed.serial_number?.trim() || null;
 
-  return {
+  const result = {
     modelNumber,
     serialNumber,
     confidence: clamp01(Number(parsed.confidence ?? 0)),
     rawText: parsed.raw_text?.trim() || "",
   };
+
+  audit?.logLlmCall({
+    name: "nameplate_analysis",
+    model: LLM_CONFIG.classificationModel,
+    systemPrompt,
+    userPrompt: "Extract model and serial number from this machine name plate.",
+    imageCount: imageBuffers.length,
+    rawResponse: text,
+    parsedResponse: result,
+    tokensUsed: res.usage,
+    durationMs: Date.now() - llmStart,
+  });
+
+  return result;
 }
 
 export function parseManufacturingYear(serial: string): number | null {

@@ -4,6 +4,7 @@ import {
   seedActions,
   seedTooRunnyPlaybook,
   seedAdminUser,
+  seedSupportedModels,
 } from "../src/lib/db/seed";
 
 async function main() {
@@ -11,8 +12,9 @@ async function main() {
   await seedActions();
   await seedTooRunnyPlaybook();
   await seedAdminUser();
+  await seedSupportedModels();
   console.log(
-    "Database seeded with default labels, actions, too_runny playbook, admin user, and vector indexes."
+    "Database seeded with default labels, actions, too_runny playbook, admin user, supported models, and vector indexes."
   );
 }
 
