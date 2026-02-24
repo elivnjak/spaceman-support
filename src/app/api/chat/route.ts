@@ -1601,15 +1601,21 @@ export async function POST(request: Request) {
             metadata: c.metadata,
             documentId: c.documentId,
           }));
-          sendEvent("stage", JSON.stringify({ message: STAGE_MESSAGES.thinking }));
-          const followUpMessage = await runFollowUpAnswer({
-            recentMessages: messages.slice(0, -1),
-            docChunks: chunksForTurn,
-            lastUserMessage: message,
-            resolution: lastResolution,
-            machineModel: session.machineModel ?? undefined,
-            imageBuffers: imageBuffersForLlm.length > 0 ? imageBuffersForLlm : undefined,
-          }, audit);
+          let followUpMessage: string;
+          if (chunksForTurn.length === 0) {
+            followUpMessage =
+              "I don't have documentation in the knowledge base to answer that question. Please contact a technician for further assistance.";
+          } else {
+            sendEvent("stage", JSON.stringify({ message: STAGE_MESSAGES.thinking }));
+            followUpMessage = await runFollowUpAnswer({
+              recentMessages: messages.slice(0, -1),
+              docChunks: chunksForTurn,
+              lastUserMessage: message,
+              resolution: lastResolution,
+              machineModel: session.machineModel ?? undefined,
+              imageBuffers: imageBuffersForLlm.length > 0 ? imageBuffersForLlm : undefined,
+            }, audit);
+          }
           phase = "resolved_followup";
           plannerOutput = {
             message: followUpMessage,

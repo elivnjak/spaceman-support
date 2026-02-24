@@ -253,13 +253,18 @@ export async function runDiagnosticPlanner(
     .join("\n");
   const chunksText = input.docChunks
     .map((c) => `[${c.id}]\n${c.content.slice(0, 500)}`)
-    .join("\n\n");
+    .join("\n\n") || "(No documentation available)";
 
   const systemPrompt = `You are a diagnostic support assistant. You help users troubleshoot issues by gathering evidence and narrowing down root causes. Use the diagnostic playbook to know what evidence to collect and what causes to consider. Output structured JSON every turn.
 
 Keep the "message" field strictly user-facing: the user should always know what you understood and what you want them to do next (or what the resolution is). Do not write internal reasoning (e.g. "we update the possible causes") in the message.
 
 When your message references a fact from the document chunks, cite the source by its ID using the format (document <id>). For example: "The maximum output is 200 serves per hour (document 5e68ed0e-e094-421d-8291-b1d5afb3c631)." Always cite when stating specific numbers, procedures, or specifications from the documentation.
+
+Grounding rules:
+- Only state technical facts, numbers, procedures, or specifications that are present in the provided document chunks or in the diagnostic playbook content included in the prompt.
+- If the document chunks are empty or do not contain enough information, say you do not have that information in the available documentation and continue with playbook-driven troubleshooting or escalate.
+- Never invent part numbers, measurements, thresholds, maintenance procedures, or documentation details. If uncertain, ask for more evidence or escalate.
 
 When enough evidence has been collected to narrow down causes, you must conclude in this turn: output phase "resolving" with a resolution (diagnosis + steps), or phase "escalated" if you cannot determine the cause. Do not leave the user with a message like "let's evaluate" and no resolution—provide the diagnosis or escalate in this same response.
 
@@ -364,7 +369,12 @@ export async function runFollowUpAnswer(input: {
 }, audit?: AuditLogger): Promise<string> {
   const systemPrompt = `You are a helpful support assistant. A diagnosis has already been provided to the user. Answer the user's follow-up question using the provided documentation. Be direct and specific. Do not repeat the full diagnosis or resolution steps unless the user explicitly asks for them.
 
-When your answer references a fact from the documentation, cite the source by its ID using the format (document <id>). For example: "The serving size is 80 grams (document 5e68ed0e-e094-421d-8291-b1d5afb3c631)." Always cite when stating specific numbers, procedures, or specifications.`;
+When your answer references a fact from the documentation, cite the source by its ID using the format (document <id>). For example: "The serving size is 80 grams (document 5e68ed0e-e094-421d-8291-b1d5afb3c631)." Always cite when stating specific numbers, procedures, or specifications.
+
+Grounding rules:
+- Answer strictly from the provided documentation chunks.
+- If the documentation does not contain enough information to answer the user's question, explicitly say you do not have that information in the available documentation.
+- Do not guess or invent technical details.`;
 
   const resolutionBlock =
     input.resolution &&
@@ -381,7 +391,7 @@ Why: ${input.resolution.why}
 
   const chunksText = input.docChunks
     .map((c) => `[${c.id}]\n${c.content.slice(0, 500)}`)
-    .join("\n\n");
+    .join("\n\n") || "(No documentation available)";
 
   const userPrompt = `${resolutionBlock ?? ""}
 ## Recent conversation (last ${DIAGNOSTIC_CONFIG.recentMessagesWindow} messages)
@@ -394,7 +404,7 @@ ${chunksText}
 ${input.machineModel ? `Machine model: ${input.machineModel}\n\n` : ""}## User's follow-up question
 ${input.lastUserMessage}
 
-Answer the user's question in one or two short paragraphs. Use only the documentation above when citing facts. Cite each source you use with (document <id>).`;
+Answer the user's question in one or two short paragraphs. Answer strictly from the documentation above. If the documentation does not cover the user's question, say so clearly instead of guessing. Cite each source you use with (document <id>).`;
 
   const hasImages = (input.imageBuffers?.length ?? 0) > 0;
   const userContent: OpenAI.Chat.Completions.ChatCompletionContentPart[] = hasImages
