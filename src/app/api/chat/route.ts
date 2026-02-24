@@ -1548,7 +1548,7 @@ export async function POST(request: Request) {
 
         const evidence = (session.evidence as Record<string, EvidenceRecord>) ?? {};
         let hypotheses = (session.hypotheses as HypothesisState[]) ?? [];
-        let phase = session.phase;
+        let phase: PlannerOutput["phase"] = session.phase as PlannerOutput["phase"];
         let turnCount = session.turnCount + 1;
 
         const lastAssistantMessage = messages.filter((m) => m.role === "assistant").pop();
@@ -1564,7 +1564,7 @@ export async function POST(request: Request) {
         const userAskedForEscalationInNote =
           inputSource === "note" && messageContainsEscalationIntent(message);
 
-        let plannerOutput: PlannerOutput;
+        let plannerOutput: PlannerOutput | null = null;
         let plannerLogged = false;
         let chunksForTurn: {
           id: string;
@@ -1932,6 +1932,10 @@ export async function POST(request: Request) {
             }
           }
           }
+        }
+
+        if (!plannerOutput) {
+          throw new Error("Planner output was not generated for this turn");
         }
 
         if (!plannerLogged) {
