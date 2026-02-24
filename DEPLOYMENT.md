@@ -33,10 +33,9 @@ You need:
    - In the app service → **Settings** → **Volumes** → add a volume and mount it at `/app/storage` (or another path).
    - Add variable: `STORAGE_PATH=/app/storage` (or the path you chose).
 
-6. **Migrations run automatically on Railway deploy/start**
-   - This repo includes `railway.json` with `startCommand: npm run railway:start`.
-   - `railway:start` runs `db:setup` (pgvector + migrations + seed) and then starts Next.js.
-   - Because setup is idempotent, this is safe on repeated deploys/restarts.
+6. **Migrations run automatically on Railway deploy**
+   - This repo uses Railway’s **pre-deploy command** in `railway.json`: `npm run db:setup` runs before each deploy (pgvector + migrations + seed). The **start command** is `npm start` so the app starts quickly and is not killed by startup timeouts.
+   - Because setup is idempotent, this is safe on repeated deploys.
 
    If you need to run setup manually (for recovery/debugging), Railway doesn’t have a “Shell” in the dashboard; use one of these:
 
@@ -54,12 +53,8 @@ You need:
    npm run db:setup
    ```
 
-   **Option C — Run automatically on every deploy**  
-   In the dashboard: your app service → **Settings** → **Deploy** → **Pre-deploy Steps** → add:
-   ```bash
-   npm run db:setup
-   ```
-   (Migrations and seed are safe to run repeatedly.)
+   **Option C — Pre-deploy (already in repo)**  
+   `railway.json` sets `preDeployCommand: ["npm", "run", "db:setup"]`, so migrations and seed run automatically before each deploy. No dashboard change needed.
 
    `db:setup` runs migrations, enables pgvector, and seeds the admin user from `ADMIN_EMAIL` / `ADMIN_PASSWORD`.
 

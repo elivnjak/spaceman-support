@@ -42,6 +42,9 @@
     "turndown": "^7.2.2",
     "zod": "^3.25.76"
   },
+  "overrides": {
+    "punycode": "^2.3.1"
+  },
   "devDependencies": {
     "@railway/cli": "^4.30.3",
     "@types/bcryptjs": "^2.4.6",
