@@ -369,7 +369,11 @@ export function ChatPageClient({ isHomePage }: ChatPageClientProps) {
     .find((m) => m.role === "assistant" && (m.requests?.length ?? 0) > 0);
   const hasPendingStructuredRequest = Boolean(latestAssistantWithRequests) && !loading;
   const allowAddNote = currentPhase === "gathering_info" || currentPhase === "diagnosing";
-  const showFullInput = currentPhase === "collecting_issue" && !hasPendingStructuredRequest;
+  const hasUserSentMessage = messages.some((m) => m.role === "user");
+  const showFullInput =
+    currentPhase === "collecting_issue" &&
+    !hasPendingStructuredRequest &&
+    !hasUserSentMessage;
   const showTextOnlyInput =
     (currentPhase === "resolved_followup" || currentPhase === "escalated") &&
     !hasPendingStructuredRequest;
