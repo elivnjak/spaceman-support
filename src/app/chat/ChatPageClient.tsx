@@ -105,6 +105,26 @@ const SESSION_STALE_MS = 2 * 60 * 60 * 1000;
 
 const CHAT_SESSION_STORAGE_KEY = "chatSessionId";
 
+/** Convert stored image path from backend to a URL the browser can load. */
+function toSessionImageUrl(sessionId: string, storedPath: string): string {
+  const normalized = storedPath.replace(/\\/g, "/");
+  const filename = normalized.split("/").pop() ?? "";
+  return `/api/chat/${sessionId}/image/${encodeURIComponent(filename)}`;
+}
+
+/** Return a loadable image URL; pass through blob/http URLs, convert stored paths. */
+function toImageUrl(sessionId: string | null, img: string): string {
+  if (
+    img.startsWith("blob:") ||
+    img.startsWith("http://") ||
+    img.startsWith("https://") ||
+    (img.startsWith("/") && !img.startsWith("/api/chat/"))
+  ) {
+    return img;
+  }
+  return sessionId ? toSessionImageUrl(sessionId, img) : img;
+}
+
 export function ChatPageClient({ isHomePage }: ChatPageClientProps) {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [chatStarted, setChatStarted] = useState(false);
@@ -167,7 +187,12 @@ export function ChatPageClient({ isHomePage }: ChatPageClientProps) {
         }
 
         setSessionId(session.id);
-        setMessages(session.messages ?? []);
+        setMessages(
+          (session.messages ?? []).map((m) => ({
+            ...m,
+            images: m.images?.map((img) => toImageUrl(session.id, img)) ?? m.images,
+          }))
+        );
         setCurrentPhase(session.phase ?? "collecting_issue");
         setChatStarted(true);
         setInitialPhase("done");
@@ -579,20 +604,21 @@ export function ChatPageClient({ isHomePage }: ChatPageClientProps) {
                       })()}
                       {m.role === "user" && m.images && m.images.length > 0 && (() => {
                         const count = m.images!.length;
+                        const urls = m.images!.map((src) => toImageUrl(sessionId, src));
                         const gridClass =
                           count === 1
                             ? "grid grid-cols-1"
                             : "grid grid-cols-3 gap-1.5";
                         return (
                           <div className={`mt-2 ${gridClass}`}>
-                            {m.images!.map((src, idx) => (
+                            {urls.map((src, idx) => (
                               // eslint-disable-next-line @next/next/no-img-element
                               <img
                                 key={`${src}-${idx}`}
                                 src={src}
                                 alt={`Photo ${idx + 1} of ${count}`}
                                 className="max-h-24 w-full cursor-pointer rounded-md border border-white/30 object-cover transition-opacity hover:opacity-90"
-                                onClick={() => setLightbox({ images: m.images!, index: idx })}
+                                onClick={() => setLightbox({ images: urls, index: idx })}
                               />
                             ))}
                           </div>
