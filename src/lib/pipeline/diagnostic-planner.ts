@@ -1,5 +1,6 @@
 import OpenAI from "openai";
-import { LLM_CONFIG, DIAGNOSTIC_CONFIG } from "@/lib/config";
+import { getDiagnosticConfig, getLlmConfig } from "@/lib/config";
+import { getIntentManifest } from "@/lib/intent/loader";
 import { validateGrounding, enforcePlaybookInstructions, type PlaybookStep, type LLMStep } from "./validate-grounding";
 import type { AuditLogger } from "@/lib/audit";
 
@@ -254,11 +255,22 @@ export async function runDiagnosticPlanner(
   input: DiagnosticPlannerInput,
   audit?: AuditLogger
 ): Promise<PlannerOutput> {
+  const [diagnosticConfig, llmConfig, intentManifest] = await Promise.all([
+    getDiagnosticConfig(),
+    getLlmConfig(),
+    getIntentManifest(),
+  ]);
+  const communication = intentManifest.communication;
+  const frustrationHandling = intentManifest.frustrationHandling;
+  const noteHandlingInstruction = frustrationHandling.empathyAcknowledgment
+    ? `If the latest user input came from the optional "Add a note" field and expresses frustration or asks for a human, acknowledge it empathetically and try up to ${frustrationHandling.alternatePathsBeforeEscalation} alternative troubleshooting path(s) before escalating, unless safety rules require immediate escalation.`
+    : `If the latest user input came from the optional "Add a note" field and expresses frustration or asks for a human, avoid extra empathy phrasing and try up to ${frustrationHandling.alternatePathsBeforeEscalation} alternative troubleshooting path(s) before escalating, unless safety rules require immediate escalation.`;
+
   const stateSummary = buildStateSummary(input);
   const playbookBlock = buildPlaybookBlock(input.playbook);
   const actionsBlock = buildActionsBlock(input.actions);
   const recentConv = input.recentMessages
-    .slice(-DIAGNOSTIC_CONFIG.recentMessagesWindow)
+    .slice(-diagnosticConfig.recentMessagesWindow)
     .map((m) => `${m.role}: ${m.content}`)
     .join("\n");
   const chunksText = input.docChunks
@@ -266,6 +278,10 @@ export async function runDiagnosticPlanner(
     .join("\n\n") || "(No documentation available)";
 
   const systemPrompt = `You are a diagnostic support assistant. You help users troubleshoot issues by gathering evidence and narrowing down root causes. Use the diagnostic playbook to know what evidence to collect and what causes to consider. Output structured JSON every turn.
+
+Response style:
+- Tone: ${communication.tone}
+- Grounding strictness: ${communication.groundingStrictness}
 
 Keep the "message" field strictly user-facing: the user should always know what you understood and what you want them to do next (or what the resolution is). Do not write internal reasoning (e.g. "we update the possible causes") in the message.
 
@@ -278,7 +294,7 @@ Grounding rules:
 
 If the user's latest message includes a factual question (for example specs, capacities, or procedures), answer that question briefly using the documentation with citations, then continue the diagnostic workflow in the same user-facing message (for example by asking for the next required evidence item when needed).
 
-If the latest user input came from the optional "Add a note" field and expresses frustration or asks for a human, acknowledge it empathetically and try one alternative troubleshooting path before escalating, unless safety rules require immediate escalation.
+${noteHandlingInstruction}
 
 If the user explicitly skipped a requested item ("I don't know"), treat that as uncertain evidence for the outstanding request IDs and continue with alternate evidence collection where possible.
 
@@ -314,7 +330,7 @@ ${stateSummary}
 
 ---
 
-## Recent conversation (last ${DIAGNOSTIC_CONFIG.recentMessagesWindow} messages)
+## Recent conversation (last ${diagnosticConfig.recentMessagesWindow} messages)
 ${recentConv}
 
 ## Document chunks (for context and citations)
@@ -344,7 +360,7 @@ Respond with JSON only.`;
 
   const llmStart = Date.now();
   const res = await getOpenAI().chat.completions.create({
-    model: LLM_CONFIG.diagnosticPlannerModel,
+    model: llmConfig.diagnosticPlannerModel,
     messages: [
       { role: "system", content: systemPrompt },
       { role: "user", content: userContent },
@@ -363,7 +379,7 @@ Respond with JSON only.`;
   if (!Array.isArray(parsed.evidence_extracted)) parsed.evidence_extracted = [];
   audit?.logLlmCall({
     name: "diagnostic_planner",
-    model: LLM_CONFIG.diagnosticPlannerModel,
+    model: llmConfig.diagnosticPlannerModel,
     systemPrompt,
     userPrompt,
     imageCount: input.imageBuffers?.length ?? 0,
@@ -384,8 +400,17 @@ export async function runFollowUpAnswer(input: {
   machineModel?: string | null;
   imageBuffers?: Buffer[];
 }, audit?: AuditLogger): Promise<string> {
+  const [diagnosticConfig, llmConfig, intentManifest] = await Promise.all([
+    getDiagnosticConfig(),
+    getLlmConfig(),
+    getIntentManifest(),
+  ]);
   const systemPrompt = `You are a helpful support assistant. A diagnosis has already been provided to the user. Answer the user's follow-up question using the provided documentation. Be direct and specific. Do not repeat the full diagnosis or resolution steps unless the user explicitly asks for them.
 Do not ask the user any questions or request additional information. Your role here is only to answer the follow-up question, not continue the diagnostic workflow.
+
+Response style:
+- Tone: ${intentManifest.communication.tone}
+- Grounding strictness: ${intentManifest.communication.groundingStrictness}
 
 When your answer references a fact from the documentation, cite the source by its ID using the format (document <id>). For example: "The serving size is 80 grams (document 5e68ed0e-e094-421d-8291-b1d5afb3c631)." Always cite when stating specific numbers, procedures, or specifications.
 
@@ -403,7 +428,7 @@ Why: ${input.resolution.why}
 `;
 
   const recentConv = input.recentMessages
-    .slice(-DIAGNOSTIC_CONFIG.recentMessagesWindow)
+    .slice(-diagnosticConfig.recentMessagesWindow)
     .map((m) => `${m.role}: ${m.content}`)
     .join("\n");
 
@@ -412,7 +437,7 @@ Why: ${input.resolution.why}
     .join("\n\n") || "(No documentation available)";
 
   const userPrompt = `${resolutionBlock ?? ""}
-## Recent conversation (last ${DIAGNOSTIC_CONFIG.recentMessagesWindow} messages)
+## Recent conversation (last ${diagnosticConfig.recentMessagesWindow} messages)
 ${recentConv}
 
 ## Documentation (use this to answer the question)
@@ -437,7 +462,7 @@ Answer the user's question in one or two short paragraphs. Answer strictly from 
 
   const llmStart = Date.now();
   const res = await getOpenAI().chat.completions.create({
-    model: LLM_CONFIG.diagnosticPlannerModel,
+    model: llmConfig.diagnosticPlannerModel,
     messages: [
       { role: "system", content: systemPrompt },
       { role: "user", content: userContent },
@@ -446,7 +471,7 @@ Answer the user's question in one or two short paragraphs. Answer strictly from 
   const text = res.choices[0]?.message?.content?.trim();
   audit?.logLlmCall({
     name: "follow_up_answer",
-    model: LLM_CONFIG.diagnosticPlannerModel,
+    model: llmConfig.diagnosticPlannerModel,
     systemPrompt,
     userPrompt,
     imageCount: input.imageBuffers?.length ?? 0,
@@ -463,7 +488,8 @@ export function validateAndSanitizePlannerOutput(
   output: PlannerOutput,
   playbook: DiagnosticPlaybook,
   actionsById: Map<string, ActionRecord>,
-  forEndUser: boolean
+  forEndUser: boolean,
+  options?: { maxRequestsPerTurn?: number }
 ): { output: PlannerOutput; errors: string[] } {
   const errors: string[] = [];
   const sanitized = { ...output, requests: [...output.requests] };
@@ -475,7 +501,7 @@ export function validateAndSanitizePlannerOutput(
 
   const maxRequestsForChat = 1;
   const allowedMax = Math.min(
-    DIAGNOSTIC_CONFIG.maxRequestsPerTurn,
+    options?.maxRequestsPerTurn ?? 3,
     maxRequestsForChat
   );
   if (sanitized.requests.length > allowedMax) {

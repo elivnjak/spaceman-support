@@ -16,6 +16,7 @@ const navItems = [
   { href: "/admin/maintenance", label: "Maintenance mode" },
   { href: "/admin/docs", label: "Documents" },
   { href: "/admin/playbooks", label: "Playbooks" },
+  { href: "/admin/intent", label: "Intent manifest" },
   { href: "/admin/audit-logs", label: "Audit logs" },
   { href: "/admin/test", label: "Test console" },
 ] as const;

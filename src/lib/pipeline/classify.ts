@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import { LLM_CONFIG } from "@/lib/config";
+import { getLlmConfig } from "@/lib/config";
 
 function getOpenAI() {
   const key = process.env.OPENAI_API_KEY;
@@ -104,9 +104,10 @@ const CLASSIFY_JSON_SCHEMA = {
 } as const;
 
 export async function classifyLabel(input: ClassifyInput): Promise<ClassifyResult> {
+  const llmConfig = await getLlmConfig();
   const prompt = buildClassifyPrompt(input);
   const res = await getOpenAI().chat.completions.create({
-    model: LLM_CONFIG.classificationModel,
+    model: llmConfig.classificationModel,
     messages: [{ role: "user", content: prompt }],
     response_format: {
       type: "json_schema",
@@ -122,6 +123,7 @@ export async function classifyLabel(input: ClassifyInput): Promise<ClassifyResul
 export async function classifyLabelWithVision(
   input: ClassifyWithVisionInput
 ): Promise<ClassifyResult> {
+  const llmConfig = await getLlmConfig();
   const machineLine =
     input.machineModel != null && input.machineModel !== ""
       ? `\nMachine model: ${input.machineModel}\n`
@@ -164,7 +166,7 @@ Look at the user's photo(s) above and pick the label that best matches what you 
   ];
 
   const res = await getOpenAI().chat.completions.create({
-    model: LLM_CONFIG.classificationModel,
+    model: llmConfig.classificationModel,
     messages: [{ role: "user", content }],
     response_format: {
       type: "json_schema",

@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { docChunks } from "@/lib/db/schema";
 import { sql } from "drizzle-orm";
-import { CONFIDENCE_CONFIG, RETRIEVAL_CONFIG } from "@/lib/config";
+import { getConfidenceConfig, getRetrievalConfig } from "@/lib/config";
 import { toCanonicalModel } from "@/lib/ingestion/extract-machine-model";
 
 export type TextChunkMatch = {
@@ -15,13 +15,18 @@ export type TextChunkMatch = {
 
 export async function searchDocChunks(
   queryEmbedding: number[],
-  limit: number = RETRIEVAL_CONFIG.textTopN,
+  limit?: number,
   machineModel?: string | null,
   labelId?: string,
   keywordQuery?: string
 ): Promise<TextChunkMatch[]> {
+  const [confidenceConfig, retrievalConfig] = await Promise.all([
+    getConfidenceConfig(),
+    getRetrievalConfig(),
+  ]);
+  const resolvedLimit = limit ?? retrievalConfig.textTopN;
   const vectorStr = `[${queryEmbedding.join(",")}]`;
-  const minChunkScore = CONFIDENCE_CONFIG.minChunkScore;
+  const minChunkScore = confidenceConfig.minChunkScore;
   const canonical = toCanonicalModel(machineModel);
   const withPrefix = canonical ? `SM-${canonical}` : null;
   const normalizedKeyword = keywordQuery?.trim().replace(/\s+/g, " ") ?? "";
@@ -48,7 +53,7 @@ export async function searchDocChunks(
           )`
       : sql`0`;
   const literalBoostExpr = keywordPattern
-    ? sql`CASE WHEN LOWER(dc.content) LIKE ${keywordPattern} THEN ${sql.raw(String(RETRIEVAL_CONFIG.textExactMatchBoost))} ELSE 0 END`
+    ? sql`CASE WHEN LOWER(dc.content) LIKE ${keywordPattern} THEN ${sql.raw(String(retrievalConfig.textExactMatchBoost))} ELSE 0 END`
     : sql`0`;
 
   const runHybridQuery = async (
@@ -56,7 +61,7 @@ export async function searchDocChunks(
     machineMatchOnly: boolean
   ): Promise<{ rows: Record<string, unknown>[] }> => {
     const ftsRankExpr = buildFtsRankExpr(useIndexedSearchVector);
-    const hybridScoreExpr = sql`${similarityExpr} + (${ftsRankExpr} * ${sql.raw(String(RETRIEVAL_CONFIG.textKeywordRankWeight))}) + ${literalBoostExpr}`;
+    const hybridScoreExpr = sql`${similarityExpr} + (${ftsRankExpr} * ${sql.raw(String(retrievalConfig.textKeywordRankWeight))}) + ${literalBoostExpr}`;
     const baseWhere = sql`dc.embedding IS NOT NULL AND ${similarityExpr} >= ${minChunkScore} ${labelFilter}`;
     const machineMatchFilter =
       machineMatchOnly && canonical
@@ -71,7 +76,7 @@ export async function searchDocChunks(
       WHERE ${baseWhere}
         ${machineMatchFilter}
       ORDER BY ${hybridScoreExpr} DESC, ${similarityExpr} DESC
-      LIMIT ${machineMatchOnly ? RETRIEVAL_CONFIG.textMachineMatchedReserve : limit}
+      LIMIT ${machineMatchOnly ? retrievalConfig.textMachineMatchedReserve : resolvedLimit}
     `);
     const rows = Array.isArray(result)
       ? result
@@ -81,7 +86,7 @@ export async function searchDocChunks(
 
   const runQueries = async (useIndexedSearchVector: boolean) => {
     const hasMachine = machineModel != null && machineModel !== "";
-    const reserve = hasMachine ? RETRIEVAL_CONFIG.textMachineMatchedReserve : 0;
+    const reserve = hasMachine ? retrievalConfig.textMachineMatchedReserve : 0;
 
     if (reserve > 0) {
       const [machineRaw, allRaw] = await Promise.all([
@@ -100,7 +105,7 @@ export async function searchDocChunks(
         }
       }
       for (const r of allRows) {
-        if (merged.length >= limit) break;
+        if (merged.length >= resolvedLimit) break;
         const id = r.id as string;
         if (!seen.has(id)) {
           seen.add(id);
@@ -132,5 +137,5 @@ export async function searchDocChunks(
       metadata: r.metadata,
       similarity: Number(r.similarity),
     }))
-    .filter((c) => c.similarity >= CONFIDENCE_CONFIG.minChunkScore);
+    .filter((c) => c.similarity >= confidenceConfig.minChunkScore);
 }

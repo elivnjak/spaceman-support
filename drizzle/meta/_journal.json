@@ -15,6 +15,13 @@
       "when": 1771887600000,
       "tag": "0001_hybrid_search_vector",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1772058000000,
+      "tag": "0002_intent_manifest",
+      "breakpoints": true
     }
   ]
 }

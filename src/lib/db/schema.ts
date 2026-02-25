@@ -193,6 +193,13 @@ export const maintenanceConfig = pgTable("maintenance_config", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });
 
+export const intentManifest = pgTable("intent_manifest", {
+  id: text("id").primaryKey(),
+  data: jsonb("data").notNull().default({}),
+  updatedBy: text("updated_by"),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+});
+
 export const supportSessions = pgTable(
   "support_sessions",
   {
@@ -293,6 +300,8 @@ export type ClearanceGuideImage = typeof clearanceGuideImages.$inferSelect;
 export type NewClearanceGuideImage = typeof clearanceGuideImages.$inferInsert;
 export type MaintenanceConfig = typeof maintenanceConfig.$inferSelect;
 export type NewMaintenanceConfig = typeof maintenanceConfig.$inferInsert;
+export type IntentManifestRow = typeof intentManifest.$inferSelect;
+export type NewIntentManifestRow = typeof intentManifest.$inferInsert;
 export type Playbook = typeof playbooks.$inferSelect;
 export type NewPlaybook = typeof playbooks.$inferInsert;
 export type PlaybookProductType = typeof playbookProductTypes.$inferSelect;

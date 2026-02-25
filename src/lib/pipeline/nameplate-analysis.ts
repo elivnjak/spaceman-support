@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 import { eq } from "drizzle-orm";
-import { LLM_CONFIG } from "@/lib/config";
+import { getLlmConfig } from "@/lib/config";
 import { db } from "@/lib/db";
 import { supportedModels } from "@/lib/db/schema";
 import { toCanonicalModel } from "@/lib/ingestion/extract-machine-model";
@@ -30,6 +30,7 @@ export async function analyzeNameplate(
   imageBuffers: Buffer[],
   audit?: AuditLogger
 ): Promise<NameplateResult> {
+  const llmConfig = await getLlmConfig();
   if (imageBuffers.length === 0) {
     return {
       modelNumber: null,
@@ -63,7 +64,7 @@ Rules:
 
   const llmStart = Date.now();
   const res = await getOpenAI().chat.completions.create({
-    model: LLM_CONFIG.classificationModel,
+    model: llmConfig.visionModel,
     messages: [
       { role: "system", content: systemPrompt },
       { role: "user", content: userContent },
@@ -96,7 +97,7 @@ Rules:
 
   audit?.logLlmCall({
     name: "nameplate_analysis",
-    model: LLM_CONFIG.classificationModel,
+    model: llmConfig.visionModel,
     systemPrompt,
     userPrompt: "Extract model and serial number from this machine name plate.",
     imageCount: imageBuffers.length,

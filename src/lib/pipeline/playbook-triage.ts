@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import { LLM_CONFIG } from "@/lib/config";
+import { getLlmConfig } from "@/lib/config";
 import type { AuditLogger } from "@/lib/audit";
 
 export type TriageLabelOption = {
@@ -47,6 +47,7 @@ export async function runPlaybookTriage(
   input: PlaybookTriageInput,
   audit?: AuditLogger
 ): Promise<PlaybookTriageResult> {
+  const llmConfig = await getLlmConfig();
   if (input.labels.length === 0) {
     return {
       selectedLabelId: null,
@@ -115,7 +116,7 @@ Return JSON only.`;
 
   const llmStart = Date.now();
   const res = await getOpenAI().chat.completions.create({
-    model: LLM_CONFIG.classificationModel,
+    model: llmConfig.triageModel,
     messages: [
       { role: "system", content: systemPrompt },
       { role: "user", content: userContent },
@@ -162,7 +163,7 @@ Return JSON only.`;
 
   audit?.logLlmCall({
     name: "playbook_triage",
-    model: LLM_CONFIG.classificationModel,
+    model: llmConfig.triageModel,
     systemPrompt,
     userPrompt,
     imageCount: input.imageBuffers?.length ?? 0,

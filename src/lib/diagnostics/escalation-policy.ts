@@ -1,4 +1,5 @@
 import type { EscalationTriggerItem } from "@/lib/pipeline/diagnostic-planner";
+import { MANIFEST_DEFAULTS } from "@/lib/intent/defaults";
 
 type EvidenceSummary = {
   ratio: number;
@@ -36,27 +37,7 @@ export type EscalationDecision = {
   assistantMessage: string;
 };
 
-const SAFETY_CONTROLLED_VOCAB: Array<{
-  id: string;
-  terms: string[];
-  reason: string;
-}> = [
-  {
-    id: "fire_or_smoke",
-    terms: ["smoke", "burning smell", "burnt smell", "fire", "flame", "sparks", "arcing"],
-    reason: "Potential fire/electrical hazard detected",
-  },
-  {
-    id: "electrical_hazard",
-    terms: ["electrical shock", "got shocked", "live wire", "short circuit"],
-    reason: "Electrical hazard detected",
-  },
-  {
-    id: "gas_or_refrigerant_leak",
-    terms: ["gas leak", "refrigerant leak", "hissing leak", "chemical smell"],
-    reason: "Potential gas/refrigerant leak detected",
-  },
-];
+const SAFETY_CONTROLLED_VOCAB = MANIFEST_DEFAULTS.safety.controlledVocabulary;
 
 function normalizeText(input: string): string {
   return input
@@ -80,8 +61,7 @@ function detectControlledSafetySignal(userMessage: string): EscalationDecision |
         return {
           source: "safety_controlled_vocabulary",
           escalationReason: `${group.reason}: ${term}.`,
-          assistantMessage:
-            "For safety, we're escalating this to a technician immediately. Please stop troubleshooting and keep the machine in a safe state.",
+          assistantMessage: MANIFEST_DEFAULTS.communication.escalationTone,
         };
       }
     }
@@ -144,7 +124,9 @@ export function evaluatePostPlannerEscalation(input: PostPlannerInput): Escalati
   const noNextStep =
     (input.plannerPhase === "diagnosing" || input.plannerPhase === "gathering_info") &&
     input.plannerRequestsCount === 0;
-  const evidenceInsufficient = input.evidence.requiredCount > 0 && input.evidence.ratio < 0.6;
+  const evidenceInsufficient =
+    input.evidence.requiredCount > 0 &&
+    input.evidence.ratio < MANIFEST_DEFAULTS.escalation.evidenceRatioMinimum;
   if (
     noNextStep &&
     evidenceInsufficient &&

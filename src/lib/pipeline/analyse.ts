@@ -5,7 +5,7 @@ import { toCanonicalModel } from "@/lib/ingestion/extract-machine-model";
 import { clipEmbedder } from "@/lib/embeddings/clip";
 import { getConfiguredClipProvider } from "@/lib/embeddings/clip";
 import { openaiTextEmbedder } from "@/lib/embeddings/openai-text";
-import { CONFIDENCE_CONFIG, RETRIEVAL_CONFIG } from "@/lib/config";
+import { getConfidenceConfig, getRetrievalConfig } from "@/lib/config";
 import {
   searchReferenceImages,
   aggregateLabelScores,
@@ -58,6 +58,10 @@ export type AnalyseResult = {
 };
 
 export async function runAnalysis(input: AnalyseInput): Promise<AnalyseResult> {
+  const [confidenceConfig, retrievalConfig] = await Promise.all([
+    getConfidenceConfig(),
+    getRetrievalConfig(),
+  ]);
   const { userText, imageBuffers, machineModel, onStage } = input;
   const hasImages = imageBuffers.length > 0;
 
@@ -75,12 +79,12 @@ export async function runAnalysis(input: AnalyseInput): Promise<AnalyseResult> {
     const matches = await searchReferenceImages(emb, undefined, clipProvider ?? undefined);
     allMatches.push(...matches);
   }
-  const labelScores = aggregateLabelScores(allMatches);
+  const labelScores = aggregateLabelScores(allMatches, confidenceConfig.topM);
   const topScore = labelScores[0]?.score ?? 0;
   const secondScore = labelScores[1]?.score ?? 0;
   const labelGap = topScore - secondScore;
-  const baseCount = RETRIEVAL_CONFIG.candidateLabelsCount;
-  const margin = RETRIEVAL_CONFIG.candidateScoreMargin;
+  const baseCount = retrievalConfig.candidateLabelsCount;
+  const margin = retrievalConfig.candidateScoreMargin;
   const cutoff = topScore - margin;
   const allLabels = await db.select().from(labels);
   const candidateLabels = hasImages
@@ -89,9 +93,9 @@ export async function runAnalysis(input: AnalyseInput): Promise<AnalyseResult> {
 
   const shouldBeUnknown =
     hasImages &&
-    (topScore < CONFIDENCE_CONFIG.unknownThreshold ||
-      (topScore < CONFIDENCE_CONFIG.lowThreshold &&
-        labelGap < CONFIDENCE_CONFIG.labelGapMinimum));
+    (topScore < confidenceConfig.unknownThreshold ||
+      (topScore < confidenceConfig.lowThreshold &&
+        labelGap < confidenceConfig.labelGapMinimum));
 
   if (shouldBeUnknown) {
     const earlyTop3Mean =
@@ -165,8 +169,8 @@ export async function runAnalysis(input: AnalyseInput): Promise<AnalyseResult> {
   });
 
   const needsVisionTieBreaker =
-    classifyResult.confidence < CONFIDENCE_CONFIG.visionTieBreakerThreshold ||
-    labelGap < CONFIDENCE_CONFIG.visionLabelGapThreshold;
+    classifyResult.confidence < confidenceConfig.visionTieBreakerThreshold ||
+    labelGap < confidenceConfig.visionLabelGapThreshold;
   if (needsVisionTieBreaker && imageBuffers.length > 0) {
     const visionResult = await classifyLabelWithVision({
       userText,
@@ -194,18 +198,18 @@ export async function runAnalysis(input: AnalyseInput): Promise<AnalyseResult> {
   );
   const weakTextEvidence =
     textChunks.length === 0 ||
-    topChunkSimilarity < CONFIDENCE_CONFIG.minTextChunkSimilarityForConfident;
+    topChunkSimilarity < confidenceConfig.minTextChunkSimilarityForConfident;
   const weakImageEvidence =
     !hasImages ||
-    topScore < CONFIDENCE_CONFIG.lowThreshold ||
-    labelGap < CONFIDENCE_CONFIG.labelGapMinimum;
+    topScore < confidenceConfig.lowThreshold ||
+    labelGap < confidenceConfig.labelGapMinimum;
   const abstainOnWeakEvidence =
-    calibratedConfidence < CONFIDENCE_CONFIG.minFinalConfidence &&
+    calibratedConfidence < confidenceConfig.minFinalConfidence &&
     weakTextEvidence &&
     weakImageEvidence;
   const isInvalidLabel =
     rawFinal === "unknown" ||
-    calibratedConfidence < CONFIDENCE_CONFIG.lowThreshold ||
+    calibratedConfidence < confidenceConfig.lowThreshold ||
     abstainOnWeakEvidence ||
     !validLabelIds.has(rawFinal);
 

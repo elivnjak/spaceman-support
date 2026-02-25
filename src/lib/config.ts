@@ -1,42 +1,31 @@
-function getNumberEnv(key: string, fallback: number): number {
-  const raw = process.env[key];
-  if (!raw) return fallback;
-  const parsed = Number(raw);
-  return Number.isFinite(parsed) ? parsed : fallback;
-}
+import { MANIFEST_DEFAULTS } from "@/lib/intent/defaults";
+import { getIntentManifest } from "@/lib/intent/loader";
 
 export const CONFIDENCE_CONFIG = {
-  topM: 3,
-  highThreshold: 0.4,
-  lowThreshold: 0.2,
-  labelGapMinimum: 0.05,
+  ...MANIFEST_DEFAULTS.confidence,
   /** Min similarity for RAG chunk inclusion; 0.25 keeps spec/electrical chunks that sit just below 0.3. */
-  minChunkScore: 0.25,
-  unknownThreshold: 0.15,
-  /** When confidence below this or labelGap below visionLabelGapThreshold, run GPT-4o vision tie-breaker. */
-  visionTieBreakerThreshold: 0.4,
-  visionLabelGapThreshold: 0.08,
+  minChunkScore: MANIFEST_DEFAULTS.confidence.minChunkScore,
+  /** When confidence below this or labelGap below visionLabelGapThreshold, run vision tie-breaker. */
+  visionTieBreakerThreshold: MANIFEST_DEFAULTS.confidence.visionTieBreakerThreshold,
   /** When LLM returns "unknown", override to top label only if both conditions hold. */
-  imageOverrideMinScore: 0.45,
-  imageOverrideMinGap: 0.1,
+  imageOverrideMinScore: MANIFEST_DEFAULTS.confidence.imageOverrideMinScore,
   /** Abstain when classifier confidence is below this and evidence is weak. */
-  minFinalConfidence: 0.55,
+  minFinalConfidence: MANIFEST_DEFAULTS.confidence.minFinalConfidence,
   /** Minimum top text chunk similarity required for confident text-grounded answer. */
-  minTextChunkSimilarityForConfident: 0.35,
+  minTextChunkSimilarityForConfident:
+    MANIFEST_DEFAULTS.confidence.minTextChunkSimilarityForConfident,
 } as const;
 
 export const RETRIEVAL_CONFIG = {
-  imageTopK: 5,
-  textTopN: 8,
+  ...MANIFEST_DEFAULTS.retrieval,
   /** When machine model is set, reserve this many slots for chunks from machine-matched documents. */
-  textMachineMatchedReserve: 4,
-  candidateLabelsCount: 3,
+  textMachineMatchedReserve: MANIFEST_DEFAULTS.retrieval.textMachineMatchedReserve,
   /** Include labels whose score is within this delta of top score (catches near-ties). */
-  candidateScoreMargin: 0.05,
+  candidateScoreMargin: MANIFEST_DEFAULTS.retrieval.candidateScoreMargin,
   /** Hybrid retrieval: weight applied to PostgreSQL FTS rank in text chunk ordering. */
-  textKeywordRankWeight: getNumberEnv("RETRIEVAL_TEXT_KEYWORD_RANK_WEIGHT", 0.4),
+  textKeywordRankWeight: MANIFEST_DEFAULTS.retrieval.textKeywordRankWeight,
   /** Small bonus for direct literal keyword match in chunk text. */
-  textExactMatchBoost: getNumberEnv("RETRIEVAL_TEXT_EXACT_MATCH_BOOST", 0.2),
+  textExactMatchBoost: MANIFEST_DEFAULTS.retrieval.textExactMatchBoost,
 } as const;
 
 export const EMBEDDING_CONFIG = {
@@ -46,29 +35,32 @@ export const EMBEDDING_CONFIG = {
 } as const;
 
 export const LLM_CONFIG = {
-  classificationModel: "gpt-4o",
-  generationModel: "gpt-4o",
-  diagnosticPlannerModel: "gpt-4o",
+  classificationModel: MANIFEST_DEFAULTS.models.classificationModel,
+  generationModel: MANIFEST_DEFAULTS.models.generationModel,
+  diagnosticPlannerModel: MANIFEST_DEFAULTS.models.diagnosticPlannerModel,
 } as const;
 
 export const DIAGNOSTIC_CONFIG = {
   /** Safety cap: only escalate for turn count if this is exceeded (allows long diagnostics until resolve/escalate). */
-  maxTurns: 50,
-  maxRequestsPerTurn: 3,
-  recentMessagesWindow: 5,
-  stallTurnsWithoutNewEvidence: 2,
-  requiredEvidenceTurnsBeforeEscalation: 4,
-  consecutiveSkipsBeforeEscalationOffer: getNumberEnv("DIAGNOSTIC_CONSECUTIVE_SKIPS_BEFORE_ESCALATION_OFFER", 3),
+  maxTurns: MANIFEST_DEFAULTS.escalation.maxSessionTurns,
+  maxRequestsPerTurn: MANIFEST_DEFAULTS.escalation.maxRequestsPerTurn,
+  recentMessagesWindow: MANIFEST_DEFAULTS.escalation.recentMessagesWindow,
+  stallTurnsWithoutNewEvidence:
+    MANIFEST_DEFAULTS.escalation.stallTurnsWithoutNewEvidence,
+  requiredEvidenceTurnsBeforeEscalation:
+    MANIFEST_DEFAULTS.escalation.requiredEvidenceTurnsBeforeEscalation,
+  consecutiveSkipsBeforeEscalationOffer:
+    MANIFEST_DEFAULTS.escalation.consecutiveSkipsBeforeOffer,
 } as const;
 
 export const TRIAGE_CONFIG = {
-  autoSelectThreshold: getNumberEnv("TRIAGE_AUTO_SELECT", 0.8),
-  confirmThreshold: getNumberEnv("TRIAGE_CONFIRM_THRESHOLD", 0.7),
-  maxRounds: getNumberEnv("TRIAGE_MAX_ROUNDS", 3),
+  autoSelectThreshold: MANIFEST_DEFAULTS.escalation.triageAutoSelectThreshold,
+  confirmThreshold: MANIFEST_DEFAULTS.escalation.triageConfirmThreshold,
+  maxRounds: MANIFEST_DEFAULTS.escalation.triageMaxRounds,
 } as const;
 
 export const INGESTION_CONFIG = {
-  visionModel: "gpt-4o",
+  visionModel: MANIFEST_DEFAULTS.models.visionModel,
   /** Min score from page heuristic (0–1) to trigger vision extraction for that page. */
   tablePageThreshold: 0.6,
   /** Skip vision entirely for PDFs exceeding this page count. */
@@ -83,7 +75,48 @@ export const HTML_INGESTION_CONFIG = {
   /** Minimum pixel dimension to consider an image (icons/spacers smaller than this are skipped). */
   minImageDimension: 150,
   /** Model for vision classification/description. */
-  imageDescriptionModel: "gpt-4o",
+  imageDescriptionModel: MANIFEST_DEFAULTS.models.visionModel,
   /** Max time (ms) to wait for JS-rendered page to settle. */
   jsRenderTimeout: 30_000,
 } as const;
+
+export async function getConfidenceConfig() {
+  return (await getIntentManifest()).confidence;
+}
+
+export async function getRetrievalConfig() {
+  return (await getIntentManifest()).retrieval;
+}
+
+export async function getLlmConfig() {
+  const manifest = await getIntentManifest();
+  return {
+    classificationModel: manifest.models.classificationModel,
+    generationModel: manifest.models.generationModel,
+    diagnosticPlannerModel: manifest.models.diagnosticPlannerModel,
+    triageModel: manifest.models.triageModel,
+    visionModel: manifest.models.visionModel,
+  };
+}
+
+export async function getDiagnosticConfig() {
+  const escalation = (await getIntentManifest()).escalation;
+  return {
+    maxTurns: escalation.maxSessionTurns,
+    maxRequestsPerTurn: escalation.maxRequestsPerTurn,
+    recentMessagesWindow: escalation.recentMessagesWindow,
+    stallTurnsWithoutNewEvidence: escalation.stallTurnsWithoutNewEvidence,
+    requiredEvidenceTurnsBeforeEscalation:
+      escalation.requiredEvidenceTurnsBeforeEscalation,
+    consecutiveSkipsBeforeEscalationOffer: escalation.consecutiveSkipsBeforeOffer,
+  };
+}
+
+export async function getTriageConfig() {
+  const escalation = (await getIntentManifest()).escalation;
+  return {
+    autoSelectThreshold: escalation.triageAutoSelectThreshold,
+    confirmThreshold: escalation.triageConfirmThreshold,
+    maxRounds: escalation.triageMaxRounds,
+  };
+}

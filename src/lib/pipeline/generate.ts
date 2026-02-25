@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import { LLM_CONFIG } from "@/lib/config";
+import { getLlmConfig } from "@/lib/config";
 import { validateGrounding, enforcePlaybookInstructions, type PlaybookStep, type LLMStep } from "./validate-grounding";
 
 function getOpenAI() {
@@ -47,6 +47,7 @@ export async function generateAnswer(
   input: GenerateInput,
   retryWithStrictPrompt = false
 ): Promise<GenerateResult> {
+  const llmConfig = await getLlmConfig();
   const stepIdsList = input.playbookSteps.map((s) => s.step_id).join(", ");
   const playbookText = input.playbookSteps
     .map(
@@ -72,7 +73,7 @@ export async function generateAnswer(
     : `Label: ${input.labelDisplayName} (${input.finalLabel})\n\nPlaybook steps:\n${playbookText}\n\nText chunks:\n${chunksText}\n\nUser: ${input.userText}${machineLine}${specsBlock}\n\nImage matches: ${input.imageMatchesSummary}`;
 
   const res = await getOpenAI().chat.completions.create({
-    model: LLM_CONFIG.generationModel,
+    model: llmConfig.generationModel,
     messages: [
       { role: "system", content: SYSTEM_PROMPT },
       { role: "user", content: userContent },

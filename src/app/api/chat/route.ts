@@ -29,7 +29,8 @@ import {
   type PlannerOutput,
   type ActionRecord,
 } from "@/lib/pipeline/diagnostic-planner";
-import { DIAGNOSTIC_CONFIG, TRIAGE_CONFIG } from "@/lib/config";
+import { getDiagnosticConfig, getTriageConfig } from "@/lib/config";
+import { getIntentManifest } from "@/lib/intent/loader";
 import { ensureNameplateTables } from "@/lib/db/ensure-nameplate-tables";
 import { ensureClearanceTables } from "@/lib/db/ensure-clearance-tables";
 import {
@@ -62,11 +63,13 @@ const SKIP_SIGNAL = "__skip__";
 
 type InputSource = "chat" | "structured" | "skip" | "note";
 
-function buildVerificationRequest(): PlannerOutput["requests"][number] {
+function buildVerificationRequest(
+  promptText = "Did that fix the issue?"
+): PlannerOutput["requests"][number] {
   return {
     type: "question",
     id: VERIFICATION_REQUEST_ID,
-    prompt: "Did that fix the issue?",
+    prompt: promptText,
     expectedInput: {
       type: "boolean",
       options: [...VERIFICATION_REQUEST_OPTIONS],
@@ -194,14 +197,19 @@ function countConsecutiveSkipTurns(messages: ChatMessage[]): number {
   return count;
 }
 
-function messageContainsEscalationIntent(content: string): boolean {
+function messageContainsEscalationIntent(
+  content: string,
+  patterns: string[]
+): boolean {
   const normalized = normalizeUserMessage(content);
   if (!normalized) return false;
-  return (
-    /\b(talk to (a )?(person|human|agent|technician|support))\b/.test(normalized) ||
-    /\b(connect me|escalat(e|ion)|real person|human support)\b/.test(normalized) ||
-    /\b(this isn't helping|not helping|this is not helping|frustrat(ed|ing))\b/.test(normalized)
-  );
+  return patterns.some((pattern) => {
+    try {
+      return new RegExp(pattern, "i").test(normalized);
+    } catch {
+      return false;
+    }
+  });
 }
 
 function prependSubstantiveUserHistory(
@@ -367,6 +375,16 @@ export async function POST(request: Request) {
       try {
         await ensureNameplateTables();
         await ensureClearanceTables();
+        const [diagnosticConfig, triageConfig, intentManifest] =
+          await Promise.all([
+            getDiagnosticConfig(),
+            getTriageConfig(),
+            getIntentManifest(),
+          ]);
+        const frustrationPatterns =
+          intentManifest.frustrationHandling.detectionPatterns.map(
+            (item) => item.pattern
+          );
         let session = sessionIdRaw
           ? (await db.select().from(diagnosticSessions).where(eq(diagnosticSessions.id, sessionIdRaw)))[0]
           : null;
@@ -453,6 +471,59 @@ export async function POST(request: Request) {
             !isTrivialMessage(message);
 
           if (hasSubstantiveIssue) {
+            if (!intentManifest.safety.requireNameplate) {
+              const availableProductTypes = await getProductTypeOptions();
+              const productTypeOptions = availableProductTypes.map(
+                (item) => item.name
+              );
+              const responseMessage =
+                "Before we continue, what type of product are you using? If you choose Other, please specify the exact product.";
+              const assistantTurn: ChatMessage & {
+                requests?: PlannerOutput["requests"];
+              } = {
+                role: "assistant",
+                content: responseMessage,
+                timestamp: new Date().toISOString(),
+                requests: [
+                  {
+                    type: "question",
+                    id: "product_type",
+                    prompt: "What type of product are you using?",
+                    expectedInput: { type: "enum", options: productTypeOptions },
+                  },
+                ],
+              };
+              messages.push(assistantTurn);
+              triageHistory = [
+                ...triageHistory,
+                { role: "user", content: message.trim() },
+              ];
+              await db
+                .update(diagnosticSessions)
+                .set({
+                  messages,
+                  triageHistory,
+                  phase: "product_type_check",
+                  status: "active",
+                  updatedAt: new Date(),
+                })
+                .where(eq(diagnosticSessions.id, sessionId));
+              sendEvent(
+                "message",
+                JSON.stringify({
+                  sessionId,
+                  message: responseMessage,
+                  phase: "product_type_check",
+                  requests: assistantTurn.requests,
+                  model: session.machineModel ?? undefined,
+                  serialNumber: session.serialNumber ?? undefined,
+                  productType: session.productType ?? undefined,
+                  playbookId: session.playbookId ?? undefined,
+                })
+              );
+              controller.close();
+              return;
+            }
             console.log(
               `[chat] phase: collecting_issue -> nameplate_check (session=${sessionId}) symptom="${message.trim().slice(0, 60)}${message.length > 60 ? "…" : ""}"`
             );
@@ -691,7 +762,7 @@ export async function POST(request: Request) {
           sendEvent("stage", JSON.stringify({ message: STAGE_MESSAGES.analysing_photos }));
 
           const unsupportedMessage =
-            "Your machine isn't a Spaceman machine. We only support Spaceman machines.";
+            `Your machine isn't a ${intentManifest.safety.supportedBrand} machine. We only support ${intentManifest.safety.supportedBrand} machines.`;
 
           try {
             const extracted = await analyzeNameplate(imageBuffers, audit);
@@ -839,10 +910,11 @@ export async function POST(request: Request) {
           }
           const currentYear = new Date().getFullYear();
           const isOlderThanFiveYears =
-            currentYear - manufacturingYear > 5;
+            currentYear - manufacturingYear >
+            intentManifest.safety.machineAgeThresholdYears;
           if (isOlderThanFiveYears) {
             const escalationMessage =
-              "This machine appears to be more than 5 years old, so I'm connecting you with a technical specialist.";
+              `This machine appears to be more than ${intentManifest.safety.machineAgeThresholdYears} years old, so I'm connecting you with a technical specialist.`;
             messages.push({
               role: "assistant",
               content: escalationMessage,
@@ -857,7 +929,7 @@ export async function POST(request: Request) {
                 messages,
                 phase: "escalated",
                 status: "escalated",
-                escalationReason: "Machine is more than 5 years old based on serial number.",
+                escalationReason: `Machine is more than ${intentManifest.safety.machineAgeThresholdYears} years old based on serial number.`,
                 updatedAt: new Date(),
               })
               .where(eq(diagnosticSessions.id, sessionId));
@@ -870,7 +942,7 @@ export async function POST(request: Request) {
                 message: escalationMessage,
                 phase: "escalated",
                 requests: [],
-                escalation_reason: "Machine is more than 5 years old based on serial number.",
+                escalation_reason: `Machine is more than ${intentManifest.safety.machineAgeThresholdYears} years old based on serial number.`,
                 model: session.machineModel ?? undefined,
                 serialNumber: session.serialNumber ?? undefined,
                 productType: session.productType ?? undefined,
@@ -1405,11 +1477,11 @@ export async function POST(request: Request) {
                 : matchedPlaybookCandidates[0];
           const canAutoSelect =
             !!matchedPlaybook &&
-            triageResult.confidence >= TRIAGE_CONFIG.autoSelectThreshold;
+            triageResult.confidence >= triageConfig.autoSelectThreshold;
           const canConfirmSelect =
             !!matchedPlaybook &&
-            triageRound >= TRIAGE_CONFIG.maxRounds &&
-            triageResult.confidence >= TRIAGE_CONFIG.confirmThreshold;
+            triageRound >= triageConfig.maxRounds &&
+            triageResult.confidence >= triageConfig.confirmThreshold;
 
           if (canAutoSelect || canConfirmSelect) {
             console.log(
@@ -1429,7 +1501,7 @@ export async function POST(request: Request) {
             const followUpQuestion =
               triageResult.followUpQuestion ??
               "I need one more detail to choose the correct diagnostic guide. What symptom do you notice first?";
-            const shouldEscalate = triageRound >= TRIAGE_CONFIG.maxRounds;
+            const shouldEscalate = triageRound >= triageConfig.maxRounds;
             const responseMessage = shouldEscalate
               ? "I still can't confidently identify the right playbook from the provided details. I'm connecting you with a technician."
               : followUpQuestion;
@@ -1562,7 +1634,8 @@ export async function POST(request: Request) {
           .filter((id) => outstandingRequestIds.includes(id));
         const escalationOfferOutstanding = outstandingRequestIds.includes(ESCALATION_OFFER_REQUEST_ID);
         const userAskedForEscalationInNote =
-          inputSource === "note" && messageContainsEscalationIntent(message);
+          inputSource === "note" &&
+          messageContainsEscalationIntent(message, frustrationPatterns);
 
         let plannerOutput: PlannerOutput | null = null;
         let plannerLogged = false;
@@ -1606,7 +1679,9 @@ export async function POST(request: Request) {
               if (verificationRequested) {
                 const clarificationMessage =
                   "Please confirm so I can track the outcome: did the steps fix the issue?";
-                const verificationRequest = buildVerificationRequest();
+                const verificationRequest = buildVerificationRequest(
+                  intentManifest.communication.verificationQuestion
+                );
                 messages.push({
                   role: "assistant",
                   content: clarificationMessage,
@@ -1815,7 +1890,7 @@ export async function POST(request: Request) {
               playbook.escalationTriggers
             );
             /** Only enforce turn cap as a safety net; normal end is resolve or planner/stall escalation. */
-            const overSafetyTurnCap = turnCount > DIAGNOSTIC_CONFIG.maxTurns;
+            const overSafetyTurnCap = turnCount > diagnosticConfig.maxTurns;
 
             if (escalationFromTrigger.triggered) {
               phase = "escalated";
@@ -1859,7 +1934,7 @@ export async function POST(request: Request) {
             const plannerLastUserMessage = lastUserWasSkip
               ? `User replied "I don't know" and skipped answering outstanding request IDs: ${outstandingRequestIds.join(", ") || "(none)"}.`
               : userAskedForEscalationInNote
-                ? `${plannerUserMessage}\n\n[Context: user entered this in the optional note field and appears to be asking for human help. Show empathy, try one alternate troubleshooting path before escalating unless unsafe.]`
+                ? `${plannerUserMessage}\n\n[Context: user entered this in the optional note field and appears to be asking for human help. ${intentManifest.frustrationHandling.empathyAcknowledgment ? "Show empathy and " : ""}try up to ${intentManifest.frustrationHandling.alternatePathsBeforeEscalation} alternate troubleshooting path(s) before escalating unless unsafe.]`
                 : plannerUserMessage;
             const queryText = `${plannerLastUserMessage} ${playbook.labelId} troubleshooting steps causes`;
             const queryEmbedding = await openaiTextEmbedder.embed(queryText);
@@ -1905,7 +1980,8 @@ export async function POST(request: Request) {
               plannerOutput,
               playbook,
               actionsById,
-              true
+              true,
+              { maxRequestsPerTurn: diagnosticConfig.maxRequestsPerTurn }
             );
             audit.logPlannerOutput(plannerOutput, sanitized, sanitizeErrors);
             plannerLogged = true;
@@ -1996,8 +2072,10 @@ export async function POST(request: Request) {
           verificationRequestedAt = new Date();
           verificationRespondedAt = null;
           // Append verification question
-          const verificationSuffix = "\n\nAfter trying these steps, please let me know: did that fix the issue?";
-          const verificationRequest = buildVerificationRequest();
+          const verificationSuffix = `\n\nAfter trying these steps, please let me know: ${intentManifest.communication.verificationQuestion}`;
+          const verificationRequest = buildVerificationRequest(
+            intentManifest.communication.verificationQuestion
+          );
           plannerOutput = {
             ...plannerOutput,
             message: plannerOutput.message + verificationSuffix,
@@ -2016,7 +2094,7 @@ export async function POST(request: Request) {
           status === "active" &&
           !escalationOfferOutstanding &&
           lastUserWasSkip &&
-          consecutiveSkips >= DIAGNOSTIC_CONFIG.consecutiveSkipsBeforeEscalationOffer &&
+          consecutiveSkips >= diagnosticConfig.consecutiveSkipsBeforeEscalationOffer &&
           (phase === "gathering_info" || phase === "diagnosing");
         if (shouldOfferEscalationAfterSkips) {
           const offerMessage =
@@ -2074,7 +2152,7 @@ export async function POST(request: Request) {
         const stallEscalation =
           turnCount >= 2 &&
           plannerOutput.evidence_extracted.length === 0 &&
-          turnCount - lastEvidenceTurn >= DIAGNOSTIC_CONFIG.stallTurnsWithoutNewEvidence;
+          turnCount - lastEvidenceTurn >= diagnosticConfig.stallTurnsWithoutNewEvidence;
         if (stallEscalation && status === "active") {
           status = "escalated";
           phase = "escalated";

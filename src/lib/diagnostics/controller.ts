@@ -7,6 +7,7 @@ import type {
   PlannerOutput,
   PlannerRequest,
 } from "@/lib/pipeline/diagnostic-planner";
+import { MANIFEST_DEFAULTS } from "@/lib/intent/defaults";
 
 export type SuggestedAction = {
   id: string;
@@ -60,7 +61,7 @@ export function suggestNextActions(input: {
 export function hasSufficientEvidence(
   playbook: DiagnosticPlaybook,
   evidence: Record<string, EvidenceRecord>,
-  minRatio = 0.6
+  minRatio = MANIFEST_DEFAULTS.escalation.evidenceRatioMinimum
 ): { sufficient: boolean; ratio: number; requiredCount: number; collectedRequired: number } {
   const required = (playbook.evidenceChecklist ?? []).filter((e) => e.required);
   if (required.length === 0) {
@@ -302,13 +303,18 @@ function shouldResolveFromHypotheses(input: {
 
   const second = input.hypotheses[1];
   const gap = second ? top.confidence - second.confidence : top.confidence;
-  const hasStrongTop = top.confidence >= 0.72;
-  const hasClearGap = gap >= 0.12;
+  const hasStrongTop =
+    top.confidence >= MANIFEST_DEFAULTS.confidence.hypothesisResolutionMinConfidence;
+  const hasClearGap =
+    gap >= MANIFEST_DEFAULTS.confidence.hypothesisResolutionMinGap;
   const hasHighEvidenceCoverage =
-    input.evidenceSufficiency.ratio >= 0.75 ||
+    input.evidenceSufficiency.ratio >=
+      MANIFEST_DEFAULTS.confidence.hypothesisMinEvidenceCoverage ||
     input.evidenceSufficiency.collectedRequired === input.evidenceSufficiency.requiredCount;
   const noMajorEvidenceGaps =
-    input.missingRequiredCount === 0 || input.evidenceSufficiency.ratio >= 0.75;
+    input.missingRequiredCount === 0 ||
+    input.evidenceSufficiency.ratio >=
+      MANIFEST_DEFAULTS.confidence.hypothesisMinEvidenceCoverage;
 
   return hasStrongTop && hasClearGap && hasHighEvidenceCoverage && noMajorEvidenceGaps;
 }

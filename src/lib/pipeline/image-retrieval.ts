@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { referenceImages } from "@/lib/db/schema";
 import { sql } from "drizzle-orm";
-import { CONFIDENCE_CONFIG, RETRIEVAL_CONFIG } from "@/lib/config";
+import { CONFIDENCE_CONFIG, getRetrievalConfig } from "@/lib/config";
 
 export type ImageMatch = {
   referenceImageId: string;
@@ -34,9 +34,11 @@ export function aggregateLabelScores(
 
 export async function searchReferenceImages(
   queryEmbedding: number[],
-  limit: number = RETRIEVAL_CONFIG.imageTopK,
+  limit?: number,
   provider?: "replicate" | "huggingface"
 ): Promise<ImageMatch[]> {
+  const retrievalConfig = await getRetrievalConfig();
+  const resolvedLimit = limit ?? retrievalConfig.imageTopK;
   const vectorStr = `[${queryEmbedding.join(",")}]`;
   const minScore = 0.1;
   const raw = await db.execute(sql`
@@ -47,7 +49,7 @@ export async function searchReferenceImages(
       ${provider ? sql`AND embedding_provider = ${provider}` : sql``}
       AND (1 - (embedding <=> ${vectorStr}::vector)) >= ${minScore}
     ORDER BY embedding <=> ${vectorStr}::vector
-    LIMIT ${limit}
+    LIMIT ${resolvedLimit}
   `);
   type Row = { id: string; label_id: string; similarity: number };
   const rows = (Array.isArray(raw) ? raw : (raw as { rows?: unknown[] }).rows ?? []) as Row[];

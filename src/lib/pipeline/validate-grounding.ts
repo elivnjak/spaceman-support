@@ -1,3 +1,5 @@
+import { MANIFEST_DEFAULTS } from "@/lib/intent/defaults";
+
 export type PlaybookStep = {
   step_id: string;
   title?: string;
@@ -46,7 +48,8 @@ function wordOverlap(a: string, b: string): number {
   return intersection / (setA.size + setB.size - intersection);
 }
 
-const INSTRUCTION_DRIFT_THRESHOLD = 0.35;
+const INSTRUCTION_DRIFT_THRESHOLD =
+  MANIFEST_DEFAULTS.confidence.groundingDriftThreshold;
 
 export function validateGrounding(
   llmSteps: LLMStep[],
