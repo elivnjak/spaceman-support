@@ -9,7 +9,6 @@ type RefImage = {
   filePath: string;
   fileHash: string | null;
   notes: string | null;
-  embedding: number[] | null;
   createdAt: string;
 };
 
@@ -265,9 +264,6 @@ export default function AdminImagesPage() {
                   </option>
                 ))}
               </select>
-              <p className="mt-1 text-xs text-gray-500">
-                {im.embedding ? "Embedded ✓" : "Embedding pending…"}
-              </p>
             </div>
           </div>
         ))}

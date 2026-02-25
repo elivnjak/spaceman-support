@@ -71,7 +71,7 @@ const DEFAULT_COUNTS = {
   supportedModels: 0,
   nameplateConfigured: false,
   clearanceConfigured: false,
-} as const;
+};
 
 type Props = { searchParams: Promise<{ unauthorized?: string; next?: string }> };
 
@@ -204,16 +204,6 @@ export default async function AdminDashboardPage({ searchParams }: Props) {
             Manage
           </Link>
         </div>
-        </div>
-      )}
-      {isAuthenticated && (
-        <div className="mt-8">
-        <Link
-          href="/admin/test"
-          className="inline-flex items-center rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
-        >
-          Test the assistant
-        </Link>
         </div>
       )}
     </div>

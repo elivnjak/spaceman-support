@@ -1,16 +1,11 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { referenceImages } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
 import {
   writeStorageFile,
   sha256,
   referenceImagePath,
 } from "@/lib/storage";
-import {
-  embedWithProvider,
-  getConfiguredClipProvider,
-} from "@/lib/embeddings/clip";
 
 export async function GET() {
   const list = await db
@@ -34,14 +29,6 @@ export async function POST(request: Request) {
   }
 
   const results: { id: string; filePath: string; duplicate?: boolean }[] = [];
-  const provider = getConfiguredClipProvider();
-  if (!provider) {
-    return NextResponse.json(
-      { error: "No CLIP provider configured for image embeddings." },
-      { status: 400 }
-    );
-  }
-
   for (const file of files) {
     const buffer = Buffer.from(await file.arrayBuffer());
     const hash = sha256(buffer);
@@ -70,19 +57,8 @@ export async function POST(request: Request) {
         filePath: fullPath,
         fileHash: hash,
         notes,
-        embedding: null,
       })
       .returning({ id: referenceImages.id, filePath: referenceImages.filePath });
-
-    try {
-      const { embedding } = await embedWithProvider(buffer);
-      await db
-        .update(referenceImages)
-        .set({ embedding })
-        .where(eq(referenceImages.id, inserted.id));
-    } catch (err) {
-      console.error("CLIP embed failed for", inserted.id, err);
-    }
 
     results.push({
       id: inserted.id,

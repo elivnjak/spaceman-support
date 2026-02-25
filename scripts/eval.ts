@@ -18,7 +18,6 @@
 import "dotenv/config";
 import { readFile } from "fs/promises";
 import { join } from "path";
-import { runAnalysis } from "../src/lib/pipeline/analyse";
 
 type TestCase = {
   text: string;
@@ -62,24 +61,10 @@ async function runTestCase(tc: TestCase): Promise<{
   unknown: boolean;
   durationMs: number;
 }> {
-  const imageBuffers: Buffer[] = [];
-  for (const rel of tc.imagePaths) {
-    const abs = join(process.cwd(), rel);
-    imageBuffers.push(await readFile(abs));
-  }
-  const start = Date.now();
-  const result = await runAnalysis({
-    userText: tc.text,
-    imageBuffers,
-    machineModel: tc.machineModel,
-  });
-  const durationMs = Date.now() - start;
-  return {
-    predictedLabel: result.predictedLabel,
-    confidence: result.confidence,
-    unknown: result.unknown,
-    durationMs,
-  };
+  void tc;
+  throw new Error(
+    "Classification eval is no longer available because the analyse pipeline was removed."
+  );
 }
 
 type ConfusionEntry = { predicted: string; expected: string };
@@ -139,56 +124,11 @@ function printCalibrationBuckets(
 }
 
 async function runClassificationEval() {
-  const cases = await loadTestCases();
-  if (cases.length === 0) {
-    console.log("No test cases in data/test_cases.json");
-    return;
-  }
-
-  console.log(`\n=== Classification Evaluation (${cases.length} cases) ===\n`);
-
-  let correct = 0;
-  let unknownCount = 0;
-  const times: number[] = [];
-  const confusionEntries: ConfusionEntry[] = [];
-  const calibrationData: { confidence: number; correct: boolean }[] = [];
-  const allLabels = [...new Set(cases.map((c) => c.expectedLabel)), "unknown"];
-
-  for (let i = 0; i < cases.length; i++) {
-    const tc = cases[i]!;
-    process.stdout.write(`  [${i + 1}/${cases.length}] ${tc.text.slice(0, 50).padEnd(52)} `);
-    try {
-      const out = await runTestCase(tc);
-      times.push(out.durationMs);
-      const isCorrect = out.predictedLabel === tc.expectedLabel;
-      if (isCorrect) correct++;
-      if (out.unknown) unknownCount++;
-      confusionEntries.push({ predicted: out.predictedLabel, expected: tc.expectedLabel });
-      calibrationData.push({ confidence: out.confidence, correct: isCorrect });
-      console.log(
-        `→ ${out.predictedLabel.padEnd(14)} (expected: ${tc.expectedLabel.padEnd(14)}) ${isCorrect ? "✓" : "✗"}  conf=${(out.confidence * 100).toFixed(0)}%  ${out.durationMs}ms`
-      );
-    } catch (err) {
-      console.log("ERROR:", err instanceof Error ? err.message : err);
-      confusionEntries.push({ predicted: "error", expected: tc.expectedLabel });
-    }
-  }
-
-  const avgTime =
-    times.length > 0 ? times.reduce((a, b) => a + b, 0) / times.length : 0;
-  console.log("\n--- Classification Results ---");
   console.log(
-    `Label accuracy: ${correct}/${cases.length} (${((100 * correct) / cases.length).toFixed(1)}%)`
+    "\n=== Classification Evaluation ===\n\n" +
+      "Skipped: the legacy analyse pipeline was removed, so classification eval cases are no longer supported.\n" +
+      "Use --multi-turn (or --scenario <id>) to run chat diagnostic evaluation.\n"
   );
-  console.log(
-    `Unknown rate: ${unknownCount}/${cases.length} (${((100 * unknownCount) / cases.length).toFixed(1)}%)`
-  );
-  console.log(`Avg time per run: ${avgTime.toFixed(0)}ms`);
-
-  console.log("\n--- Confusion Matrix ---");
-  printConfusionMatrix(confusionEntries, allLabels);
-  printPerLabelMetrics(confusionEntries, allLabels);
-  printCalibrationBuckets(calibrationData);
 }
 
 async function runMultiTurnEval(scenarioFilter?: string) {

@@ -74,8 +74,6 @@ export const RATE_LIMITS = {
   chatPerSession: { maxRequests: 10, windowMs: 60_000 },
   /** Max chat messages per IP per minute */
   chatPerIp: { maxRequests: 30, windowMs: 60_000 },
-  /** Max analyse requests per IP per minute */
-  analysePerIp: { maxRequests: 10, windowMs: 60_000 },
   /** Max admin requests per IP per minute */
   adminPerIp: { maxRequests: 60, windowMs: 60_000 },
 } as const;

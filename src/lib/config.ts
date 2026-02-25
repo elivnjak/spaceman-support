@@ -5,10 +5,6 @@ export const CONFIDENCE_CONFIG = {
   ...MANIFEST_DEFAULTS.confidence,
   /** Min similarity for RAG chunk inclusion; 0.25 keeps spec/electrical chunks that sit just below 0.3. */
   minChunkScore: MANIFEST_DEFAULTS.confidence.minChunkScore,
-  /** When confidence below this or labelGap below visionLabelGapThreshold, run vision tie-breaker. */
-  visionTieBreakerThreshold: MANIFEST_DEFAULTS.confidence.visionTieBreakerThreshold,
-  /** When LLM returns "unknown", override to top label only if both conditions hold. */
-  imageOverrideMinScore: MANIFEST_DEFAULTS.confidence.imageOverrideMinScore,
   /** Abstain when classifier confidence is below this and evidence is weak. */
   minFinalConfidence: MANIFEST_DEFAULTS.confidence.minFinalConfidence,
   /** Minimum top text chunk similarity required for confident text-grounded answer. */
@@ -20,8 +16,6 @@ export const RETRIEVAL_CONFIG = {
   ...MANIFEST_DEFAULTS.retrieval,
   /** When machine model is set, reserve this many slots for chunks from machine-matched documents. */
   textMachineMatchedReserve: MANIFEST_DEFAULTS.retrieval.textMachineMatchedReserve,
-  /** Include labels whose score is within this delta of top score (catches near-ties). */
-  candidateScoreMargin: MANIFEST_DEFAULTS.retrieval.candidateScoreMargin,
   /** Hybrid retrieval: weight applied to PostgreSQL FTS rank in text chunk ordering. */
   textKeywordRankWeight: MANIFEST_DEFAULTS.retrieval.textKeywordRankWeight,
   /** Small bonus for direct literal keyword match in chunk text. */
@@ -31,7 +25,6 @@ export const RETRIEVAL_CONFIG = {
 export const EMBEDDING_CONFIG = {
   openaiTextModel: "text-embedding-3-small",
   openaiTextDimensions: 1536,
-  clipDimensions: 512,
 } as const;
 
 export const LLM_CONFIG = {

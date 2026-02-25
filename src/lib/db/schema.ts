@@ -78,7 +78,6 @@ export const referenceImages = pgTable("reference_images", {
   filePath: text("file_path").notNull(),
   fileHash: text("file_hash"),
   notes: text("notes"),
-  embedding: vector("embedding", 512),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });
 

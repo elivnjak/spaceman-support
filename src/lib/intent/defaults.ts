@@ -68,16 +68,7 @@ export const MANIFEST_DEFAULTS: IntentManifest = {
     supportedBrand: "Spaceman",
   },
   confidence: {
-    topM: 3,
-    highThreshold: 0.4,
-    lowThreshold: 0.2,
-    labelGapMinimum: 0.05,
     minChunkScore: 0.25,
-    unknownThreshold: 0.15,
-    visionTieBreakerThreshold: 0.4,
-    visionLabelGapThreshold: 0.08,
-    imageOverrideMinScore: 0.45,
-    imageOverrideMinGap: 0.1,
     minFinalConfidence: 0.55,
     minTextChunkSimilarityForConfident: 0.35,
     groundingDriftThreshold: 0.35,
@@ -101,11 +92,8 @@ export const MANIFEST_DEFAULTS: IntentManifest = {
     triageConfirmThreshold: getNumberEnv("TRIAGE_CONFIRM_THRESHOLD", 0.7),
   },
   retrieval: {
-    imageTopK: 5,
     textTopN: 8,
     textMachineMatchedReserve: 4,
-    candidateLabelsCount: 3,
-    candidateScoreMargin: 0.05,
     textKeywordRankWeight: getNumberEnv(
       "RETRIEVAL_TEXT_KEYWORD_RANK_WEIGHT",
       0.4
@@ -114,7 +102,7 @@ export const MANIFEST_DEFAULTS: IntentManifest = {
   },
   communication: {
     tone: "empathetic",
-    citationPolicy: "always",
+    citationPolicy: "admin_only",
     groundingStrictness: "strict",
     escalationTone:
       "For safety, we're escalating this to a technician immediately. Please stop troubleshooting and keep the machine in a safe state.",
@@ -195,75 +183,12 @@ export const MANIFEST_META: IntentManifestMeta = {
       description:
         "Controls confidence thresholds, abstention behavior, and diagnosis resolution criteria.",
     },
-    topM: meta(
-      "Top image matches to average",
-      "Number of top image matches used when aggregating label similarity.",
-      "Higher values smooth noisy results; lower values make results react faster to top matches.",
-      d.confidence.topM,
-      { range: { min: 1, max: 10, step: 1 } }
-    ),
-    highThreshold: meta(
-      "High confidence threshold",
-      "Score considered strongly confident for image/classification logic.",
-      "Raising this makes the system more conservative about claiming high confidence.",
-      d.confidence.highThreshold,
-      { range: { min: 0, max: 1, step: 0.01 } }
-    ),
-    lowThreshold: meta(
-      "Low confidence threshold",
-      "Score below which predictions are treated as weak confidence.",
-      "Raising this increases caution and follow-up prompts. Lowering this allows more automatic decisions.",
-      d.confidence.lowThreshold,
-      { range: { min: 0, max: 1, step: 0.01 } }
-    ),
-    labelGapMinimum: meta(
-      "Minimum label gap",
-      "Minimum score gap between top and second label to consider the winner clearly separated.",
-      "Higher gap reduces near-tie auto-selection. Lower gap allows more auto selection in ambiguous cases.",
-      d.confidence.labelGapMinimum,
-      { range: { min: 0, max: 0.5, step: 0.01 } }
-    ),
     minChunkScore: meta(
       "Minimum text chunk similarity",
       "Lowest chunk similarity allowed into text retrieval grounding.",
       "Higher values increase precision but can miss relevant chunks. Lower values increase recall but can add noise.",
       d.confidence.minChunkScore,
       { range: { min: 0, max: 1, step: 0.01 } }
-    ),
-    unknownThreshold: meta(
-      "Unknown threshold",
-      "If top image confidence is below this, the system prefers returning unknown over guessing.",
-      "Lowering this increases coverage with more risk. Raising this increases abstention and safety.",
-      d.confidence.unknownThreshold,
-      { range: { min: 0, max: 1, step: 0.01 } }
-    ),
-    visionTieBreakerThreshold: meta(
-      "Vision tie-break threshold",
-      "If confidence is below this, a vision tie-breaker is triggered.",
-      "Lower values trigger tie-break less often (faster, cheaper). Higher values trigger it more often (more careful).",
-      d.confidence.visionTieBreakerThreshold,
-      { range: { min: 0, max: 1, step: 0.01 } }
-    ),
-    visionLabelGapThreshold: meta(
-      "Vision tie-break label-gap threshold",
-      "If top-two labels are closer than this, a vision tie-breaker is triggered.",
-      "Higher values trigger tie-break on more near-ties.",
-      d.confidence.visionLabelGapThreshold,
-      { range: { min: 0, max: 0.5, step: 0.01 } }
-    ),
-    imageOverrideMinScore: meta(
-      "Image override minimum score",
-      "Minimum score needed before overriding an LLM unknown with the top image label.",
-      "Higher values make overrides rarer and safer.",
-      d.confidence.imageOverrideMinScore,
-      { range: { min: 0, max: 1, step: 0.01 } }
-    ),
-    imageOverrideMinGap: meta(
-      "Image override minimum gap",
-      "Minimum score gap needed before overriding LLM unknown with top image label.",
-      "Higher values require clearer visual separation between labels.",
-      d.confidence.imageOverrideMinGap,
-      { range: { min: 0, max: 0.5, step: 0.01 } }
     ),
     minFinalConfidence: meta(
       "Minimum final confidence",
@@ -389,15 +314,8 @@ export const MANIFEST_META: IntentManifestMeta = {
     _domain: {
       label: "Retrieval",
       description:
-        "Controls image/text retrieval breadth and the hybrid ranking blend.",
+        "Controls text retrieval breadth and the hybrid ranking blend.",
     },
-    imageTopK: meta(
-      "Image Top-K",
-      "How many similar reference images are retrieved for visual matching.",
-      "Higher values improve recall but increase noise and compute.",
-      d.retrieval.imageTopK,
-      { range: { min: 1, max: 20, step: 1 } }
-    ),
     textTopN: meta(
       "Text Top-N",
       "How many text chunks are retrieved for grounding.",
@@ -411,20 +329,6 @@ export const MANIFEST_META: IntentManifestMeta = {
       "Higher values prioritize machine-specific docs over general docs.",
       d.retrieval.textMachineMatchedReserve,
       { range: { min: 0, max: 20, step: 1 } }
-    ),
-    candidateLabelsCount: meta(
-      "Candidate label count",
-      "Base number of label candidates passed to classification.",
-      "Higher values widen candidate exploration but can increase ambiguity.",
-      d.retrieval.candidateLabelsCount,
-      { range: { min: 1, max: 10, step: 1 } }
-    ),
-    candidateScoreMargin: meta(
-      "Candidate score margin",
-      "Extra labels included when they are near the top score by this margin.",
-      "Higher margins include more near-ties; lower margins focus on strongest labels.",
-      d.retrieval.candidateScoreMargin,
-      { range: { min: 0, max: 0.5, step: 0.01 } }
     ),
     textKeywordRankWeight: meta(
       "Keyword rank weight",

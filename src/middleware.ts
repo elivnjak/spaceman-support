@@ -61,8 +61,8 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // --- Chat + Analyse API routes: CORS, rate limiting ---
-  if (pathname.startsWith("/api/chat") || pathname.startsWith("/api/analyse")) {
+  // --- Chat API routes: CORS, rate limiting ---
+  if (pathname.startsWith("/api/chat")) {
     // Reject cross-origin POSTs (only allow same-origin or configured base URL)
     if (request.method === "POST") {
       const allowedOrigin = getRequestOrigin(request);
@@ -87,9 +87,7 @@ export function middleware(request: NextRequest) {
       // Rate limit by IP (skip when admin is logged in, e.g. for testing)
       if (!sessionToken) {
         const ip = getClientIp(request);
-        const limit = pathname.startsWith("/api/chat")
-          ? RATE_LIMITS.chatPerIp
-          : RATE_LIMITS.analysePerIp;
+        const limit = RATE_LIMITS.chatPerIp;
         const result = checkRateLimit(`ip:${pathname}:${ip}`, limit.maxRequests, limit.windowMs);
         if (!result.allowed) {
           return NextResponse.json(
@@ -113,5 +111,5 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/admin/:path*", "/api/admin/:path*", "/api/chat/:path*", "/api/analyse/:path*"],
+  matcher: ["/admin/:path*", "/api/admin/:path*", "/api/chat/:path*"],
 };

@@ -78,10 +78,6 @@ export async function ensureVectorExtension(): Promise<void> {
 
 export async function ensureVectorIndexes(): Promise<void> {
   await db.execute(sql`
-    CREATE INDEX IF NOT EXISTS reference_images_embedding_idx
-    ON reference_images USING hnsw (embedding vector_cosine_ops)
-  `);
-  await db.execute(sql`
     CREATE INDEX IF NOT EXISTS doc_chunks_embedding_idx
     ON doc_chunks USING hnsw (embedding vector_cosine_ops)
   `);

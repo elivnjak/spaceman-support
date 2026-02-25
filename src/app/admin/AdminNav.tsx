@@ -18,7 +18,6 @@ const navItems = [
   { href: "/admin/playbooks", label: "Playbooks" },
   { href: "/admin/intent", label: "Intent manifest" },
   { href: "/admin/audit-logs", label: "Audit logs" },
-  { href: "/admin/test", label: "Test console" },
 ] as const;
 
 export function AdminNav() {
