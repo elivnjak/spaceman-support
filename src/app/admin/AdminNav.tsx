@@ -13,6 +13,7 @@ const navItems = [
   { href: "/admin/product-types", label: "Product types" },
   { href: "/admin/nameplate", label: "Nameplate config" },
   { href: "/admin/clearance", label: "Clearance config" },
+  { href: "/admin/maintenance", label: "Maintenance mode" },
   { href: "/admin/docs", label: "Documents" },
   { href: "/admin/playbooks", label: "Playbooks" },
   { href: "/admin/audit-logs", label: "Audit logs" },

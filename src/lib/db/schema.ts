@@ -180,6 +180,19 @@ export const clearanceGuideImages = pgTable("clearance_guide_images", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });
 
+export const maintenanceConfig = pgTable("maintenance_config", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  enabled: boolean("enabled").notNull().default(false),
+  iconPath: text("icon_path"),
+  title: text("title").notNull().default("Chat Unavailable"),
+  description: text("description")
+    .notNull()
+    .default("Our support chat is currently undergoing maintenance."),
+  phone: text("phone").notNull().default(""),
+  email: text("email").notNull().default(""),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+});
+
 export const supportSessions = pgTable(
   "support_sessions",
   {
@@ -278,6 +291,8 @@ export type ClearanceConfig = typeof clearanceConfig.$inferSelect;
 export type NewClearanceConfig = typeof clearanceConfig.$inferInsert;
 export type ClearanceGuideImage = typeof clearanceGuideImages.$inferSelect;
 export type NewClearanceGuideImage = typeof clearanceGuideImages.$inferInsert;
+export type MaintenanceConfig = typeof maintenanceConfig.$inferSelect;
+export type NewMaintenanceConfig = typeof maintenanceConfig.$inferInsert;
 export type Playbook = typeof playbooks.$inferSelect;
 export type NewPlaybook = typeof playbooks.$inferInsert;
 export type PlaybookProductType = typeof playbookProductTypes.$inferSelect;

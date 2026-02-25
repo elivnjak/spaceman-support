@@ -61,28 +61,38 @@ async function getCounts() {
   }
 }
 
+const DEFAULT_COUNTS = {
+  labels: 0,
+  images: 0,
+  docs: 0,
+  docsReady: 0,
+  playbooks: 0,
+  actions: 0,
+  supportedModels: 0,
+  nameplateConfigured: false,
+  clearanceConfigured: false,
+} as const;
+
 type Props = { searchParams: Promise<{ unauthorized?: string; next?: string }> };
 
 export default async function AdminDashboardPage({ searchParams }: Props) {
   const params = await searchParams;
-  const cookieStore = await cookies();
-  const sessionToken = cookieStore.get(getSessionCookieName())?.value?.trim() ?? "";
-  const session = sessionToken ? await validateSession(sessionToken) : null;
-  const isAuthenticated = !!session && session.user.role === "admin";
+  let isAuthenticated = false;
+  let counts = DEFAULT_COUNTS;
+
+  try {
+    const cookieStore = await cookies();
+    const sessionToken = cookieStore.get(getSessionCookieName())?.value?.trim() ?? "";
+    const session = sessionToken ? await validateSession(sessionToken) : null;
+    isAuthenticated = !!session && session.user.role === "admin";
+    counts = isAuthenticated ? await getCounts() : DEFAULT_COUNTS;
+  } catch {
+    // Database unreachable (e.g. ECONNREFUSED): show login form only
+    isAuthenticated = false;
+    counts = DEFAULT_COUNTS;
+  }
+
   const showLogin = !isAuthenticated || params.unauthorized === "1";
-  const counts = isAuthenticated
-    ? await getCounts()
-    : {
-        labels: 0,
-        images: 0,
-        docs: 0,
-        docsReady: 0,
-        playbooks: 0,
-        actions: 0,
-        supportedModels: 0,
-        nameplateConfigured: false,
-        clearanceConfigured: false,
-      };
 
   return (
     <div>
