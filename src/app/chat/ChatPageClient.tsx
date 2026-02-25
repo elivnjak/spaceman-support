@@ -100,6 +100,11 @@ type InitialPhase = "idle" | "typing" | "done";
 /** Delay before showing the first message so it feels like it was just sent. */
 const FIRST_MESSAGE_DELAY_MS = 1500;
 
+/** Sessions older than this are not restored on reload. */
+const SESSION_STALE_MS = 2 * 60 * 60 * 1000;
+
+const CHAT_SESSION_STORAGE_KEY = "chatSessionId";
+
 export function ChatPageClient({ isHomePage }: ChatPageClientProps) {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [chatStarted, setChatStarted] = useState(false);
@@ -128,6 +133,52 @@ export function ChatPageClient({ isHomePage }: ChatPageClientProps) {
   const SNIPPET_LENGTH = 280;
 
   messagesRef.current = messages;
+
+  // Restore session from sessionStorage on mount (e.g. after page reload).
+  useEffect(() => {
+    const stored = sessionStorage.getItem(CHAT_SESSION_STORAGE_KEY);
+    if (!stored) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/chat/${stored}`);
+        if (!res.ok || cancelled) {
+          sessionStorage.removeItem(CHAT_SESSION_STORAGE_KEY);
+          return;
+        }
+        const session: {
+          id: string;
+          status: string;
+          messages: ChatMessage[];
+          phase: string;
+          updatedAt: string | null;
+        } = await res.json();
+
+        if (cancelled) return;
+        if (
+          session.status === "resolved" ||
+          session.status === "escalated" ||
+          (session.updatedAt &&
+            Date.now() - new Date(session.updatedAt).getTime() > SESSION_STALE_MS)
+        ) {
+          sessionStorage.removeItem(CHAT_SESSION_STORAGE_KEY);
+          return;
+        }
+
+        setSessionId(session.id);
+        setMessages(session.messages ?? []);
+        setCurrentPhase(session.phase ?? "collecting_issue");
+        setChatStarted(true);
+        setInitialPhase("done");
+      } catch {
+        if (!cancelled) sessionStorage.removeItem(CHAT_SESSION_STORAGE_KEY);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // After user clicks Start: show typing indicator, then show first message.
   useEffect(() => {
@@ -217,6 +268,28 @@ export function ChatPageClient({ isHomePage }: ChatPageClientProps) {
       (c) => c.chunkId.toLowerCase() === chunkId.toLowerCase()
     );
     if (cit) setOpenCitation(cit);
+  };
+
+  const startNewConversation = () => {
+    sessionStorage.removeItem(CHAT_SESSION_STORAGE_KEY);
+    setSessionId(null);
+    setMessages([]);
+    setChatStarted(false);
+    setInitialPhase("idle");
+    setCurrentPhase("collecting_issue");
+    setError("");
+    setLoading(false);
+    setStage("");
+    setInput("");
+    setFiles([]);
+    setRequestInputs({});
+    setExpandedCitations(new Set());
+    setOpenCitation(null);
+    setLightbox(null);
+    setAddNoteOpen(false);
+    setInputSource("chat");
+    setActivePhotoRequestId(null);
+    setDebugState({});
   };
 
   useEffect(() => {
@@ -324,6 +397,7 @@ export function ChatPageClient({ isHomePage }: ChatPageClientProps) {
       }
       if (payload) {
         setSessionId(payload.sessionId);
+        sessionStorage.setItem(CHAT_SESSION_STORAGE_KEY, payload.sessionId);
         setMessages((prev) => [
           ...prev,
           {
@@ -349,6 +423,12 @@ export function ChatPageClient({ isHomePage }: ChatPageClientProps) {
         }));
         setCurrentPhase(payload.phase);
         setAddNoteOpen(false);
+        if (
+          payload.phase === "resolved_followup" ||
+          payload.phase === "escalated"
+        ) {
+          sessionStorage.removeItem(CHAT_SESSION_STORAGE_KEY);
+        }
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -381,14 +461,25 @@ export function ChatPageClient({ isHomePage }: ChatPageClientProps) {
   return (
     <main className="flex min-h-screen flex-col bg-gray-50 dark:bg-gray-900">
       <header className="border-b border-gray-200 bg-white px-4 py-3 dark:border-gray-700 dark:bg-gray-800">
-        <div className="mx-auto flex max-w-2xl items-center justify-center">
-          <h1 className="text-lg font-semibold">Kuhlberg Support</h1>
+        <div className="mx-auto flex max-w-2xl items-center justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <h1 className="text-lg font-semibold">Kuhlberg Support</h1>
+            {sessionId && (
+              <p className="mt-1 truncate text-xs text-gray-500 dark:text-gray-400">
+                Session: {sessionId}
+              </p>
+            )}
+          </div>
+          {chatStarted && (
+            <button
+              type="button"
+              onClick={startNewConversation}
+              className="shrink-0 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600 dark:focus:ring-offset-gray-800"
+            >
+              New conversation
+            </button>
+          )}
         </div>
-        {sessionId && (
-          <p className="mx-auto mt-1 max-w-2xl truncate text-xs text-gray-500 dark:text-gray-400">
-            Session: {sessionId}
-          </p>
-        )}
       </header>
 
       <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col overflow-hidden p-4">
