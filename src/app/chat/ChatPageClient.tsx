@@ -51,12 +51,6 @@ type MessagePayload = {
   escalation_reason?: string;
   citations?: CitationItem[];
   guideImages?: string[];
-  model?: string | null;
-  serialNumber?: string | null;
-  productType?: string | null;
-  playbookId?: string | null;
-  playbookTitle?: string | null;
-  playbookLabelId?: string | null;
 };
 
 const DOC_REF_REGEX =
@@ -136,8 +130,6 @@ export function ChatPageClient({ isHomePage }: ChatPageClientProps) {
   const [stage, setStage] = useState("");
   const [error, setError] = useState("");
   const [currentPhase, setCurrentPhase] = useState("collecting_issue");
-  const [debugOpen, setDebugOpen] = useState(false);
-  const [debugState, setDebugState] = useState<Record<string, unknown>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [expandedCitations, setExpandedCitations] = useState<Set<string>>(new Set());
@@ -314,7 +306,6 @@ export function ChatPageClient({ isHomePage }: ChatPageClientProps) {
     setAddNoteOpen(false);
     setInputSource("chat");
     setActivePhotoRequestId(null);
-    setDebugState({});
   };
 
   useEffect(() => {
@@ -435,17 +426,6 @@ export function ChatPageClient({ isHomePage }: ChatPageClientProps) {
             guideImages: payload.guideImages?.length ? payload.guideImages : undefined,
           },
         ]);
-        setDebugState((s) => ({
-          ...s,
-          phase: payload!.phase,
-          lastRequests: payload!.requests,
-          model: payload!.model ?? s.model,
-          serialNumber: payload!.serialNumber ?? s.serialNumber,
-          productType: payload!.productType ?? s.productType,
-          playbookId: payload!.playbookId ?? s.playbookId,
-          playbookTitle: payload!.playbookTitle ?? s.playbookTitle,
-          playbookLabelId: payload!.playbookLabelId ?? s.playbookLabelId,
-        }));
         setCurrentPhase(payload.phase);
         setAddNoteOpen(false);
         if (
@@ -1006,21 +986,6 @@ export function ChatPageClient({ isHomePage }: ChatPageClientProps) {
               )}
             </form>
           </>
-        )}
-      </div>
-
-      <div className="border-t border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
-        <button
-          type="button"
-          onClick={() => setDebugOpen((o) => !o)}
-          className="w-full px-4 py-2 text-left text-xs text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700"
-        >
-          {debugOpen ? "Hide debug" : "Show debug"}
-        </button>
-        {debugOpen && (
-          <pre className="max-h-40 overflow-auto border-t border-gray-200 p-4 text-xs dark:border-gray-700">
-            {JSON.stringify({ sessionId, messageCount: messages.length, ...debugState }, null, 2)}
-          </pre>
         )}
       </div>
 

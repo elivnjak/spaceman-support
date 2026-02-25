@@ -515,10 +515,6 @@ export async function POST(request: Request) {
                   message: responseMessage,
                   phase: "product_type_check",
                   requests: assistantTurn.requests,
-                  model: session.machineModel ?? undefined,
-                  serialNumber: session.serialNumber ?? undefined,
-                  productType: session.productType ?? undefined,
-                  playbookId: session.playbookId ?? undefined,
                 })
               );
               controller.close();
@@ -575,10 +571,6 @@ export async function POST(request: Request) {
                 phase: "nameplate_check",
                 requests: assistantTurn.requests,
                 guideImages: guideImages.length > 0 ? guideImages : undefined,
-                model: session.machineModel ?? undefined,
-                serialNumber: session.serialNumber ?? undefined,
-                productType: session.productType ?? undefined,
-                playbookId: session.playbookId ?? undefined,
               })
             );
             controller.close();
@@ -639,10 +631,6 @@ export async function POST(request: Request) {
                 message: responseMessage,
                 phase: "collecting_issue",
                 requests: assistantTurn.requests,
-                model: session.machineModel ?? undefined,
-                serialNumber: session.serialNumber ?? undefined,
-                productType: session.productType ?? undefined,
-                playbookId: session.playbookId ?? undefined,
               })
             );
             controller.close();
@@ -697,10 +685,6 @@ export async function POST(request: Request) {
                 phase: "escalated",
                 requests: [],
                 escalation_reason: "User does not have a photo of the machine name plate.",
-                model: session.machineModel ?? undefined,
-                serialNumber: session.serialNumber ?? undefined,
-                productType: session.productType ?? undefined,
-                playbookId: session.playbookId ?? undefined,
               })
             );
             sendEscalationWebhook(escalationHandoff).catch(() => {});
@@ -749,10 +733,6 @@ export async function POST(request: Request) {
                 phase: "nameplate_check",
                 requests: assistantTurn.requests,
                 guideImages: guideImages.length > 0 ? guideImages : undefined,
-                model: session.machineModel ?? undefined,
-                serialNumber: session.serialNumber ?? undefined,
-                productType: session.productType ?? undefined,
-                playbookId: session.playbookId ?? undefined,
               })
             );
             controller.close();
@@ -809,10 +789,6 @@ export async function POST(request: Request) {
                 phase: "nameplate_check",
                 requests: assistantTurn.requests,
                 guideImages: guideImages.length > 0 ? guideImages : undefined,
-                model: session.machineModel ?? undefined,
-                serialNumber: session.serialNumber ?? undefined,
-                productType: session.productType ?? undefined,
-                playbookId: session.playbookId ?? undefined,
               })
             );
             controller.close();
@@ -846,10 +822,6 @@ export async function POST(request: Request) {
                   message: unsupportedMessage,
                   phase: "unsupported_model",
                   requests: [],
-                  model: session.machineModel ?? undefined,
-                  serialNumber: session.serialNumber ?? undefined,
-                  productType: session.productType ?? undefined,
-                  playbookId: session.playbookId ?? undefined,
                 })
               );
               controller.close();
@@ -899,10 +871,6 @@ export async function POST(request: Request) {
                 phase: "nameplate_check",
                 requests: assistantTurn.requests,
                 guideImages: guideImages.length > 0 ? guideImages : undefined,
-                model: session.machineModel ?? undefined,
-                serialNumber: session.serialNumber ?? undefined,
-                productType: session.productType ?? undefined,
-                playbookId: session.playbookId ?? undefined,
               })
             );
             controller.close();
@@ -943,10 +911,6 @@ export async function POST(request: Request) {
                 phase: "escalated",
                 requests: [],
                 escalation_reason: `Machine is more than ${intentManifest.safety.machineAgeThresholdYears} years old based on serial number.`,
-                model: session.machineModel ?? undefined,
-                serialNumber: session.serialNumber ?? undefined,
-                productType: session.productType ?? undefined,
-                playbookId: session.playbookId ?? undefined,
               })
             );
             controller.close();
@@ -1012,10 +976,6 @@ export async function POST(request: Request) {
               message: responseMessage,
               phase: "product_type_check",
               requests: assistantTurn.requests,
-              model: session.machineModel ?? undefined,
-              serialNumber: session.serialNumber ?? undefined,
-              productType: session.productType ?? undefined,
-              playbookId: session.playbookId ?? undefined,
             })
           );
           controller.close();
@@ -1043,10 +1003,6 @@ export async function POST(request: Request) {
                 message: unsupportedMessage,
                 phase: "unsupported_model",
                 requests: [],
-                model: session.machineModel ?? undefined,
-                serialNumber: session.serialNumber ?? undefined,
-                productType: session.productType ?? undefined,
-                playbookId: session.playbookId ?? undefined,
               })
             );
             controller.close();
@@ -1107,10 +1063,6 @@ export async function POST(request: Request) {
                 message: assistantTurn.content,
                 phase: "product_type_check",
                 requests: assistantTurn.requests,
-                model: session.machineModel ?? undefined,
-                serialNumber: session.serialNumber ?? undefined,
-                productType: session.productType ?? undefined,
-                playbookId: session.playbookId ?? undefined,
               })
             );
             controller.close();
@@ -1151,10 +1103,6 @@ export async function POST(request: Request) {
                 message: askDetailMessage,
                 phase: "product_type_check",
                 requests: assistantTurn.requests,
-                model: session.machineModel ?? undefined,
-                serialNumber: session.serialNumber ?? undefined,
-                productType: session.productType ?? undefined,
-                playbookId: session.playbookId ?? undefined,
               })
             );
             controller.close();
@@ -1195,10 +1143,6 @@ export async function POST(request: Request) {
                 message: assistantTurn.content,
                 phase: "product_type_check",
                 requests: assistantTurn.requests,
-                model: session.machineModel ?? undefined,
-                serialNumber: session.serialNumber ?? undefined,
-                productType: session.productType ?? undefined,
-                playbookId: session.playbookId ?? undefined,
               })
             );
             controller.close();
@@ -1262,10 +1206,6 @@ export async function POST(request: Request) {
               phase: "clearance_check",
               requests: assistantTurn.requests,
               guideImages: guideImages.length > 0 ? guideImages : undefined,
-              model: session.machineModel ?? undefined,
-              serialNumber: session.serialNumber ?? undefined,
-              productType: session.productType ?? undefined,
-              playbookId: session.playbookId ?? undefined,
             })
           );
           controller.close();
@@ -1317,10 +1257,6 @@ export async function POST(request: Request) {
                 phase: "clearance_check",
                 requests: assistantTurn.requests,
                 guideImages: guideImages.length > 0 ? guideImages : undefined,
-                model: session.machineModel ?? undefined,
-                serialNumber: session.serialNumber ?? undefined,
-                productType: session.productType ?? undefined,
-                playbookId: session.playbookId ?? undefined,
               })
             );
             controller.close();
@@ -1554,10 +1490,6 @@ export async function POST(request: Request) {
                 escalation_reason: shouldEscalate
                   ? "Unable to confidently identify a playbook after triage follow-ups."
                   : undefined,
-                model: session.machineModel ?? undefined,
-                serialNumber: session.serialNumber ?? undefined,
-                productType: session.productType ?? undefined,
-                playbookId: session.playbookId ?? undefined,
               })
             );
             controller.close();
@@ -1701,10 +1633,6 @@ export async function POST(request: Request) {
                     message: clarificationMessage,
                     phase: "resolved_followup",
                     requests: [verificationRequest],
-                    model: session.machineModel ?? undefined,
-                    serialNumber: session.serialNumber ?? undefined,
-                    productType: session.productType ?? undefined,
-                    playbookId: session.playbookId ?? undefined,
                   })
                 );
                 controller.close();
@@ -1762,10 +1690,6 @@ export async function POST(request: Request) {
                     phase: "escalated",
                     requests: [],
                     escalation_reason: "Resolution did not fix the issue",
-                    model: session.machineModel ?? undefined,
-                    serialNumber: session.serialNumber ?? undefined,
-                    productType: session.productType ?? undefined,
-                    playbookId: session.playbookId ?? undefined,
                   })
                 );
                 controller.close();
@@ -1799,10 +1723,6 @@ export async function POST(request: Request) {
                   message: responseMessage,
                   phase: "resolved_followup",
                   requests: [],
-                  model: session.machineModel ?? undefined,
-                  serialNumber: session.serialNumber ?? undefined,
-                  productType: session.productType ?? undefined,
-                  playbookId: session.playbookId ?? undefined,
                 })
               );
               controller.close();
@@ -2238,12 +2158,6 @@ export async function POST(request: Request) {
           resolution: responseToSend.resolution,
           escalation_reason: responseToSend.escalation_reason,
           citations: isAdmin && citations.length > 0 ? citations : undefined,
-          model: session.machineModel ?? undefined,
-          serialNumber: session.serialNumber ?? undefined,
-          productType: session.productType ?? undefined,
-          playbookId: session.playbookId ?? undefined,
-          playbookTitle: playbook?.title ?? undefined,
-          playbookLabelId: playbook?.labelId ?? undefined,
         };
         audit.logSessionState("after", {
           phase,
