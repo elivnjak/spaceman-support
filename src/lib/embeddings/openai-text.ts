@@ -23,30 +23,50 @@ function safeEmbedInput(text: string): string {
   return lastSpace > EMBED_MAX_CHARS * 0.8 ? truncated.slice(0, lastSpace) : truncated;
 }
 
+const EXPECTED_DIMENSIONS = EMBEDDING_CONFIG.openaiTextDimensions;
+
+function checkDimensions(vec: number[], context: string): void {
+  if (vec.length !== EXPECTED_DIMENSIONS) {
+    throw new Error(
+      `Embedding dimension mismatch: got ${vec.length}, expected ${EXPECTED_DIMENSIONS}. ${context}`
+    );
+  }
+}
+
 export const openaiTextEmbedder: TextEmbedder = {
   async embed(text: string): Promise<number[]> {
     return withRetry(async () => {
-    const openai = getOpenAI();
-    const res = await openai.embeddings.create({
-      model: EMBEDDING_CONFIG.openaiTextModel,
-      input: safeEmbedInput(text),
-    });
-    const vec = res.data[0]?.embedding;
-    if (!vec) throw new Error("OpenAI embedding returned empty");
-    return vec;
+      const openai = getOpenAI();
+      const res = await openai.embeddings.create({
+        model: EMBEDDING_CONFIG.openaiTextModel,
+        input: safeEmbedInput(text),
+        dimensions: EXPECTED_DIMENSIONS,
+      });
+      const vec = res.data[0]?.embedding;
+      if (!vec) throw new Error("OpenAI embedding returned empty");
+      checkDimensions(vec, "Query embedding must match doc_chunks.embedding vector(1536).");
+      return vec;
     });
   },
 
   async embedBatch(texts: string[]): Promise<number[][]> {
     if (texts.length === 0) return [];
     return withRetry(async () => {
-    const openai = getOpenAI();
-    const res = await openai.embeddings.create({
-      model: EMBEDDING_CONFIG.openaiTextModel,
-      input: texts.map(safeEmbedInput),
-    });
-    const sorted = res.data.sort((a, b) => a.index - b.index);
-    return sorted.map((d) => d.embedding);
+      const openai = getOpenAI();
+      const res = await openai.embeddings.create({
+        model: EMBEDDING_CONFIG.openaiTextModel,
+        input: texts.map(safeEmbedInput),
+        dimensions: EXPECTED_DIMENSIONS,
+      });
+      const sorted = res.data.sort((a, b) => a.index - b.index);
+      const embeddings = sorted.map((d) => d.embedding);
+      for (let i = 0; i < embeddings.length; i++) {
+        checkDimensions(
+          embeddings[i],
+          `Chunk embedding at index ${i} must match doc_chunks.embedding vector(1536).`
+        );
+      }
+      return embeddings;
     });
   },
 };

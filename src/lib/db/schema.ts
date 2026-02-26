@@ -223,6 +223,8 @@ export const supportSessions = pgTable(
 export const diagnosticSessions = pgTable("diagnostic_sessions", {
   id: uuid("id").primaryKey().defaultRandom(),
   status: text("status").notNull().default("active"),
+  userName: text("user_name"),
+  userPhone: text("user_phone"),
   machineModel: text("machine_model"),
   serialNumber: text("serial_number"),
   productType: text("product_type"),
@@ -246,6 +248,10 @@ export const diagnosticSessions = pgTable("diagnostic_sessions", {
   verificationRespondedAt: timestamp("verification_responded_at", { withTimezone: true }),
   /** Structured handoff data sent to external ticketing system on escalation */
   escalationHandoff: jsonb("escalation_handoff"),
+  /** Consecutive turns with mild+ frustration; reset when none; used for cumulative escalation */
+  frustrationTurnCount: integer("frustration_turn_count").notNull().default(0),
+  /** Turns we have already sent "try up to N alternate paths" context; when >= N we force escalate */
+  escalationContextTurnCount: integer("escalation_context_turn_count").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });

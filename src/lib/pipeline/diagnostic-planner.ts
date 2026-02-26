@@ -148,6 +148,12 @@ export type DiagnosticPlannerInput = {
   outstandingRequestIds?: string[];
   /** Source of latest user text, used to tune planner behavior. */
   inputSource?: "chat" | "structured" | "skip" | "note";
+  /** Optional frustration/escalation signal from sentiment classifier. */
+  sentimentSignal?: {
+    frustrationLevel: "none" | "mild" | "moderate" | "high";
+    escalationIntent: boolean;
+    reasoning: string;
+  };
 };
 
 function getChunkPromptContent(chunk: { content: string; metadata?: unknown }): string {
@@ -293,6 +299,8 @@ Grounding rules:
 - Never invent part numbers, measurements, thresholds, maintenance procedures, or documentation details. If uncertain, ask for more evidence or escalate.
 
 If the user's latest message includes a factual question (for example specs, capacities, or procedures), answer that question briefly using the documentation with citations, then continue the diagnostic workflow in the same user-facing message (for example by asking for the next required evidence item when needed).
+
+${input.sentimentSignal ? `User sentiment (from classifier): frustration level = ${input.sentimentSignal.frustrationLevel}, escalation intent = ${input.sentimentSignal.escalationIntent}. ${input.sentimentSignal.frustrationLevel !== "none" ? "Show empathy and consider escalating if the context above already instructs you to try limited alternate paths first." : ""}` : ""}
 
 ${noteHandlingInstruction}
 

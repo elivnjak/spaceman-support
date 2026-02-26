@@ -36,7 +36,14 @@ export type RagRetrievalEntry = {
   topSimilarity?: number;
 };
 
+export type SentimentSignalEntry = {
+  frustrationLevel: string;
+  escalationIntent: boolean;
+  reasoning: string;
+};
+
 type AuditPayload = {
+  sentimentSignal?: SentimentSignalEntry;
   userInput?: {
     message: string;
     imageCount: number;
@@ -124,6 +131,10 @@ export class AuditLogger {
   logRagRetrieval(entry: RagRetrievalEntry): void {
     if (!this.payload.ragRetrieval) this.payload.ragRetrieval = [];
     this.payload.ragRetrieval.push(entry);
+  }
+
+  logSentimentSignal(signal: SentimentSignalEntry): void {
+    this.payload.sentimentSignal = signal;
   }
 
   logPlannerOutput(raw: unknown, sanitized?: unknown, errors?: string[]): void {

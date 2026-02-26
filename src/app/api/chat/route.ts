@@ -29,6 +29,10 @@ import {
   type PlannerOutput,
   type ActionRecord,
 } from "@/lib/pipeline/diagnostic-planner";
+import {
+  runSentimentClassifier,
+  type SentimentSignal,
+} from "@/lib/pipeline/sentiment-classifier";
 import { getDiagnosticConfig, getTriageConfig } from "@/lib/config";
 import { getIntentManifest } from "@/lib/intent/loader";
 import { ensureNameplateTables } from "@/lib/db/ensure-nameplate-tables";
@@ -226,6 +230,34 @@ function isSkipSignal(content: string): boolean {
   return normalizeUserMessage(content) === SKIP_SIGNAL;
 }
 
+/** True if the user is indicating they don't know / can't answer (should not force re-prompt). */
+function isIdontKnowMessage(content: string): boolean {
+  const n = normalizeUserMessage(content);
+  if (!n || n === SKIP_SIGNAL) return true;
+  const idkPatterns = [
+    /^i don'?t know\.?$/i,
+    /^dunno\.?$/i,
+    /^(not sure|no idea|unsure|unknown|not certain)\.?$/i,
+    /^i('m| am) not sure\.?$/i,
+    /^can'?t (say|tell)\.?$/i,
+  ];
+  return idkPatterns.some((p) => p.test(n));
+}
+
+/** True if the user is indicating they don't have a photo (should not force re-prompt for photo). */
+function isIdontHavePhotoMessage(content: string): boolean {
+  const n = normalizeUserMessage(content);
+  if (!n || n === SKIP_SIGNAL) return true;
+  const noPhotoPatterns = [
+    /^i don'?t have (a )?photo\.?$/i,
+    /^i don'?t have (any )?(photos?|pictures?|images?)\.?$/i,
+    /^(no photo|no photos|don'?t have (a )?photo)\.?$/i,
+    /^i (don'?t have|haven'?t got) (one|any)\.?$/i,
+    /^(unable to|can'?t) (provide|send|upload) (a )?photo\.?$/i,
+  ];
+  return noPhotoPatterns.some((p) => p.test(n));
+}
+
 function countConsecutiveSkipTurns(messages: ChatMessage[]): number {
   let count = 0;
   for (let i = messages.length - 1; i >= 0; i--) {
@@ -240,6 +272,9 @@ function countConsecutiveSkipTurns(messages: ChatMessage[]): number {
   return count;
 }
 
+/** Pattern IDs that mean the user explicitly asked to speak to a human (not just frustration). */
+const EXPLICIT_ASK_PATTERN_IDS = ["talk_to_human", "connect_or_escalate"];
+
 function messageContainsEscalationIntent(
   content: string,
   patterns: string[]
@@ -253,6 +288,16 @@ function messageContainsEscalationIntent(
       return false;
     }
   });
+}
+
+function messageExplicitlyAsksForHuman(
+  content: string,
+  detectionPatterns: { id: string; pattern: string }[]
+): boolean {
+  const explicitPatterns = detectionPatterns
+    .filter((p) => EXPLICIT_ASK_PATTERN_IDS.includes(p.id))
+    .map((p) => p.pattern);
+  return messageContainsEscalationIntent(content, explicitPatterns);
 }
 
 function prependSubstantiveUserHistory(
@@ -355,6 +400,8 @@ export async function POST(request: Request) {
       ? inputSourceRaw
       : "chat";
   const machineModel = (formData.get("machineModel") as string)?.trim() || null;
+  const userName = (formData.get("userName") as string)?.trim() || null;
+  const userPhone = (formData.get("userPhone") as string)?.trim() || null;
   const files = formData.getAll("images") as File[];
 
   if (message.length > MAX_MESSAGE_LENGTH) {
@@ -440,6 +487,8 @@ export async function POST(request: Request) {
             .insert(diagnosticSessions)
             .values({
               status: "active",
+              userName,
+              userPhone,
               machineModel: null,
               playbookId: null,
               triageHistory: [],
@@ -512,6 +561,65 @@ export async function POST(request: Request) {
             Boolean(message) &&
             !isPlaceholderUserMessage(message) &&
             !isTrivialMessage(message);
+          const userExplicitlyAskedForHuman =
+            Boolean(message) &&
+            messageExplicitlyAsksForHuman(
+              message,
+              intentManifest.frustrationHandling.detectionPatterns
+            );
+
+          if (userExplicitlyAskedForHuman) {
+            const escalationReason = "User asked to speak with a human";
+            const escalationMessage =
+              intentManifest.frustrationHandling.escalationIntentMessage;
+            messages.push({
+              role: "assistant",
+              content: escalationMessage,
+              timestamp: new Date().toISOString(),
+            });
+            const evidence = (session.evidence as Record<string, unknown>) ?? {};
+            const hypotheses = (session.hypotheses as unknown[]) ?? [];
+            const escalationHandoff = buildEscalationHandoff({
+              sessionId,
+              userName: session.userName ?? null,
+              userPhone: session.userPhone ?? null,
+              machineModel: session.machineModel ?? null,
+              escalationReason,
+              playbookTitle: "Pre-diagnosis",
+              labelId: "collecting_issue_human_request",
+              turnCount: session.turnCount ?? 0,
+              evidence: evidence as Parameters<typeof buildEscalationHandoff>[0]["evidence"],
+              hypotheses: hypotheses as Parameters<typeof buildEscalationHandoff>[0]["hypotheses"],
+              messages,
+            });
+
+            await db
+              .update(diagnosticSessions)
+              .set({
+                messages,
+                phase: "escalated",
+                status: "escalated",
+                escalationReason,
+                escalationHandoff,
+                updatedAt: new Date(),
+              })
+              .where(eq(diagnosticSessions.id, sessionId));
+
+            sendEvent(
+              controller,
+              "message",
+              JSON.stringify({
+                sessionId,
+                message: escalationMessage,
+                phase: "escalated",
+                requests: [],
+                escalation_reason: escalationReason,
+              })
+            );
+            sendEscalationWebhook(escalationHandoff).catch(() => {});
+            closeController(controller);
+            return;
+          }
 
           if (hasSubstantiveIssue) {
             if (!intentManifest.safety.requireNameplate) {
@@ -698,6 +806,8 @@ export async function POST(request: Request) {
             const hypotheses = (session.hypotheses as unknown[]) ?? [];
             const escalationHandoff = buildEscalationHandoff({
               sessionId,
+              userName: session.userName ?? null,
+              userPhone: session.userPhone ?? null,
               machineModel: session.machineModel ?? null,
               escalationReason: "User does not have a photo of the machine name plate.",
               playbookTitle: "Pre-diagnosis",
@@ -1115,6 +1225,54 @@ export async function POST(request: Request) {
             return;
           }
 
+          if (inputSource === "skip" || isIdontKnowMessage(message)) {
+            const productTypeForUnknown = otherOption?.name ?? "Other";
+            const ackMessage = "No problem. We'll continue with general guidance.";
+            const { instructionText, guideImages } = await getClearancePrompt();
+            const clearanceResponseMessage = `${ackMessage} ${instructionText}`;
+            const assistantTurn: ChatMessage & {
+              requests?: PlannerOutput["requests"];
+              guideImages?: string[];
+            } = {
+              role: "assistant",
+              content: clearanceResponseMessage,
+              timestamp: new Date().toISOString(),
+              requests: [
+                {
+                  type: "photo",
+                  id: "clearance_photos",
+                  prompt: "Please upload machine clearance photos from different angles.",
+                  expectedInput: { type: "photo" },
+                },
+              ],
+              guideImages: guideImages.length > 0 ? guideImages : undefined,
+            };
+            messages.push(assistantTurn);
+            await db
+              .update(diagnosticSessions)
+              .set({
+                productType: productTypeForUnknown,
+                messages,
+                phase: "clearance_check",
+                status: "active",
+                updatedAt: new Date(),
+              })
+              .where(eq(diagnosticSessions.id, sessionId));
+            sendEvent(
+              controller,
+              "message",
+              JSON.stringify({
+                sessionId,
+                message: clearanceResponseMessage,
+                phase: "clearance_check",
+                requests: assistantTurn.requests,
+                guideImages: assistantTurn.guideImages,
+              })
+            );
+            closeController(controller);
+            return;
+          }
+
           if (otherOption && matchedOption === otherOption.name && !expectingOtherDetail) {
             const askDetailMessage = "Please type the exact product type you are using.";
             const assistantTurn: ChatMessage & { requests?: PlannerOutput["requests"] } = {
@@ -1264,49 +1422,96 @@ export async function POST(request: Request) {
           const { instructionText, guideImages } = await getClearancePrompt();
 
           if (imageBuffers.length === 0) {
-            const responseMessage = instructionText;
-            const assistantTurn: ChatMessage & {
-              requests?: PlannerOutput["requests"];
-              guideImages?: string[];
-            } = {
-              role: "assistant",
-              content: responseMessage,
-              timestamp: new Date().toISOString(),
-              requests: [
-                {
-                  type: "photo",
-                  id: "clearance_photos",
-                  prompt: "Please upload machine clearance photos from different angles.",
-                  expectedInput: { type: "photo" },
-                },
-              ],
-              guideImages: guideImages.length > 0 ? guideImages : undefined,
-            };
-            messages.push(assistantTurn);
+            const userDeclinedPhoto =
+              inputSource === "skip" ||
+              isSkipSignal(message) ||
+              isIdontHavePhotoMessage(message);
 
-            await db
-              .update(diagnosticSessions)
-              .set({
+            if (userDeclinedPhoto) {
+              const ackMessage =
+                "No problem. We'll continue without clearance photos so our team can still help if we need to escalate.";
+              const assistantTurn: ChatMessage & {
+                requests?: PlannerOutput["requests"];
+                guideImages?: string[];
+              } = {
+                role: "assistant",
+                content: ackMessage,
+                timestamp: new Date().toISOString(),
+                requests: [],
+                guideImages: undefined,
+              };
+              messages.push(assistantTurn);
+              await db
+                .update(diagnosticSessions)
+                .set({
+                  messages,
+                  phase: "triaging",
+                  status: "active",
+                  updatedAt: new Date(),
+                })
+                .where(eq(diagnosticSessions.id, sessionId));
+              session = {
+                ...session,
                 messages,
-                phase: "clearance_check",
+                phase: "triaging",
                 status: "active",
-                updatedAt: new Date(),
-              })
-              .where(eq(diagnosticSessions.id, sessionId));
-
-            sendEvent(
-              controller,
-              "message",
-              JSON.stringify({
-                sessionId,
-                message: responseMessage,
-                phase: "clearance_check",
-                requests: assistantTurn.requests,
+              };
+              sendEvent(
+                controller,
+                "message",
+                JSON.stringify({
+                  sessionId,
+                  message: ackMessage,
+                  phase: "triaging",
+                  requests: [],
+                })
+              );
+              // Fall through so triaging block runs in same request
+            } else {
+              const responseMessage = instructionText;
+              const assistantTurn: ChatMessage & {
+                requests?: PlannerOutput["requests"];
+                guideImages?: string[];
+              } = {
+                role: "assistant",
+                content: responseMessage,
+                timestamp: new Date().toISOString(),
+                requests: [
+                  {
+                    type: "photo",
+                    id: "clearance_photos",
+                    prompt: "Please upload machine clearance photos from different angles.",
+                    expectedInput: { type: "photo" },
+                  },
+                ],
                 guideImages: guideImages.length > 0 ? guideImages : undefined,
-              })
-            );
-            closeController(controller);
-            return;
+              };
+              messages.push(assistantTurn);
+
+              await db
+                .update(diagnosticSessions)
+                .set({
+                  messages,
+                  phase: "clearance_check",
+                  status: "active",
+                  updatedAt: new Date(),
+                })
+                .where(eq(diagnosticSessions.id, sessionId));
+
+              sendEvent(
+                controller,
+                "message",
+                JSON.stringify({
+                  sessionId,
+                  message: responseMessage,
+                  phase: "clearance_check",
+                  requests: assistantTurn.requests,
+                  guideImages: guideImages.length > 0 ? guideImages : undefined,
+                })
+              );
+              closeController(controller);
+              return;
+            }
           }
 
           const existingClearancePaths = Array.isArray(session.clearanceImagePaths)
@@ -1603,6 +1808,8 @@ export async function POST(request: Request) {
         let hypotheses = (session.hypotheses as HypothesisState[]) ?? [];
         let phase: PlannerOutput["phase"] = session.phase as PlannerOutput["phase"];
         let turnCount = session.turnCount + 1;
+        let newFrustrationTurnCount: number | null = null;
+        let newEscalationContextTurnCount: number | null = null;
 
         const lastAssistantMessage = messages.filter((m) => m.role === "assistant").pop();
         const outstandingRequestIds =
@@ -1614,9 +1821,10 @@ export async function POST(request: Request) {
           .map((item) => item.id)
           .filter((id) => outstandingRequestIds.includes(id));
         const escalationOfferOutstanding = outstandingRequestIds.includes(ESCALATION_OFFER_REQUEST_ID);
-        const userAskedForEscalationInNote =
-          inputSource === "note" &&
-          messageContainsEscalationIntent(message, frustrationPatterns);
+        const regexEscalationIntent = messageContainsEscalationIntent(
+          message,
+          frustrationPatterns
+        );
 
         let plannerOutput: PlannerOutput | null = null;
         let plannerLogged = false;
@@ -1903,22 +2111,117 @@ export async function POST(request: Request) {
             );
 
             sendEvent("stage", JSON.stringify({ message: STAGE_MESSAGES.searching_manuals }));
-            const plannerLastUserMessage = lastUserWasSkip
-              ? `User replied "I don't know" and skipped answering outstanding request IDs: ${outstandingRequestIds.join(", ") || "(none)"}.`
-              : userAskedForEscalationInNote
-                ? `${plannerUserMessage}\n\n[Context: user entered this in the optional note field and appears to be asking for human help. ${intentManifest.frustrationHandling.empathyAcknowledgment ? "Show empathy and " : ""}try up to ${intentManifest.frustrationHandling.alternatePathsBeforeEscalation} alternate troubleshooting path(s) before escalating unless unsafe.]`
-                : plannerUserMessage;
-            const queryText = `${plannerLastUserMessage} ${playbook.labelId} troubleshooting steps causes`;
-            const queryEmbedding = await openaiTextEmbedder.embed(queryText);
+            const sentimentPromise: Promise<SentimentSignal | null> =
+              intentManifest.frustrationHandling.sentimentClassifierEnabled
+                ? runSentimentClassifier({
+                    latestMessage: message,
+                    recentMessages: messages.slice(0, -1),
+                  })
+                : Promise.resolve(null);
+
+            const queryTextForRag = `${plannerUserMessage} ${playbook.labelId} troubleshooting steps causes`;
+            const queryEmbedding = await openaiTextEmbedder.embed(queryTextForRag);
             const chunks = await searchDocChunks(
               queryEmbedding,
               8,
               session.machineModel ?? undefined,
               undefined,
-              plannerLastUserMessage
+              plannerUserMessage
             );
+            const sentimentSignal = await sentimentPromise;
+            const threshold = intentManifest.frustrationHandling.frustrationEscalationThreshold;
+            const sentimentIndicatesEscalation =
+              sentimentSignal &&
+              (sentimentSignal.escalationIntent ||
+                (threshold === "moderate"
+                  ? (sentimentSignal.frustrationLevel === "moderate" ||
+                      sentimentSignal.frustrationLevel === "high")
+                  : sentimentSignal.frustrationLevel === "high"));
+            const frustrationThisTurn =
+              regexEscalationIntent ||
+              Boolean(sentimentIndicatesEscalation);
+            const prevFrustrationCount =
+              (session as { frustrationTurnCount?: number }).frustrationTurnCount ??
+              0;
+            const messageIsAnswerToRequest =
+              inputSource === "structured" ||
+              (outstandingRequestIds.length > 0 && /^-?\d*\.?\d+$/.test(message.trim()));
+            newFrustrationTurnCount = frustrationThisTurn
+              ? prevFrustrationCount + 1
+              : prevFrustrationCount;
+            const consecutiveThreshold =
+              intentManifest.frustrationHandling
+                .consecutiveFrustrationTurnsBeforeEscalation;
+            const cumulativeIndicatesEscalation =
+              newFrustrationTurnCount >= consecutiveThreshold;
+            const userExpressedEscalationIntent =
+              regexEscalationIntent ||
+              Boolean(sentimentIndicatesEscalation) ||
+              cumulativeIndicatesEscalation;
+            const userExplicitlyAskedForHuman =
+              messageExplicitlyAsksForHuman(
+                message,
+                intentManifest.frustrationHandling.detectionPatterns
+              ) || Boolean(sentimentSignal?.escalationIntent);
+
+            if (sentimentSignal) {
+              audit.logSentimentSignal({
+                frustrationLevel: sentimentSignal.frustrationLevel,
+                escalationIntent: sentimentSignal.escalationIntent,
+                reasoning: sentimentSignal.reasoning,
+              });
+            }
+
+            const prevEscalationContextTurns =
+              (session as { escalationContextTurnCount?: number })
+                .escalationContextTurnCount ?? 0;
+            const alternatePathsLimit =
+              intentManifest.frustrationHandling.alternatePathsBeforeEscalation;
+            const forceEscalateAfterAlternatePaths =
+              userExpressedEscalationIntent &&
+              !userExplicitlyAskedForHuman &&
+              frustrationThisTurn &&
+              !messageIsAnswerToRequest &&
+              prevEscalationContextTurns >= alternatePathsLimit;
+
+            if (userExplicitlyAskedForHuman) {
+              newEscalationContextTurnCount = 0;
+              phase = "escalated";
+              plannerOutput = {
+                message:
+                  intentManifest.frustrationHandling.escalationIntentMessage,
+                phase: "escalated",
+                requests: [],
+                hypotheses_update: hypotheses,
+                evidence_extracted: [],
+                escalation_reason: "User asked to speak with a human",
+              };
+            } else if (forceEscalateAfterAlternatePaths) {
+              newEscalationContextTurnCount = 0;
+              phase = "escalated";
+              plannerOutput = {
+                message:
+                  intentManifest.frustrationHandling.escalationIntentMessage,
+                phase: "escalated",
+                requests: [],
+                hypotheses_update: hypotheses,
+                evidence_extracted: [],
+                escalation_reason:
+                  "Repeated frustration — connecting you with a technician",
+              };
+            } else {
+              newEscalationContextTurnCount =
+                userExpressedEscalationIntent
+                  ? prevEscalationContextTurns + 1
+                  : prevEscalationContextTurns;
+            const plannerLastUserMessage = lastUserWasSkip
+              ? `User replied "I don't know" and skipped answering outstanding request IDs: ${outstandingRequestIds.join(", ") || "(none)"}.`
+              : userExpressedEscalationIntent
+                ? `${plannerUserMessage}\n\n[Context: user appears to be asking for human help. ${intentManifest.frustrationHandling.empathyAcknowledgment ? "Show empathy and " : ""}try up to ${intentManifest.frustrationHandling.alternatePathsBeforeEscalation} alternate troubleshooting path(s) before escalating unless unsafe.]`
+                : plannerUserMessage;
+
             audit.logRagRetrieval({
-              query: queryText,
+              query: queryTextForRag,
               chunksReturned: chunks.length,
               chunkIds: chunks.map((c) => c.id),
               documentIds: [...new Set(chunks.map((c) => c.documentId))],
@@ -1948,6 +2251,7 @@ export async function POST(request: Request) {
                 outstandingRequestIds,
                 inputSource,
                 imageBuffers: imageBuffersForLlm.length > 0 ? imageBuffersForLlm : undefined,
+                sentimentSignal: sentimentSignal ?? undefined,
               }, audit)
             );
 
@@ -1980,6 +2284,7 @@ export async function POST(request: Request) {
                   console.log(`[chat] Switched playbook from ${playbook.labelId} to ${switchLabel} for session ${sessionId}`);
                 }
               }
+            }
             }
           }
           }
@@ -2155,6 +2460,8 @@ export async function POST(request: Request) {
             .pop() as (ChatMessage & { resolution?: PlannerOutput["resolution"] }) | undefined;
           escalationHandoff = buildEscalationHandoff({
             sessionId,
+            userName: session.userName ?? null,
+            userPhone: session.userPhone ?? null,
             machineModel: session.machineModel ?? null,
             escalationReason,
             playbookTitle: playbook.title,
@@ -2167,6 +2474,13 @@ export async function POST(request: Request) {
           });
         }
 
+        const frustrationTurnCount =
+          newFrustrationTurnCount ?? (session as { frustrationTurnCount?: number }).frustrationTurnCount ?? 0;
+        const escalationContextTurnCount =
+          newEscalationContextTurnCount ??
+          (session as { escalationContextTurnCount?: number })
+            .escalationContextTurnCount ??
+          0;
         await db
           .update(diagnosticSessions)
           .set({
@@ -2181,6 +2495,8 @@ export async function POST(request: Request) {
             verificationRequestedAt,
             verificationRespondedAt,
             escalationHandoff: escalationHandoff ?? undefined,
+            frustrationTurnCount,
+            escalationContextTurnCount,
             updatedAt: new Date(),
           })
           .where(eq(diagnosticSessions.id, sessionId));

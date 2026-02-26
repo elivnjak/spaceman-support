@@ -119,26 +119,37 @@ export const MANIFEST_DEFAULTS: IntentManifest = {
     detectionPatterns: [
       {
         id: "talk_to_human",
-        pattern: "\\b(talk to (a )?(person|human|agent|technician|support))\\b",
-        description: "User explicitly asks to speak with a human.",
+        pattern:
+          "\\b((talk|speak) (to|with) (a )?(person|human|agent|technician|support|manager|supervisor|someone)|(want|need|would like) to (talk|speak) (to|with) (a )?(person|human|someone|agent)|(can|could|may) I (talk|speak) (to|with) (a )?(person|human|someone)|get me (a )?(person|human|someone)|(a )?real person|(human|person|agent) (please|now)|(I )?want to (talk|speak) to (a )?human)\\b",
+        description: "User explicitly asks to speak with a human or someone.",
       },
       {
         id: "connect_or_escalate",
         pattern:
-          "\\b(connect me|escalat(e|ion)|real person|human support)\\b",
-        description: "User asks to be connected or escalated.",
+          "\\b(connect me( to)?( a)?( person|human|agent|support)?|escalat(e|ion)|real person|human support|live (agent|support|chat|person)|transfer (me )?(to )?(a )?(person|human|agent|support)?|put me (through|in touch)|hand me off|(connect|transfer|get) (me )?to (a )?(person|human|agent|support)|(I )?(need|want) (a )?(person|human|agent|someone))\\b",
+        description: "User asks to be connected, transferred, or escalated to a person.",
       },
       {
         id: "frustration_phrase",
         pattern:
-          "\\b(this isn't helping|not helping|this is not helping|frustrat(ed|ing))\\b",
-        description: "User indicates the bot is not helping.",
+          "\\b(this isn't helping|not helpful|this is not helping|frustrat(ed|ing)|annoy(ed|ing)|useless|pointless|waste of time|sick of this|tired of this|fed up|giving up|give up|gave up|I quit|done with this|can't take this|had enough|going in circles|going nowhere|getting nowhere|no progress|still (broken|not working|the same)|(you('re| are)|why are you) asking (me )?(again|the same|this again)|already (told|said|answered) you|stop (asking|repeating)|same question (again|twice|over)|taking (too|so) long|too slow|how (much )?longer)\\b",
+        description:
+          "User indicates the bot is not helping or expresses frustration/annoyance.",
+      },
+      {
+        id: "dissatisfaction_with_bot",
+        pattern:
+          "\\b(this (bot|chat|thing|system) (is )?(terrible|horrible|awful|bad|broken|stupid|dumb|trash|garbage|rubbish|junk|sucks?))\\b",
+        description: "User expresses strong dissatisfaction with the bot or chat.",
       },
     ],
     alternatePathsBeforeEscalation: 1,
     escalationIntentMessage:
       "I understand this is frustrating. I can connect you with a technician now.",
     empathyAcknowledgment: true,
+    sentimentClassifierEnabled: true,
+    frustrationEscalationThreshold: "moderate",
+    consecutiveFrustrationTurnsBeforeEscalation: 2,
   },
 };
 
@@ -452,6 +463,26 @@ export const MANIFEST_META: IntentManifestMeta = {
       "Whether to explicitly acknowledge frustration before continuing or escalating.",
       "Turning this off makes responses shorter but can feel less supportive.",
       d.frustrationHandling.empathyAcknowledgment
+    ),
+    sentimentClassifierEnabled: meta(
+      "Sentiment classifier enabled",
+      "When enabled, an LLM classifies each user message for frustration and escalation intent in addition to regex patterns.",
+      "Disable to rely only on regex patterns (faster, no extra API cost, but misses paraphrasing and subtle frustration).",
+      d.frustrationHandling.sentimentClassifierEnabled
+    ),
+    frustrationEscalationThreshold: meta(
+      "Frustration escalation threshold",
+      "Minimum frustration level from the classifier to trigger escalation flow (try N alternate paths then escalate).",
+      "moderate = escalate sooner when user seems frustrated; high = only escalate when frustration is high or explicit.",
+      d.frustrationHandling.frustrationEscalationThreshold,
+      { options: ["moderate", "high"] }
+    ),
+    consecutiveFrustrationTurnsBeforeEscalation: meta(
+      "Consecutive frustration turns before escalation",
+      "After this many turns in a row with mild+ frustration, treat as escalation intent even if the latest message alone would not.",
+      "Higher values require sustained frustration before escalating.",
+      d.frustrationHandling.consecutiveFrustrationTurnsBeforeEscalation,
+      { range: { min: 1, max: 5, step: 1 } }
     ),
   },
 };

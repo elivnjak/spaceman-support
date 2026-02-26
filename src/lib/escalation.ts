@@ -2,6 +2,8 @@ import type { ChatMessage, EvidenceRecord, HypothesisState, PlannerOutput } from
 
 export type EscalationHandoff = {
   sessionId: string;
+  userName: string | null;
+  userPhone: string | null;
   machineModel: string | null;
   escalationReason: string;
   playbookTitle: string;
@@ -30,6 +32,8 @@ export type EscalationHandoff = {
 
 export function buildEscalationHandoff(opts: {
   sessionId: string;
+  userName: string | null;
+  userPhone: string | null;
   machineModel: string | null;
   escalationReason: string;
   playbookTitle: string;
@@ -61,6 +65,8 @@ export function buildEscalationHandoff(opts: {
 
   return {
     sessionId: opts.sessionId,
+    userName: opts.userName ?? null,
+    userPhone: opts.userPhone ?? null,
     machineModel: opts.machineModel,
     escalationReason: opts.escalationReason,
     playbookTitle: opts.playbookTitle,

@@ -2,16 +2,103 @@
   "version": "7",
   "dialect": "postgresql",
   "entries": [
-    {"idx": 0, "version": "7", "when": 1771755848460, "tag": "0001_rare_colonel_america", "breakpoints": true},
-    {"idx": 1, "version": "7", "when": 1771902054100, "tag": "0001_smooth_dragon_man", "breakpoints": true},
-    {"idx": 2, "version": "7", "when": 1771902054101, "tag": "0001_playbook_triage", "breakpoints": true},
-    {"idx": 3, "version": "7", "when": 1771902054102, "tag": "0002_nameplate_check", "breakpoints": true},
-    {"idx": 4, "version": "7", "when": 1771902054103, "tag": "0003_nameplate_guide_images", "breakpoints": true},
-    {"idx": 5, "version": "7", "when": 1771902054104, "tag": "0004_product_types", "breakpoints": true},
-    {"idx": 6, "version": "7", "when": 1771902054105, "tag": "0005_playbook_product_types", "breakpoints": true},
-    {"idx": 7, "version": "7", "when": 1771902054106, "tag": "0006_drop_requires_product_type", "breakpoints": true},
-    {"idx": 8, "version": "7", "when": 1771902054107, "tag": "0007_clearance_check", "breakpoints": true},
-    {"idx": 9, "version": "7", "when": 1771902054108, "tag": "0008_users_sessions", "breakpoints": true},
-    {"idx": 10, "version": "7", "when": 1771902054109, "tag": "0009_resolution_verification_tracking", "breakpoints": true}
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1771755848460,
+      "tag": "0001_rare_colonel_america",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1771902054100,
+      "tag": "0001_smooth_dragon_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1771902054101,
+      "tag": "0001_playbook_triage",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1771902054102,
+      "tag": "0002_nameplate_check",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1771902054103,
+      "tag": "0003_nameplate_guide_images",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1771902054104,
+      "tag": "0004_product_types",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1771902054105,
+      "tag": "0005_playbook_product_types",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1771902054106,
+      "tag": "0006_drop_requires_product_type",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1771902054107,
+      "tag": "0007_clearance_check",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1771902054108,
+      "tag": "0008_users_sessions",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1771902054109,
+      "tag": "0009_resolution_verification_tracking",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1772066043820,
+      "tag": "0011_lazy_demogoblin",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1772150000000,
+      "tag": "0012_frustration_turn_count",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1772151000000,
+      "tag": "0013_escalation_context_turn_count",
+      "breakpoints": true
+    }
   ]
 }

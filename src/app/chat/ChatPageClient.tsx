@@ -53,6 +53,18 @@ type MessagePayload = {
   guideImages?: string[];
 };
 
+function toDisplayString(value: unknown, fallback = ""): string {
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (value == null) return fallback;
+  try {
+    const json = JSON.stringify(value);
+    return json && json !== "{}" ? json : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 const DOC_REF_REGEX =
   /\(document\s+([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\)/gi;
 
@@ -98,6 +110,8 @@ const FIRST_MESSAGE_DELAY_MS = 1500;
 const SESSION_STALE_MS = 2 * 60 * 60 * 1000;
 
 const CHAT_SESSION_STORAGE_KEY = "chatSessionId";
+const CHAT_USER_NAME_KEY = "chatUserName";
+const CHAT_USER_PHONE_KEY = "chatUserPhone";
 
 /** Convert stored image path from backend to a URL the browser can load. */
 function toSessionImageUrl(sessionId: string, storedPath: string): string {
@@ -121,6 +135,8 @@ function toImageUrl(sessionId: string | null, img: string): string {
 
 export function ChatPageClient({ isHomePage }: ChatPageClientProps) {
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [userName, setUserName] = useState("");
+  const [userPhone, setUserPhone] = useState("");
   const [chatStarted, setChatStarted] = useState(false);
   const [initialPhase, setInitialPhase] = useState<InitialPhase>("idle");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -143,6 +159,8 @@ export function ChatPageClient({ isHomePage }: ChatPageClientProps) {
   const [connectionInterrupted, setConnectionInterrupted] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
   const messagesRef = useRef<ChatMessage[]>([]);
+  /** When user clicks skip, store the message to show/send (e.g. "I don't have a photo" for photo requests). */
+  const skipDisplayMessageRef = useRef<string>("I don't know");
   const SNIPPET_LENGTH = 280;
 
   messagesRef.current = messages;
@@ -158,6 +176,8 @@ export function ChatPageClient({ isHomePage }: ChatPageClientProps) {
         const res = await fetch(`/api/chat/${stored}`);
         if (!res.ok || cancelled) {
           sessionStorage.removeItem(CHAT_SESSION_STORAGE_KEY);
+          sessionStorage.removeItem(CHAT_USER_NAME_KEY);
+          sessionStorage.removeItem(CHAT_USER_PHONE_KEY);
           return;
         }
         const session: {
@@ -166,6 +186,8 @@ export function ChatPageClient({ isHomePage }: ChatPageClientProps) {
           messages: ChatMessage[];
           phase: string;
           updatedAt: string | null;
+          userName?: string | null;
+          userPhone?: string | null;
         } = await res.json();
 
         if (cancelled) return;
@@ -176,10 +198,14 @@ export function ChatPageClient({ isHomePage }: ChatPageClientProps) {
             Date.now() - new Date(session.updatedAt).getTime() > SESSION_STALE_MS)
         ) {
           sessionStorage.removeItem(CHAT_SESSION_STORAGE_KEY);
+          sessionStorage.removeItem(CHAT_USER_NAME_KEY);
+          sessionStorage.removeItem(CHAT_USER_PHONE_KEY);
           return;
         }
 
         setSessionId(session.id);
+        setUserName(session.userName ?? sessionStorage.getItem(CHAT_USER_NAME_KEY) ?? "");
+        setUserPhone(session.userPhone ?? sessionStorage.getItem(CHAT_USER_PHONE_KEY) ?? "");
         setMessages(
           (session.messages ?? []).map((m) => ({
             ...m,
@@ -190,7 +216,11 @@ export function ChatPageClient({ isHomePage }: ChatPageClientProps) {
         setChatStarted(true);
         setInitialPhase("done");
       } catch {
-        if (!cancelled) sessionStorage.removeItem(CHAT_SESSION_STORAGE_KEY);
+        if (!cancelled) {
+          sessionStorage.removeItem(CHAT_SESSION_STORAGE_KEY);
+          sessionStorage.removeItem(CHAT_USER_NAME_KEY);
+          sessionStorage.removeItem(CHAT_USER_PHONE_KEY);
+        }
       }
     })();
     return () => {
@@ -263,6 +293,10 @@ export function ChatPageClient({ isHomePage }: ChatPageClientProps) {
     setInputSource(value === SKIP_SIGNAL ? "skip" : "structured");
     setInput(value);
     setRequestInputs({});
+    if (value === SKIP_SIGNAL) {
+      skipDisplayMessageRef.current =
+        getRequestInputKind(req) === "photo" ? "I don't have a photo" : "I don't know";
+    }
     setTimeout(() => {
       const form = formRef.current;
       if (form instanceof HTMLFormElement) {
@@ -290,6 +324,8 @@ export function ChatPageClient({ isHomePage }: ChatPageClientProps) {
 
   const startNewConversation = () => {
     sessionStorage.removeItem(CHAT_SESSION_STORAGE_KEY);
+    sessionStorage.removeItem(CHAT_USER_NAME_KEY);
+    sessionStorage.removeItem(CHAT_USER_PHONE_KEY);
     setSessionId(null);
     setMessages([]);
     setChatStarted(false);
@@ -357,6 +393,22 @@ export function ChatPageClient({ isHomePage }: ChatPageClientProps) {
     e.preventDefault();
     const text = input.trim();
     if (!text && files.length === 0) return;
+    const latestAssistantWithRequests = [...messagesRef.current]
+      .reverse()
+      .find((m) => m.role === "assistant" && (m.requests?.length ?? 0) > 0);
+    const latestPendingRequest = latestAssistantWithRequests?.requests?.[0];
+    const latestRequestIsPhoto =
+      latestPendingRequest != null && getRequestInputKind(latestPendingRequest) === "photo";
+    const textIsSkipLike =
+      text === SKIP_SIGNAL ||
+      /^i don'?t know\.?$/i.test(text) ||
+      /^i don'?t have (a )?photo\.?$/i.test(text);
+    const shouldTreatAsSkip =
+      (inputSource === "skip" || textIsSkipLike) && latestPendingRequest != null;
+    const resolvedSkipMessage = latestRequestIsPhoto ? "I don't have a photo" : "I don't know";
+    const resolvedInputSource: "chat" | "structured" | "skip" | "note" = shouldTreatAsSkip
+      ? "skip"
+      : inputSource;
     setLoading(true);
     setStage("");
     setError("");
@@ -367,9 +419,14 @@ export function ChatPageClient({ isHomePage }: ChatPageClientProps) {
     setRequestInputs({});
 
     const form = new FormData();
-    form.set("message", text || "(sent photos)");
-    form.set("inputSource", inputSource);
+    const messageToSend = shouldTreatAsSkip
+      ? skipDisplayMessageRef.current || resolvedSkipMessage
+      : text || "(sent photos)";
+    form.set("message", messageToSend);
+    form.set("inputSource", resolvedInputSource);
     if (sessionId) form.set("sessionId", sessionId);
+    if (userName.trim()) form.set("userName", userName.trim());
+    if (userPhone.trim()) form.set("userPhone", userPhone.trim());
     userImages.forEach((f) => form.append("images", f));
 
     const imageUrls = userImages.length
@@ -379,10 +436,9 @@ export function ChatPageClient({ isHomePage }: ChatPageClientProps) {
       ...prev,
       {
         role: "user",
-        content:
-          text === SKIP_SIGNAL
-            ? "I don't know"
-            : text || "Sent photo(s)",
+        content: shouldTreatAsSkip
+          ? (skipDisplayMessageRef.current || resolvedSkipMessage)
+          : text || "Sent photo(s)",
         images: imageUrls,
       },
     ]);
@@ -407,9 +463,9 @@ export function ChatPageClient({ isHomePage }: ChatPageClientProps) {
             const event = eventMatch[1].trim();
             try {
               const data = JSON.parse(dataMatch[1].trim());
-              if (event === "stage") setStage(data.message ?? "");
+              if (event === "stage") setStage(toDisplayString(data.message, ""));
               if (event === "message") payload = data as MessagePayload;
-              if (event === "error") setError(data.error ?? "Error");
+              if (event === "error") setError(toDisplayString(data.error, "Error"));
             } catch (_) { }
           }
         }
@@ -417,11 +473,13 @@ export function ChatPageClient({ isHomePage }: ChatPageClientProps) {
       if (payload) {
         setSessionId(payload.sessionId);
         sessionStorage.setItem(CHAT_SESSION_STORAGE_KEY, payload.sessionId);
+        if (userName.trim()) sessionStorage.setItem(CHAT_USER_NAME_KEY, userName.trim());
+        if (userPhone.trim()) sessionStorage.setItem(CHAT_USER_PHONE_KEY, userPhone.trim());
         setMessages((prev) => [
           ...prev,
           {
             role: "assistant",
-            content: payload.message,
+            content: toDisplayString(payload.message, ""),
             requests: payload.requests?.length ? payload.requests : undefined,
             resolution: payload.resolution,
             escalation_reason: payload.escalation_reason,
@@ -436,6 +494,8 @@ export function ChatPageClient({ isHomePage }: ChatPageClientProps) {
           payload.phase === "escalated"
         ) {
           sessionStorage.removeItem(CHAT_SESSION_STORAGE_KEY);
+          sessionStorage.removeItem(CHAT_USER_NAME_KEY);
+          sessionStorage.removeItem(CHAT_USER_PHONE_KEY);
         }
       } else if (sessionId) {
         setConnectionInterrupted(true);
@@ -461,7 +521,11 @@ export function ChatPageClient({ isHomePage }: ChatPageClientProps) {
         phase?: string;
         status?: string;
         updatedAt?: string | null;
+        userName?: string | null;
+        userPhone?: string | null;
       } = await res.json();
+      setUserName(session.userName ?? "");
+      setUserPhone(session.userPhone ?? "");
       setMessages(
         (session.messages ?? []).map((m) => ({
           ...m,
@@ -471,11 +535,15 @@ export function ChatPageClient({ isHomePage }: ChatPageClientProps) {
       setCurrentPhase(session.phase ?? "collecting_issue");
       setSessionId(session.id);
       sessionStorage.setItem(CHAT_SESSION_STORAGE_KEY, session.id);
+      if (session.userName) sessionStorage.setItem(CHAT_USER_NAME_KEY, session.userName);
+      if (session.userPhone) sessionStorage.setItem(CHAT_USER_PHONE_KEY, session.userPhone);
       if (
         session.status === "resolved" ||
         session.status === "escalated"
       ) {
         sessionStorage.removeItem(CHAT_SESSION_STORAGE_KEY);
+        sessionStorage.removeItem(CHAT_USER_NAME_KEY);
+        sessionStorage.removeItem(CHAT_USER_PHONE_KEY);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -549,18 +617,49 @@ export function ChatPageClient({ isHomePage }: ChatPageClientProps) {
         {!chatStarted ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-6">
             <p className="text-center text-gray-600 dark:text-gray-400">
-              Welcome to Kuhlberg support chat. Click Start to get started.
+              Welcome to Kuhlberg support chat. Please enter your details to get started.
             </p>
-            <button
-              type="button"
-              onClick={() => {
-                setChatStarted(true);
-                setInitialPhase("typing");
-              }}
-              className="rounded-xl bg-blue-600 px-8 py-3 text-lg font-medium text-white shadow-lg transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900"
-            >
-              Start
-            </button>
+            <div className="flex w-full max-w-sm flex-col gap-4">
+              <div>
+                <label htmlFor="prechat-name" className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Name
+                </label>
+                <input
+                  id="prechat-name"
+                  type="text"
+                  required
+                  value={userName}
+                  onChange={(e) => setUserName(e.target.value)}
+                  placeholder="Your name"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
+                />
+              </div>
+              <div>
+                <label htmlFor="prechat-phone" className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Phone number
+                </label>
+                <input
+                  id="prechat-phone"
+                  type="tel"
+                  required
+                  value={userPhone}
+                  onChange={(e) => setUserPhone(e.target.value)}
+                  placeholder="Your phone number"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setChatStarted(true);
+                  setInitialPhase("typing");
+                }}
+                disabled={!userName.trim() || !userPhone.trim()}
+                className="rounded-xl bg-blue-600 px-8 py-3 text-lg font-medium text-white shadow-lg transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:focus:ring-offset-gray-900"
+              >
+                Start
+              </button>
+            </div>
           </div>
         ) : (
           <>

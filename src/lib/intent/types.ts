@@ -70,6 +70,9 @@ export const intentManifestSchema = z.object({
     alternatePathsBeforeEscalation: z.number().int().min(0).max(5),
     escalationIntentMessage: z.string().min(1),
     empathyAcknowledgment: z.boolean(),
+    sentimentClassifierEnabled: z.boolean(),
+    frustrationEscalationThreshold: z.enum(["moderate", "high"]),
+    consecutiveFrustrationTurnsBeforeEscalation: z.number().int().min(1).max(5),
   }),
 });
 
