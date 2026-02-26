@@ -77,9 +77,52 @@ function buildVerificationRequest(
   };
 }
 
+/** True if the error indicates the stream controller is already closed (e.g. client disconnected). */
+function isControllerClosedError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return /already closed|Invalid state/i.test(msg);
+}
+
 function send(controller: ReadableStreamDefaultController<Uint8Array>, event: string, data: string) {
-  const encoder = new TextEncoder();
-  controller.enqueue(encoder.encode(`event: ${event}\ndata: ${data}\n\n`));
+  try {
+    const encoder = new TextEncoder();
+    controller.enqueue(encoder.encode(`event: ${event}\ndata: ${data}\n\n`));
+  } catch (err) {
+    if (!isControllerClosedError(err)) throw err;
+    // Client likely disconnected; ignore so we don't log as a fatal error
+  }
+}
+
+function closeController(controller: ReadableStreamDefaultController<Uint8Array>) {
+  try {
+    controller.close();
+  } catch (err) {
+    if (!isControllerClosedError(err)) throw err;
+  }
+}
+
+const KEEPALIVE_INTERVAL_MS = 8000;
+
+/** Send an SSE comment to keep the connection alive (proxies often close idle connections after 15–60s). */
+function sendKeepalive(controller: ReadableStreamDefaultController<Uint8Array>) {
+  try {
+    controller.enqueue(new TextEncoder().encode(": keepalive\n\n"));
+  } catch (err) {
+    if (!isControllerClosedError(err)) throw err;
+  }
+}
+
+/** Run a long-running promise while sending keepalive comments so the stream isn't closed by timeouts. */
+async function withKeepalive<T>(
+  controller: ReadableStreamDefaultController<Uint8Array>,
+  promise: Promise<T>
+): Promise<T> {
+  const id = setInterval(() => sendKeepalive(controller), KEEPALIVE_INTERVAL_MS);
+  try {
+    return await promise;
+  } finally {
+    clearInterval(id);
+  }
 }
 
 const UUID_PATTERN =
@@ -413,7 +456,7 @@ export async function POST(request: Request) {
         } else {
           if (!session) {
             sendEvent("error", JSON.stringify({ error: "Session not found." }));
-            controller.close();
+            closeController(controller);
             return;
           }
           sessionId = session.id;
@@ -517,7 +560,7 @@ export async function POST(request: Request) {
                   requests: assistantTurn.requests,
                 })
               );
-              controller.close();
+              closeController(controller);
               return;
             }
             console.log(
@@ -573,7 +616,7 @@ export async function POST(request: Request) {
                 guideImages: guideImages.length > 0 ? guideImages : undefined,
               })
             );
-            controller.close();
+            closeController(controller);
             return;
           }
 
@@ -633,7 +676,7 @@ export async function POST(request: Request) {
                 requests: assistantTurn.requests,
               })
             );
-            controller.close();
+            closeController(controller);
             return;
           }
         }
@@ -688,7 +731,7 @@ export async function POST(request: Request) {
               })
             );
             sendEscalationWebhook(escalationHandoff).catch(() => {});
-            controller.close();
+            closeController(controller);
             return;
           }
 
@@ -735,7 +778,7 @@ export async function POST(request: Request) {
                 guideImages: guideImages.length > 0 ? guideImages : undefined,
               })
             );
-            controller.close();
+            closeController(controller);
             return;
           }
 
@@ -745,7 +788,10 @@ export async function POST(request: Request) {
             `Your machine isn't a ${intentManifest.safety.supportedBrand} machine. We only support ${intentManifest.safety.supportedBrand} machines.`;
 
           try {
-            const extracted = await analyzeNameplate(imageBuffers, audit);
+            const extracted = await withKeepalive(
+              controller,
+              analyzeNameplate(imageBuffers, audit)
+            );
             const extractedModel = extracted.modelNumber?.trim() ?? "";
             const extractedSerial = extracted.serialNumber?.trim() ?? "";
 
@@ -791,7 +837,7 @@ export async function POST(request: Request) {
                 guideImages: guideImages.length > 0 ? guideImages : undefined,
               })
             );
-            controller.close();
+            closeController(controller);
             return;
             }
 
@@ -824,7 +870,7 @@ export async function POST(request: Request) {
                   requests: [],
                 })
               );
-              controller.close();
+              closeController(controller);
               return;
             }
 
@@ -873,7 +919,7 @@ export async function POST(request: Request) {
                 guideImages: guideImages.length > 0 ? guideImages : undefined,
               })
             );
-            controller.close();
+            closeController(controller);
             return;
           }
           const currentYear = new Date().getFullYear();
@@ -913,7 +959,7 @@ export async function POST(request: Request) {
                 escalation_reason: `Machine is more than ${intentManifest.safety.machineAgeThresholdYears} years old based on serial number.`,
               })
             );
-            controller.close();
+            closeController(controller);
             return;
           }
 
@@ -978,7 +1024,7 @@ export async function POST(request: Request) {
               requests: assistantTurn.requests,
             })
           );
-          controller.close();
+          closeController(controller);
           return;
           } catch {
             messages.push({
@@ -1005,7 +1051,7 @@ export async function POST(request: Request) {
                 requests: [],
               })
             );
-            controller.close();
+            closeController(controller);
             return;
           }
         }
@@ -1065,7 +1111,7 @@ export async function POST(request: Request) {
                 requests: assistantTurn.requests,
               })
             );
-            controller.close();
+            closeController(controller);
             return;
           }
 
@@ -1105,7 +1151,7 @@ export async function POST(request: Request) {
                 requests: assistantTurn.requests,
               })
             );
-            controller.close();
+            closeController(controller);
             return;
           }
 
@@ -1145,7 +1191,7 @@ export async function POST(request: Request) {
                 requests: assistantTurn.requests,
               })
             );
-            controller.close();
+            closeController(controller);
             return;
           }
 
@@ -1208,7 +1254,7 @@ export async function POST(request: Request) {
               guideImages: guideImages.length > 0 ? guideImages : undefined,
             })
           );
-          controller.close();
+          closeController(controller);
           return;
         }
 
@@ -1259,7 +1305,7 @@ export async function POST(request: Request) {
                 guideImages: guideImages.length > 0 ? guideImages : undefined,
               })
             );
-            controller.close();
+            closeController(controller);
             return;
           }
 
@@ -1380,12 +1426,15 @@ export async function POST(request: Request) {
             sessionImageBuffers.length > 0 || imageBuffersForLlm.length > 0
               ? [...sessionImageBuffers, ...imageBuffersForLlm]
               : undefined;
-          const triageResult = await runPlaybookTriage({
-            labels: triageLabels,
-            triageHistory: nextTriageHistory,
-            imageBuffers: allTriageImageBuffers,
-            currentProductType: session.productType,
-          }, audit);
+          const triageResult = await withKeepalive(
+            controller,
+            runPlaybookTriage({
+              labels: triageLabels,
+              triageHistory: nextTriageHistory,
+              imageBuffers: allTriageImageBuffers,
+              currentProductType: session.productType,
+            }, audit)
+          );
           console.log(
             `[chat] triage (session=${sessionId}) selected_label=${triageResult.selectedLabelId ?? "null"} confidence=${triageResult.confidence.toFixed(2)} candidates=[${triageResult.candidateLabels.join(", ")}]`
           );
@@ -1492,7 +1541,7 @@ export async function POST(request: Request) {
                   : undefined,
               })
             );
-            controller.close();
+            closeController(controller);
             return;
           }
 
@@ -1534,7 +1583,7 @@ export async function POST(request: Request) {
           : null;
         if (!playbookRow) {
           sendEvent("error", JSON.stringify({ error: "No playbook found for this session." }));
-          controller.close();
+          closeController(controller);
           return;
         }
 
@@ -1635,7 +1684,7 @@ export async function POST(request: Request) {
                     requests: [verificationRequest],
                   })
                 );
-                controller.close();
+                closeController(controller);
                 return;
               }
 
@@ -1692,7 +1741,7 @@ export async function POST(request: Request) {
                     escalation_reason: "Resolution did not fix the issue",
                   })
                 );
-                controller.close();
+                closeController(controller);
                 return;
               }
 
@@ -1725,7 +1774,7 @@ export async function POST(request: Request) {
                   requests: [],
                 })
               );
-              controller.close();
+              closeController(controller);
               return;
             }
           }
@@ -1761,14 +1810,17 @@ export async function POST(request: Request) {
               "I don't have documentation in the knowledge base to answer that question. Please contact a technician for further assistance.";
           } else {
             sendEvent("stage", JSON.stringify({ message: STAGE_MESSAGES.thinking }));
-            followUpMessage = await runFollowUpAnswer({
-              recentMessages: messages.slice(0, -1),
-              docChunks: chunksForTurn,
-              lastUserMessage: message,
-              resolution: lastResolution,
-              machineModel: session.machineModel ?? undefined,
-              imageBuffers: imageBuffersForLlm.length > 0 ? imageBuffersForLlm : undefined,
-            }, audit);
+            followUpMessage = await withKeepalive(
+              controller,
+              runFollowUpAnswer({
+                recentMessages: messages.slice(0, -1),
+                docChunks: chunksForTurn,
+                lastUserMessage: message,
+                resolution: lastResolution,
+                machineModel: session.machineModel ?? undefined,
+                imageBuffers: imageBuffersForLlm.length > 0 ? imageBuffersForLlm : undefined,
+              }, audit)
+            );
           }
           phase = "resolved_followup";
           plannerOutput = {
@@ -1880,21 +1932,24 @@ export async function POST(request: Request) {
             }));
 
             sendEvent("stage", JSON.stringify({ message: STAGE_MESSAGES.thinking }));
-            plannerOutput = await runDiagnosticPlanner({
-              playbook,
-              evidence,
-              hypotheses,
-              phase,
-              turnCount,
-              recentMessages: messages.slice(0, -1),
-              docChunks: chunksForTurn,
-              actions: Array.from(actionsById.values()),
-              lastUserMessage: plannerLastUserMessage,
-              machineModel: session.machineModel ?? undefined,
-              outstandingRequestIds,
-              inputSource,
-              imageBuffers: imageBuffersForLlm.length > 0 ? imageBuffersForLlm : undefined,
-            }, audit);
+            plannerOutput = await withKeepalive(
+              controller,
+              runDiagnosticPlanner({
+                playbook,
+                evidence,
+                hypotheses,
+                phase,
+                turnCount,
+                recentMessages: messages.slice(0, -1),
+                docChunks: chunksForTurn,
+                actions: Array.from(actionsById.values()),
+                lastUserMessage: plannerLastUserMessage,
+                machineModel: session.machineModel ?? undefined,
+                outstandingRequestIds,
+                inputSource,
+                imageBuffers: imageBuffersForLlm.length > 0 ? imageBuffersForLlm : undefined,
+              }, audit)
+            );
 
             const { output: sanitized, errors: sanitizeErrors } = validateAndSanitizePlannerOutput(
               plannerOutput,
@@ -2169,14 +2224,14 @@ export async function POST(request: Request) {
           hypothesesCount: hypotheses.length,
         });
         sendEvent(controller, "message", JSON.stringify(responsePayload));
-        controller.close();
+        closeController(controller);
       } catch (err) {
         console.error("[chat] fatal route error", err);
         const rawMsg = err instanceof Error ? err.message : String(err);
         const msg = rawMsg?.trim() ? rawMsg : "Unexpected chat error.";
         audit?.logError(msg);
         sendEvent("error", JSON.stringify({ error: msg }));
-        controller.close();
+        closeController(controller);
       } finally {
         audit?.flush().catch(() => {});
       }

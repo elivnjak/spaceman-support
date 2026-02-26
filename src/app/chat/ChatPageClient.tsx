@@ -140,6 +140,7 @@ export function ChatPageClient({ isHomePage }: ChatPageClientProps) {
   const [activePhotoRequestId, setActivePhotoRequestId] = useState<string | null>(null);
   const [addNoteOpen, setAddNoteOpen] = useState(false);
   const [inputSource, setInputSource] = useState<"chat" | "structured" | "skip" | "note">("chat");
+  const [connectionInterrupted, setConnectionInterrupted] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
   const messagesRef = useRef<ChatMessage[]>([]);
   const SNIPPET_LENGTH = 280;
@@ -295,6 +296,7 @@ export function ChatPageClient({ isHomePage }: ChatPageClientProps) {
     setInitialPhase("idle");
     setCurrentPhase("collecting_issue");
     setError("");
+    setConnectionInterrupted(false);
     setLoading(false);
     setStage("");
     setInput("");
@@ -358,6 +360,7 @@ export function ChatPageClient({ isHomePage }: ChatPageClientProps) {
     setLoading(true);
     setStage("");
     setError("");
+    setConnectionInterrupted(false);
     setInput("");
     const userImages = [...files];
     setFiles([]);
@@ -434,12 +437,48 @@ export function ChatPageClient({ isHomePage }: ChatPageClientProps) {
         ) {
           sessionStorage.removeItem(CHAT_SESSION_STORAGE_KEY);
         }
+      } else if (sessionId) {
+        setConnectionInterrupted(true);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
       setInputSource("chat");
+    }
+  };
+
+  const loadLatestReply = async () => {
+    if (!sessionId) return;
+    setError("");
+    setConnectionInterrupted(false);
+    try {
+      const res = await fetch(`/api/chat/${sessionId}`);
+      if (!res.ok) throw new Error("Could not load session");
+      const session: {
+        id: string;
+        messages?: ChatMessage[];
+        phase?: string;
+        status?: string;
+        updatedAt?: string | null;
+      } = await res.json();
+      setMessages(
+        (session.messages ?? []).map((m) => ({
+          ...m,
+          images: m.images?.map((img) => toImageUrl(session.id, img)) ?? m.images,
+        }))
+      );
+      setCurrentPhase(session.phase ?? "collecting_issue");
+      setSessionId(session.id);
+      sessionStorage.setItem(CHAT_SESSION_STORAGE_KEY, session.id);
+      if (
+        session.status === "resolved" ||
+        session.status === "escalated"
+      ) {
+        sessionStorage.removeItem(CHAT_SESSION_STORAGE_KEY);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
     }
   };
 
@@ -491,6 +530,19 @@ export function ChatPageClient({ isHomePage }: ChatPageClientProps) {
         {error && (
           <div className="mb-4 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-800 dark:border-red-800 dark:bg-red-900/20 dark:text-red-200">
             {error}
+          </div>
+        )}
+
+        {connectionInterrupted && sessionId && (
+          <div className="mb-4 flex flex-wrap items-center gap-2 rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-200">
+            <span>The connection was interrupted before the reply could be shown.</span>
+            <button
+              type="button"
+              onClick={loadLatestReply}
+              className="shrink-0 rounded bg-amber-600 px-3 py-1.5 font-medium text-white hover:bg-amber-700 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 dark:bg-amber-500 dark:hover:bg-amber-600 dark:focus:ring-offset-gray-800"
+            >
+              Load latest reply
+            </button>
           </div>
         )}
 
@@ -978,11 +1030,6 @@ export function ChatPageClient({ isHomePage }: ChatPageClientProps) {
                     Send note
                   </button>
                 </>
-              )}
-              {!showFullInput && !showTextOnlyInput && !allowAddNote && isDiagnosticStructuredPhase && (
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  Answer the question above to continue.
-                </p>
               )}
             </form>
           </>
