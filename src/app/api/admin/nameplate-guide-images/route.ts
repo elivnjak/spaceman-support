@@ -1,12 +1,10 @@
 import { NextResponse } from "next/server";
 import { asc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { ensureNameplateTables } from "@/lib/db/ensure-nameplate-tables";
 import { nameplateGuideImages } from "@/lib/db/schema";
 import { nameplateGuideImagePath, sha256, writeStorageFile } from "@/lib/storage";
 
 export async function GET() {
-  await ensureNameplateTables();
   const rows = await db
     .select()
     .from(nameplateGuideImages)
@@ -15,7 +13,6 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  await ensureNameplateTables();
   const formData = await request.formData();
   const notes = (formData.get("notes") as string | null)?.trim() || null;
   const files = formData.getAll("files") as File[];

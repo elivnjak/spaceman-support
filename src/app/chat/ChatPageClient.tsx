@@ -113,6 +113,21 @@ const CHAT_SESSION_STORAGE_KEY = "chatSessionId";
 const CHAT_USER_NAME_KEY = "chatUserName";
 const CHAT_USER_PHONE_KEY = "chatUserPhone";
 
+/** Australian phone: 8 digits (local), or 10 with 02/03/04/07/08, or 9 digits with +61 (2/3/4/7/8). */
+function isValidAustralianPhone(value: string): boolean {
+  const digits = value.replace(/\D/g, "");
+  if (digits.length === 8) return true;
+  if (digits.length === 10 && /^0[23478]/.test(digits)) return true;
+  if (digits.length === 9 && /^[23478]/.test(digits)) return true;
+  return false;
+}
+
+function getAustralianPhoneError(value: string): string | null {
+  if (!value.trim()) return null;
+  if (isValidAustralianPhone(value)) return null;
+  return "Please enter a valid Australian phone number (e.g. 93459982, 04XX XXX XXX or 02 XXXX XXXX)";
+}
+
 /** Convert stored image path from backend to a URL the browser can load. */
 function toSessionImageUrl(sessionId: string, storedPath: string): string {
   const normalized = storedPath.replace(/\\/g, "/");
@@ -137,6 +152,7 @@ export function ChatPageClient({ isHomePage }: ChatPageClientProps) {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [userName, setUserName] = useState("");
   const [userPhone, setUserPhone] = useState("");
+  const [phoneError, setPhoneError] = useState<string | null>(null);
   const [chatStarted, setChatStarted] = useState(false);
   const [initialPhase, setInitialPhase] = useState<InitialPhase>("idle");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -619,7 +635,18 @@ export function ChatPageClient({ isHomePage }: ChatPageClientProps) {
             <p className="text-center text-gray-600 dark:text-gray-400">
               Welcome to Kuhlberg support chat. Please enter your details to get started.
             </p>
-            <div className="flex w-full max-w-sm flex-col gap-4">
+            <form
+              className="flex w-full max-w-sm flex-col gap-4"
+              onSubmit={(e) => {
+                e.preventDefault();
+                const err = getAustralianPhoneError(userPhone);
+                setPhoneError(err);
+                if (err) return;
+                if (!userName.trim() || !userPhone.trim()) return;
+                setChatStarted(true);
+                setInitialPhase("typing");
+              }}
+            >
               <div>
                 <label htmlFor="prechat-name" className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
                   Name
@@ -643,23 +670,34 @@ export function ChatPageClient({ isHomePage }: ChatPageClientProps) {
                   type="tel"
                   required
                   value={userPhone}
-                  onChange={(e) => setUserPhone(e.target.value)}
+                  onChange={(e) => {
+                    setUserPhone(e.target.value);
+                    setPhoneError(getAustralianPhoneError(e.target.value));
+                  }}
+                  onBlur={() => setPhoneError(getAustralianPhoneError(userPhone))}
                   placeholder="Your phone number"
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
+                  aria-invalid={!!phoneError}
+                  aria-describedby={phoneError ? "prechat-phone-error" : undefined}
+                  className={`w-full rounded-lg border px-3 py-2 dark:bg-gray-800 dark:text-white ${
+                    phoneError
+                      ? "border-red-500 focus:border-red-500 focus:ring-red-500 dark:border-red-500"
+                      : "border-gray-300 dark:border-gray-600"
+                  }`}
                 />
+                {phoneError && (
+                  <p id="prechat-phone-error" className="mt-1 text-sm text-red-600 dark:text-red-400" role="alert">
+                    {phoneError}
+                  </p>
+                )}
               </div>
               <button
-                type="button"
-                onClick={() => {
-                  setChatStarted(true);
-                  setInitialPhase("typing");
-                }}
-                disabled={!userName.trim() || !userPhone.trim()}
+                type="submit"
+                disabled={!userName.trim() || !userPhone.trim() || !!getAustralianPhoneError(userPhone)}
                 className="rounded-xl bg-blue-600 px-8 py-3 text-lg font-medium text-white shadow-lg transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:focus:ring-offset-gray-900"
               >
                 Start
               </button>
-            </div>
+            </form>
           </div>
         ) : (
           <>

@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { asc, eq, inArray } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { ensureNameplateTables } from "@/lib/db/ensure-nameplate-tables";
 import { nameplateConfig, nameplateGuideImages } from "@/lib/db/schema";
 
 const DEFAULT_INSTRUCTION =
@@ -25,7 +24,6 @@ function toGuidePayload(images: GuideImage[], selectedIds: string[]) {
 }
 
 export async function GET() {
-  await ensureNameplateTables();
   const [config] = await db.select().from(nameplateConfig).limit(1);
   const guideImages = await db
     .select({
@@ -49,7 +47,6 @@ export async function GET() {
 }
 
 export async function PUT(request: Request) {
-  await ensureNameplateTables();
   const body = await request.json() as {
     instructionText?: string;
     guideImageIds?: string[];

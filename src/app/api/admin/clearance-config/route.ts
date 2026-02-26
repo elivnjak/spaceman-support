@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { asc, eq, inArray } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { ensureClearanceTables } from "@/lib/db/ensure-clearance-tables";
 import { clearanceConfig, clearanceGuideImages } from "@/lib/db/schema";
 
 const DEFAULT_INSTRUCTION =
@@ -25,7 +24,6 @@ function toGuidePayload(images: GuideImage[], selectedIds: string[]) {
 }
 
 export async function GET() {
-  await ensureClearanceTables();
   const [config] = await db.select().from(clearanceConfig).limit(1);
   const guideImages = await db
     .select({
@@ -49,7 +47,6 @@ export async function GET() {
 }
 
 export async function PUT(request: Request) {
-  await ensureClearanceTables();
   const body = (await request.json()) as {
     instructionText?: string;
     guideImageIds?: string[];

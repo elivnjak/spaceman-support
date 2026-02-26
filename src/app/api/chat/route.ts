@@ -35,8 +35,6 @@ import {
 } from "@/lib/pipeline/sentiment-classifier";
 import { getDiagnosticConfig, getTriageConfig } from "@/lib/config";
 import { getIntentManifest } from "@/lib/intent/loader";
-import { ensureNameplateTables } from "@/lib/db/ensure-nameplate-tables";
-import { ensureClearanceTables } from "@/lib/db/ensure-clearance-tables";
 import {
   writeStorageFile,
   readStorageFile,
@@ -321,7 +319,6 @@ function prependSubstantiveUserHistory(
 }
 
 async function getNameplatePrompt(): Promise<{ instructionText: string; guideImages: string[] }> {
-  await ensureNameplateTables();
   const [config] = await db.select().from(nameplateConfig).limit(1);
   const defaultInstruction =
     "Please take a clear photo of the machine name plate. It is usually on the rear or side panel and includes the model and serial number.";
@@ -347,7 +344,6 @@ async function getNameplatePrompt(): Promise<{ instructionText: string; guideIma
 }
 
 async function getClearancePrompt(): Promise<{ instructionText: string; guideImages: string[] }> {
-  await ensureClearanceTables();
   const [config] = await db.select().from(clearanceConfig).limit(1);
   const defaultInstruction =
     "Please send photos of machine clearance from different angles so our technical team can use them if escalation is needed.";
@@ -463,8 +459,6 @@ export async function POST(request: Request) {
         send(controller, event, data);
       };
       try {
-        await ensureNameplateTables();
-        await ensureClearanceTables();
         const [diagnosticConfig, triageConfig, intentManifest] =
           await Promise.all([
             getDiagnosticConfig(),

@@ -1,12 +1,10 @@
 import { NextResponse } from "next/server";
 import { asc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { ensureClearanceTables } from "@/lib/db/ensure-clearance-tables";
 import { clearanceGuideImages } from "@/lib/db/schema";
 import { clearanceGuideImagePath, sha256, writeStorageFile } from "@/lib/storage";
 
 export async function GET() {
-  await ensureClearanceTables();
   const rows = await db
     .select()
     .from(clearanceGuideImages)
@@ -15,7 +13,6 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  await ensureClearanceTables();
   const formData = await request.formData();
   const notes = (formData.get("notes") as string | null)?.trim() || null;
   const files = formData.getAll("files") as File[];
