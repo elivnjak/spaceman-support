@@ -2,6 +2,25 @@
 
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
+import Script from "next/script";
+
+declare global {
+  interface Window {
+    turnstile?: {
+      render: (
+        container: HTMLElement | string,
+        options: {
+          sitekey: string;
+          appearance?: "always" | "execute" | "interaction-only";
+          callback?: (token: string) => void;
+          "expired-callback"?: () => void;
+          "error-callback"?: () => void;
+        }
+      ) => string;
+      remove: (widgetId: string) => void;
+    };
+  }
+}
 
 const SKIP_SIGNAL = "__SKIP__";
 
@@ -112,6 +131,13 @@ const SESSION_STALE_MS = 2 * 60 * 60 * 1000;
 const CHAT_SESSION_STORAGE_KEY = "chatSessionId";
 const CHAT_USER_NAME_KEY = "chatUserName";
 const CHAT_USER_PHONE_KEY = "chatUserPhone";
+const TURNSTILE_ENABLED =
+  process.env.NODE_ENV === "production" ||
+  process.env.NEXT_PUBLIC_TURNSTILE_ENFORCE?.trim().toLowerCase() === "true";
+const TURNSTILE_SITE_KEY =
+  TURNSTILE_ENABLED
+    ? process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim() ?? ""
+    : "";
 
 /** Australian phone: 8 digits (local), or 10 with 02/03/04/07/08, or 9 digits with +61 (2/3/4/7/8). */
 function isValidAustralianPhone(value: string): boolean {
@@ -173,8 +199,12 @@ export function ChatPageClient({ isHomePage }: ChatPageClientProps) {
   const [addNoteOpen, setAddNoteOpen] = useState(false);
   const [inputSource, setInputSource] = useState<"chat" | "structured" | "skip" | "note">("chat");
   const [connectionInterrupted, setConnectionInterrupted] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const [turnstileScriptLoaded, setTurnstileScriptLoaded] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
   const messagesRef = useRef<ChatMessage[]>([]);
+  const turnstileContainerRef = useRef<HTMLDivElement>(null);
+  const turnstileWidgetIdRef = useRef<string | null>(null);
   /** When user clicks skip, store the message to show/send (e.g. "I don't have a photo" for photo requests). */
   const skipDisplayMessageRef = useRef<string>("I don't know");
   const SNIPPET_LENGTH = 280;
@@ -405,10 +435,34 @@ export function ChatPageClient({ isHomePage }: ChatPageClientProps) {
     };
   }, []);
 
+  useEffect(() => {
+    if (sessionId || !TURNSTILE_SITE_KEY || !turnstileScriptLoaded) return;
+    const container = turnstileContainerRef.current;
+    if (!container || typeof window === "undefined" || !window.turnstile) return;
+
+    setTurnstileToken(null);
+    if (turnstileWidgetIdRef.current) {
+      window.turnstile.remove(turnstileWidgetIdRef.current);
+      turnstileWidgetIdRef.current = null;
+    }
+
+    turnstileWidgetIdRef.current = window.turnstile.render(container, {
+      sitekey: TURNSTILE_SITE_KEY,
+      appearance: "interaction-only",
+      callback: (token) => setTurnstileToken(token),
+      "expired-callback": () => setTurnstileToken(null),
+      "error-callback": () => setTurnstileToken(null),
+    });
+  }, [sessionId, turnstileScriptLoaded]);
+
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     const text = input.trim();
     if (!text && files.length === 0) return;
+    if (!sessionId && TURNSTILE_SITE_KEY && !turnstileToken) {
+      setError("Please complete verification and try again.");
+      return;
+    }
     const latestAssistantWithRequests = [...messagesRef.current]
       .reverse()
       .find((m) => m.role === "assistant" && (m.requests?.length ?? 0) > 0);
@@ -441,6 +495,9 @@ export function ChatPageClient({ isHomePage }: ChatPageClientProps) {
     form.set("message", messageToSend);
     form.set("inputSource", resolvedInputSource);
     if (sessionId) form.set("sessionId", sessionId);
+    if (!sessionId && turnstileToken) {
+      form.set("cf-turnstile-response", turnstileToken);
+    }
     if (userName.trim()) form.set("userName", userName.trim());
     if (userPhone.trim()) form.set("userPhone", userPhone.trim());
     userImages.forEach((f) => form.append("images", f));
@@ -588,6 +645,13 @@ export function ChatPageClient({ isHomePage }: ChatPageClientProps) {
 
   return (
     <main className="flex min-h-screen flex-col bg-gray-50 dark:bg-gray-900">
+      {TURNSTILE_SITE_KEY && (
+        <Script
+          src="https://challenges.cloudflare.com/turnstile/v0/api.js"
+          strategy="afterInteractive"
+          onLoad={() => setTurnstileScriptLoaded(true)}
+        />
+      )}
       <header className="border-b border-gray-200 bg-white px-4 py-3 dark:border-gray-700 dark:bg-gray-800">
         <div className="mx-auto flex max-w-2xl items-center justify-between gap-2">
           <div className="min-w-0 flex-1">
@@ -690,6 +754,12 @@ export function ChatPageClient({ isHomePage }: ChatPageClientProps) {
                   </p>
                 )}
               </div>
+              {TURNSTILE_SITE_KEY && (
+                <div
+                  ref={turnstileContainerRef}
+                  className="overflow-hidden"
+                />
+              )}
               <button
                 type="submit"
                 disabled={!userName.trim() || !userPhone.trim() || !!getAustralianPhoneError(userPhone)}

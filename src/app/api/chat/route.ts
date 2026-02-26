@@ -48,6 +48,7 @@ import {
   validateModel,
 } from "@/lib/pipeline/nameplate-analysis";
 import { AuditLogger } from "@/lib/audit";
+import { verifyTurnstileToken } from "@/lib/turnstile";
 
 const STAGE_MESSAGES: Record<string, string> = {
   requesting_nameplate: "Collecting machine details…",
@@ -64,6 +65,16 @@ const ESCALATION_OFFER_REQUEST_ID = "_escalation_offer";
 const SKIP_SIGNAL = "__skip__";
 
 type InputSource = "chat" | "structured" | "skip" | "note";
+
+function getClientIp(request: Request): string | null {
+  const forwardedFor = request.headers.get("x-forwarded-for");
+  if (forwardedFor) {
+    const firstIp = forwardedFor.split(",")[0]?.trim();
+    if (firstIp) return firstIp;
+  }
+  const realIp = request.headers.get("x-real-ip")?.trim();
+  return realIp || null;
+}
 
 function buildVerificationRequest(
   promptText = "Did that fix the issue?"
@@ -387,6 +398,7 @@ async function getProductTypeOptions(): Promise<{ name: string; isOther: boolean
 export async function POST(request: Request) {
   const formData = await request.formData();
   const sessionIdRaw = (formData.get("sessionId") as string)?.trim() || null;
+  const turnstileToken = (formData.get("cf-turnstile-response") as string)?.trim() || null;
   const message = (formData.get("message") as string)?.trim() ?? "";
   const inputSourceRaw = (formData.get("inputSource") as string)?.trim().toLowerCase() ?? "";
   const inputSource: InputSource =
@@ -409,6 +421,27 @@ export async function POST(request: Request) {
 
   const session = await getSessionFromRequest(request);
   const isAdmin = session?.user?.role === "admin";
+  const isNewSessionRequest = !sessionIdRaw;
+
+  if (isNewSessionRequest && (!userName || !userPhone)) {
+    return NextResponse.json(
+      { error: "Name and phone number are required to start a new chat." },
+      { status: 400 }
+    );
+  }
+
+  if (isNewSessionRequest && !isAdmin) {
+    const verification = await verifyTurnstileToken({
+      token: turnstileToken,
+      remoteIp: getClientIp(request),
+    });
+    if (!verification.ok) {
+      return NextResponse.json(
+        { error: "Verification failed. Please refresh and try again." },
+        { status: 403 }
+      );
+    }
+  }
 
   // Per-session rate limit (skip when admin is logged in, e.g. for testing)
   if (sessionIdRaw && !isAdmin) {

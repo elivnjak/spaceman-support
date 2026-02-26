@@ -1,6 +1,5 @@
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { ensureIntentManifestTable } from "@/lib/db/ensure-intent-manifest-table";
 import { intentManifest } from "@/lib/db/schema";
 import { MANIFEST_DEFAULTS, MANIFEST_META } from "./defaults";
 import {
@@ -50,7 +49,6 @@ function deepMerge<T>(base: T, override: unknown): T {
 }
 
 async function loadOverrideFromDb(): Promise<IntentManifestOverride | null> {
-  await ensureIntentManifestTable();
   const [row] = await db
     .select({ data: intentManifest.data })
     .from(intentManifest)

@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { ensureIntentManifestTable } from "@/lib/db/ensure-intent-manifest-table";
 import { intentManifest } from "@/lib/db/schema";
 import {
   INTENT_MANIFEST_ROW_ID,
@@ -67,7 +66,6 @@ function collectOverridePaths(
 }
 
 async function getCurrentOverride(): Promise<IntentManifestOverride> {
-  await ensureIntentManifestTable();
   const [row] = await db
     .select({ data: intentManifest.data })
     .from(intentManifest)
@@ -80,7 +78,6 @@ async function getCurrentOverride(): Promise<IntentManifestOverride> {
 }
 
 export async function GET() {
-  // Keep this sequence non-parallel so we do not race table bootstrap.
   const manifest = await getIntentManifest();
   const meta = getIntentManifestMeta();
   const override = await getCurrentOverride();
