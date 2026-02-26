@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { ensureMaintenanceTable } from "@/lib/db/ensure-maintenance-table";
 import { maintenanceConfig } from "@/lib/db/schema";
 
 const DEFAULT_TITLE = "Chat Unavailable";
@@ -9,7 +8,6 @@ const DEFAULT_DESCRIPTION =
   "Our support chat is currently undergoing maintenance.";
 
 export async function GET() {
-  await ensureMaintenanceTable();
   const [config] = await db.select().from(maintenanceConfig).limit(1);
   return NextResponse.json({
     enabled: config?.enabled ?? false,
@@ -23,7 +21,6 @@ export async function GET() {
 }
 
 export async function PUT(request: Request) {
-  await ensureMaintenanceTable();
   const body = (await request.json()) as {
     enabled?: boolean;
     title?: string;

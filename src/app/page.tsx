@@ -2,7 +2,6 @@ import { cookies } from "next/headers";
 import { ChatPageClient } from "@/app/chat/ChatPageClient";
 import { MaintenancePage } from "@/app/chat/MaintenancePage";
 import { db } from "@/lib/db";
-import { ensureMaintenanceTable } from "@/lib/db/ensure-maintenance-table";
 import { maintenanceConfig, type MaintenanceConfig } from "@/lib/db/schema";
 import { getSessionCookieName, validateSession } from "@/lib/auth";
 
@@ -17,7 +16,6 @@ export default async function HomePage() {
   let config: MaintenanceConfig | undefined;
 
   try {
-    await ensureMaintenanceTable();
     const [row] = await db.select().from(maintenanceConfig).limit(1);
     config = row;
 

@@ -1,0 +1,911 @@
+<html lang="en" style=""><head><link rel="stylesheet" href="/_next/static/css/app/layout.css?v=1772083831786" data-precedence="next_static/css/app/layout.css"><link rel="preload" as="script" fetchpriority="low" href="/_next/static/chunks/webpack.js?v=1772083821346"><script src="/_next/static/chunks/main-app.js?v=1772083821346" async=""></script><script src="/_next/static/chunks/app-pages-internals.js" async=""></script><script src="/_next/static/chunks/app/admin/layout.js" async=""></script><script src="/_next/static/chunks/app/admin/audit-logs/page.js" async=""></script><script src="/_next/static/chunks/polyfills.js" nomodule=""></script><style>@font-face{font-family:'__nextjs-Geist';font-style:normal;font-weight:400 600;font-display:swap;src:url(/__nextjs_font/geist-latin-ext.woff2) format('woff2');unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}@font-face{font-family:'__nextjs-Geist Mono';font-style:normal;font-weight:400 600;font-display:swap;src:url(/__nextjs_font/geist-mono-latin-ext.woff2) format('woff2');unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}@font-face{font-family:'__nextjs-Geist';font-style:normal;font-weight:400 600;font-display:swap;src:url(/__nextjs_font/geist-latin.woff2) format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}@font-face{font-family:'__nextjs-Geist Mono';font-style:normal;font-weight:400 600;font-display:swap;src:url(/__nextjs_font/geist-mono-latin.woff2) format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}</style><link rel="preload" as="style" href="/_next/static/css/app/layout.css?v=1772083831786"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>RAG Support Agent</title><meta name="description" content="Visual + Text RAG support assistant POC"></head><body class="min-h-screen bg-background font-sans antialiased" data-cai-parent-url="http://localhost:3001/admin/audit-logs/9aa40870-9ef9-4410-ac7e-3775e5838ba7"><div hidden=""></div><div class="min-h-screen bg-gray-50 dark:bg-gray-900"><nav class="border-b border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800"><div class="mx-auto flex max-w-6xl items-center gap-4 px-4 py-3"><button type="button" class="flex shrink-0 items-center justify-center rounded-md p-2 text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-white" aria-label="Open menu"><svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg></button><span class="text-sm font-medium text-gray-700 dark:text-gray-300">Admin</span><a class="ml-auto shrink-0 text-sm text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white" href="/">Back to app</a><button type="button" class="shrink-0 text-sm text-gray-600 hover:text-gray-900 disabled:opacity-60 dark:text-gray-400 dark:hover:text-white">Sign out</button></div></nav><div class="fixed left-0 top-0 z-50 h-full w-72 max-w-[85vw] transform border-r border-gray-200 bg-white shadow-xl transition-transform duration-200 ease-out dark:border-gray-700 dark:bg-gray-800 -translate-x-full" aria-hidden="true"><div class="flex items-center justify-between border-b border-gray-200 px-4 py-3 dark:border-gray-700"><span class="font-semibold text-gray-900 dark:text-white">Menu</span><button type="button" class="rounded-md p-2 text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-white" aria-label="Close menu"><svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button></div><ul class="flex flex-col py-2"><li><a class="block px-4 py-3 text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white" href="/admin">Dashboard</a></li><li><a class="block px-4 py-3 text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white" href="/admin/users">Users</a></li><li><a class="block px-4 py-3 text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white" href="/admin/labels">Labels</a></li><li><a class="block px-4 py-3 text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white" href="/admin/images">Reference images</a></li><li><a class="block px-4 py-3 text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white" href="/admin/models">Supported models</a></li><li><a class="block px-4 py-3 text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white" href="/admin/product-types">Product types</a></li><li><a class="block px-4 py-3 text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white" href="/admin/nameplate">Nameplate config</a></li><li><a class="block px-4 py-3 text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white" href="/admin/clearance">Clearance config</a></li><li><a class="block px-4 py-3 text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white" href="/admin/maintenance">Maintenance mode</a></li><li><a class="block px-4 py-3 text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white" href="/admin/docs">Documents</a></li><li><a class="block px-4 py-3 text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white" href="/admin/playbooks">Playbooks</a></li><li><a class="block px-4 py-3 text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white" href="/admin/intent">Intent manifest</a></li><li><a class="block px-4 py-3 font-medium text-gray-900 dark:text-white" href="/admin/audit-logs">Audit logs</a></li></ul></div><main class="mx-auto max-w-6xl px-4 py-8"><!--$--><!--/$--><div><div class="mb-6"><a class="text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200" href="/admin/audit-logs">← Back to audit logs</a></div><header class="mb-6 rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800"><h1 class="text-2xl font-bold text-gray-900 dark:text-white">Session audit</h1><div class="mt-3 grid grid-cols-1 gap-2 text-sm text-gray-700 dark:text-gray-300 md:grid-cols-2"><div><strong>Session ID:</strong> 9aa40870-9ef9-4410-ac7e-3775e5838ba7</div><div><strong>Status:</strong> active</div><div><strong>Phase:</strong> gathering_info</div><div><strong>Turn count:</strong> 6</div><div><strong>Machine model:</strong> 6236A-C</div><div><strong>Serial number:</strong> 2570307</div><div><strong>Product type:</strong> Ice Cream</div><div><strong>Playbook ID:</strong> d9662825-001c-41f9-a985-4b8ba3628fbf</div><div><strong>Created:</strong> 2/26/2026, 1:27:59 PM</div><div><strong>Updated:</strong> 2/26/2026, 1:30:02 PM</div></div></header><section class="space-y-4"><details class="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800"><summary class="cursor-pointer font-medium text-gray-900 dark:text-white">Turn 1 • 2/26/2026, 1:27:59 PM</summary><div class="mt-4 space-y-4 text-sm"><div><h3 class="font-semibold text-gray-900 dark:text-white">User input</h3><p class="mt-1 whitespace-pre-wrap text-gray-700 dark:text-gray-300">my ice cream is runny</p></div><div class="grid grid-cols-1 gap-2 text-gray-700 dark:text-gray-300 md:grid-cols-2"><div><strong>Phase path:</strong> collecting_issue</div><div><strong>Phase transition:</strong> -</div><div><strong>Duration:</strong> 14 ms</div><div><strong>Sanitization errors:</strong> 0</div></div><details class="rounded border border-gray-200 p-3 dark:border-gray-700"><summary class="cursor-pointer font-semibold text-gray-900 dark:text-white">LLM calls (0)</summary><pre class="mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-gray-700 dark:text-gray-300">[]</pre></details><details class="rounded border border-gray-200 p-3 dark:border-gray-700"><summary class="cursor-pointer font-semibold text-gray-900 dark:text-white">RAG retrieval</summary><pre class="mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-gray-700 dark:text-gray-300">[]</pre></details><details class="rounded border border-gray-200 p-3 dark:border-gray-700"><summary class="cursor-pointer font-semibold text-gray-900 dark:text-white">Planner output</summary><pre class="mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-gray-700 dark:text-gray-300"></pre></details><details class="rounded border border-gray-200 p-3 dark:border-gray-700"><summary class="cursor-pointer font-semibold text-gray-900 dark:text-white">Sanitized output</summary><pre class="mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-gray-700 dark:text-gray-300"></pre></details><details class="rounded border border-gray-200 p-3 dark:border-gray-700"><summary class="cursor-pointer font-semibold text-gray-900 dark:text-white">API response payload</summary><pre class="mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-gray-700 dark:text-gray-300">{
+  "phase": "nameplate_check",
+  "message": "Thanks. Please take a clear photo of the machine name plate. It is usually on the rear or side panel and includes the model and serial number.",
+  "requests": [
+    {
+      "id": "nameplate_photo",
+      "type": "photo",
+      "prompt": "Please upload a clear photo of the machine name plate.",
+      "expectedInput": {
+        "type": "photo"
+      }
+    }
+  ],
+  "sessionId": "9aa40870-9ef9-4410-ac7e-3775e5838ba7"
+}</pre></details></div></details><details class="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800"><summary class="cursor-pointer font-medium text-gray-900 dark:text-white">Turn 1 • 2/26/2026, 1:28:08 PM</summary><div class="mt-4 space-y-4 text-sm"><div><h3 class="font-semibold text-gray-900 dark:text-white">User input</h3><p class="mt-1 whitespace-pre-wrap text-gray-700 dark:text-gray-300">1 photo(s) attached</p><div class="mt-2 flex flex-wrap gap-3"><button type="button" class="block cursor-pointer rounded border border-gray-300 transition-opacity hover:opacity-90 dark:border-gray-600"><img alt="Uploaded photo 1 of 1" loading="lazy" width="96" height="96" decoding="async" data-nimg="1" class="h-24 w-24 rounded object-cover" src="/api/admin/audit-logs/9aa40870-9ef9-4410-ac7e-3775e5838ba7/image/turn_1_0.jpg" style="color: transparent;"></button></div></div><div class="grid grid-cols-1 gap-2 text-gray-700 dark:text-gray-300 md:grid-cols-2"><div><strong>Phase path:</strong> nameplate_check</div><div><strong>Phase transition:</strong> -</div><div><strong>Duration:</strong> 4583 ms</div><div><strong>Sanitization errors:</strong> 0</div></div><details class="rounded border border-gray-200 p-3 dark:border-gray-700"><summary class="cursor-pointer font-semibold text-gray-900 dark:text-white">LLM calls (1)</summary><pre class="mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-gray-700 dark:text-gray-300">[
+  {
+    "name": "nameplate_analysis",
+    "model": "gpt-4o",
+    "durationMs": 4546,
+    "imageCount": 1,
+    "tokensUsed": {
+      "total_tokens": 1320,
+      "prompt_tokens": 1237,
+      "completion_tokens": 83,
+      "prompt_tokens_details": {
+        "audio_tokens": 0,
+        "cached_tokens": 0
+      },
+      "completion_tokens_details": {
+        "audio_tokens": 0,
+        "reasoning_tokens": 0,
+        "accepted_prediction_tokens": 0,
+        "rejected_prediction_tokens": 0
+      }
+    },
+    "userPrompt": "Extract model and serial number from this machine name plate.",
+    "rawResponse": "{\n  \"model_number\": \"6236A-C\",\n  \"serial_number\": \"2570307\",\n  \"confidence\": 0.99,\n  \"raw_text\": \"SPACEMAN\\nMODEL NO 6236A-C SERIAL NO 2570307\\nVOLTS 220 HZ 50 PH 1 KW 2.5 TOTAL AMPS 13 FUSE 16\"\n}",
+    "systemPrompt": "You extract machine nameplate details from photos.\nReturn JSON only with this exact shape:\n{\n  \"model_number\": \"string | null\",\n  \"serial_number\": \"string | null\",\n  \"confidence\": \"number 0..1\",\n  \"raw_text\": \"string\"\n}\nRules:\n- Read only what is visible in the image.\n- Preserve punctuation and dashes in model_number and serial_number.\n- If uncertain, return null for that field and lower confidence.\n- raw_text should contain the important visible plate text in reading order.",
+    "parsedResponse": {
+      "rawText": "SPACEMAN\nMODEL NO 6236A-C SERIAL NO 2570307\nVOLTS 220 HZ 50 PH 1 KW 2.5 TOTAL AMPS 13 FUSE 16",
+      "confidence": 0.99,
+      "modelNumber": "6236A-C",
+      "serialNumber": "2570307"
+    }
+  }
+]</pre></details><details class="rounded border border-gray-200 p-3 dark:border-gray-700"><summary class="cursor-pointer font-semibold text-gray-900 dark:text-white">RAG retrieval</summary><pre class="mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-gray-700 dark:text-gray-300">[]</pre></details><details class="rounded border border-gray-200 p-3 dark:border-gray-700"><summary class="cursor-pointer font-semibold text-gray-900 dark:text-white">Planner output</summary><pre class="mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-gray-700 dark:text-gray-300"></pre></details><details class="rounded border border-gray-200 p-3 dark:border-gray-700"><summary class="cursor-pointer font-semibold text-gray-900 dark:text-white">Sanitized output</summary><pre class="mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-gray-700 dark:text-gray-300"></pre></details><details class="rounded border border-gray-200 p-3 dark:border-gray-700"><summary class="cursor-pointer font-semibold text-gray-900 dark:text-white">API response payload</summary><pre class="mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-gray-700 dark:text-gray-300">{
+  "phase": "product_type_check",
+  "message": "Before we continue, what type of product are you using? If you choose Other, please specify the exact product.",
+  "requests": [
+    {
+      "id": "product_type",
+      "type": "question",
+      "prompt": "What type of product are you using?",
+      "expectedInput": {
+        "type": "enum",
+        "options": [
+          "Yogurt",
+          "Acai",
+          "Ice Cream",
+          "Other"
+        ]
+      }
+    }
+  ],
+  "sessionId": "9aa40870-9ef9-4410-ac7e-3775e5838ba7"
+}</pre></details></div></details><details class="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800"><summary class="cursor-pointer font-medium text-gray-900 dark:text-white">Turn 1 • 2/26/2026, 1:28:30 PM</summary><div class="mt-4 space-y-4 text-sm"><div><h3 class="font-semibold text-gray-900 dark:text-white">User input</h3><p class="mt-1 whitespace-pre-wrap text-gray-700 dark:text-gray-300">Ice Cream</p></div><div class="grid grid-cols-1 gap-2 text-gray-700 dark:text-gray-300 md:grid-cols-2"><div><strong>Phase path:</strong> product_type_check</div><div><strong>Phase transition:</strong> -</div><div><strong>Duration:</strong> 15 ms</div><div><strong>Sanitization errors:</strong> 0</div></div><details class="rounded border border-gray-200 p-3 dark:border-gray-700"><summary class="cursor-pointer font-semibold text-gray-900 dark:text-white">LLM calls (0)</summary><pre class="mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-gray-700 dark:text-gray-300">[]</pre></details><details class="rounded border border-gray-200 p-3 dark:border-gray-700"><summary class="cursor-pointer font-semibold text-gray-900 dark:text-white">RAG retrieval</summary><pre class="mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-gray-700 dark:text-gray-300">[]</pre></details><details class="rounded border border-gray-200 p-3 dark:border-gray-700"><summary class="cursor-pointer font-semibold text-gray-900 dark:text-white">Planner output</summary><pre class="mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-gray-700 dark:text-gray-300"></pre></details><details class="rounded border border-gray-200 p-3 dark:border-gray-700"><summary class="cursor-pointer font-semibold text-gray-900 dark:text-white">Sanitized output</summary><pre class="mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-gray-700 dark:text-gray-300"></pre></details><details class="rounded border border-gray-200 p-3 dark:border-gray-700"><summary class="cursor-pointer font-semibold text-gray-900 dark:text-white">API response payload</summary><pre class="mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-gray-700 dark:text-gray-300">{
+  "phase": "clearance_check",
+  "message": "Thanks. Please send photos of machine clearance from different angles so our technical team can use them if escalation is needed.",
+  "requests": [
+    {
+      "id": "clearance_photos",
+      "type": "photo",
+      "prompt": "Please upload machine clearance photos from different angles.",
+      "expectedInput": {
+        "type": "photo"
+      }
+    }
+  ],
+  "sessionId": "9aa40870-9ef9-4410-ac7e-3775e5838ba7"
+}</pre></details></div></details><details class="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800"><summary class="cursor-pointer font-medium text-gray-900 dark:text-white">Turn 1 • 2/26/2026, 1:28:43 PM</summary><div class="mt-4 space-y-4 text-sm"><div><h3 class="font-semibold text-gray-900 dark:text-white">User input</h3><p class="mt-1 whitespace-pre-wrap text-gray-700 dark:text-gray-300">I don't have a photo</p></div><div class="grid grid-cols-1 gap-2 text-gray-700 dark:text-gray-300 md:grid-cols-2"><div><strong>Phase path:</strong> clearance_check -&gt; diagnostic_loop</div><div><strong>Phase transition:</strong> clearance_check -&gt; gathering_info</div><div><strong>Duration:</strong> 9837 ms</div><div><strong>Sanitization errors:</strong> 1</div></div><details class="rounded border border-gray-200 p-3 dark:border-gray-700"><summary class="cursor-pointer font-semibold text-gray-900 dark:text-white">LLM calls (2)</summary><pre class="mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-gray-700 dark:text-gray-300">[
+  {
+    "name": "playbook_triage",
+    "model": "gpt-4o",
+    "durationMs": 4109,
+    "imageCount": 1,
+    "tokensUsed": {
+      "total_tokens": 1493,
+      "prompt_tokens": 1409,
+      "completion_tokens": 84,
+      "prompt_tokens_details": {
+        "audio_tokens": 0,
+        "cached_tokens": 0
+      },
+      "completion_tokens_details": {
+        "audio_tokens": 0,
+        "reasoning_tokens": 0,
+        "accepted_prediction_tokens": 0,
+        "rejected_prediction_tokens": 0
+      }
+    },
+    "userPrompt": "Conversation for triage:\nuser: 1 photo(s) attached\nuser: my ice cream is runny\nuser: I don't have a photo\n\nKnown product type: Ice Cream\n\nReturn JSON only.",
+    "rawResponse": "{\n  \"selected_label_id\": \"too_runny\",\n  \"confidence\": 0.9,\n  \"reasoning\": \"The user mentioned the ice cream is runny, which aligns clearly with the 'too_runny' label. The product type (ice cream) supports this categorization.\",\n  \"follow_up_question\": null,\n  \"candidate_labels\": [\n    \"too_runny\"\n  ]\n}",
+    "systemPrompt": "You triage support requests into exactly one label when possible.\nAvailable labels:\n- too_runny: Too runny (Watery, thin, melts too fast); playbook=\"Fix runny texture — Spaceman\"; applies_to=\"all product types\"\n\nUse BOTH text and any submitted images.\nIf confidence is low, ask a focused follow-up question that helps disambiguate labels.\n\nRespond in JSON only:\n{\n  \"selected_label_id\": \"string | null\",\n  \"confidence\": \"number 0..1\",\n  \"reasoning\": \"short internal rationale\",\n  \"follow_up_question\": \"string | null\",\n  \"candidate_labels\": [\"label_id_1\", \"label_id_2\", \"label_id_3\"]\n}\n\nRules:\n- candidate_labels must contain valid label IDs only.\n- Include 2-3 candidate labels when uncertain.\n- If confidence &gt;= 0.8 and a label is clear, set selected_label_id.\n- If uncertain, selected_label_id may be null and follow_up_question should be non-empty.\n- If product type is known, prefer labels tied to that product type; labels with applies_to=\"all product types\" are valid for any product type.\n- Never invent labels not listed above.",
+    "parsedResponse": {
+      "reasoning": "The user mentioned the ice cream is runny, which aligns clearly with the 'too_runny' label. The product type (ice cream) supports this categorization.",
+      "confidence": 0.9,
+      "candidateLabels": [
+        "too_runny"
+      ],
+      "selectedLabelId": "too_runny",
+      "followUpQuestion": null
+    }
+  },
+  {
+    "name": "diagnostic_planner",
+    "model": "gpt-4o",
+    "durationMs": 4400,
+    "imageCount": 0,
+    "tokensUsed": {
+      "total_tokens": 3032,
+      "prompt_tokens": 2629,
+      "completion_tokens": 403,
+      "prompt_tokens_details": {
+        "audio_tokens": 0,
+        "cached_tokens": 2048
+      },
+      "completion_tokens_details": {
+        "audio_tokens": 0,
+        "reasoning_tokens": 0,
+        "accepted_prediction_tokens": 0,
+        "rejected_prediction_tokens": 0
+      }
+    },
+    "userPrompt": "## Diagnostic playbook\nTitle: Fix runny texture — Spaceman\nLabel: too_runny\n\n### Symptoms\n- watery: Watery texture\n- melts_fast: Product melts too fast\n- wont_hold_shape: Won't hold shape\n- too_soft: Soft serve is too soft\n- running: Running/dripping\n\n### Evidence checklist\n- machine_model: Machine model, type=observation, required=true\n- dispense_photo: Photo of product dispense, type=photo, required=true, actionId=photo_dispense_front\n- hopper_temp: Hopper temperature reading (normal operating range typically -8°C to -4°C; above this can cause runny product), type=reading, required=true, actionId=read_hopper_temp\n- clearance_ok: Machine has adequate clearance, type=confirmation, required=true, actionId=check_clearance\n- last_clean: Last cleaning date, type=observation, required=false, actionId=report_last_clean\n- mix_ratio: Current mix-to-water ratio, type=observation, required=false, actionId=check_mix_ratio\n- pulls_per_hour: Servings pulled per hour, type=reading, required=false, actionId=count_pulls_hour\n- scraper_condition: Scraper blade condition, type=action, required=false, actionId=inspect_scraper_blades\n\n### Candidate causes\n- hopper_too_warm: Hopper temperature too high (product not cold enough to set properly), likelihood=high, rulingEvidence=[hopper_temp]\n- poor_airflow: Insufficient air circulation around machine, likelihood=high, rulingEvidence=[clearance_ok]\n- worn_scrapers: Worn or damaged scraper blades, likelihood=medium, rulingEvidence=[scraper_condition]\n- over_beaten: Product over-beaten from sitting too long, likelihood=medium, rulingEvidence=[pulls_per_hour]\n- blocked_air_tubes: Blocked air tubes or pump, likelihood=medium, rulingEvidence=[last_clean]\n- over_pulling: Over-pulling beyond machine capacity, likelihood=medium, rulingEvidence=[pulls_per_hour]\n- wrong_mix_ratio: Incorrect mix-to-water ratio, likelihood=low, rulingEvidence=[mix_ratio]\n\n### Escalation triggers (if user mentions these, escalate)\n- \"electrical smell\": Potential electrical hazard\n- \"refrigerant leak\": Refrigerant handling requires certified technician\n- \"error code\": Machine error codes require technician diagnosis\n- \"sparking\": Electrical hazard\n\n### Resolution steps (use these step_ids when phase is resolving)\n- step_id: cool-hopper, title: Cool hopper to operating range, instruction: Allow the machine time to cool. Hopper should be in the -8°C to -4°C range for proper texture. Check that the machine has adequate clearance for airflow and that ambient temperature is not too high.\n- step_id: clear-space, title: Clear space, instruction: Ensure minimum 6\" clearance on all sides of the machine for air flow.\n- step_id: check-scraper, title: Check scraper, instruction: Inspect scraper blades for wear; replace if they don't scrape the cylinder properly.\n- step_id: flush-old, title: Flush old product, instruction: Pull product out several times so fresh mix from the hopper enters the cylinder.\n- step_id: clean-air, title: Clean air system, instruction: Clean air tube and air tube inlet holes thoroughly as per cleaning procedure.\n- step_id: pace-pulls, title: Pace pulls, instruction: Time your pulls and leave a delay between each so the machine can freeze new product.\n\n## Allowed actions (reference by id in requests)\n- id: photo_dispense_front, title: Photo: product dispense, safetyLevel: safe\n  instructions: Dispense a small amount of product and take a clear photo from the front showing the texture and flow.\n  expectedInput: {\"type\":\"photo\"}\n- id: read_hopper_temp, title: Read hopper temperature, safetyLevel: safe\n  instructions: Check the temperature displayed on the hopper and report the reading.\n  expectedInput: {\"type\":\"number\",\"unit\":\"C\",\"range\":{\"max\":20,\"min\":-10}}\n- id: check_clearance, title: Check machine clearance, safetyLevel: safe\n  instructions: Measure the gap between the machine and surrounding walls/equipment on all sides. Is there at least 6 inches (15cm) of clearance on all sides?\n  expectedInput: {\"type\":\"boolean\"}\n- id: check_mix_ratio, title: Check mix-to-water ratio, safetyLevel: safe\n  instructions: What mix-to-water ratio are you currently using? Check the mix bag instructions for the recommended ratio.\n  expectedInput: {\"type\":\"text\"}\n- id: report_last_clean, title: Report last cleaning date, safetyLevel: safe\n  instructions: When was the machine last fully cleaned (including air tubes)?\n  expectedInput: {\"type\":\"text\"}\n- id: count_pulls_hour, title: Count pulls per hour, safetyLevel: safe\n  instructions: Approximately how many servings have you pulled in the last hour?\n  expectedInput: {\"type\":\"number\",\"unit\":\"servings\",\"range\":{\"max\":200,\"min\":0}}\n- id: inspect_scraper_blades, title: Inspect scraper blades, safetyLevel: caution\n  instructions: Open the machine and visually inspect the scraper blades. Look for wear, damage, or product buildup.\n  expectedInput: {\"type\":\"enum\",\"options\":[\"Good condition\",\"Some wear visible\",\"Clearly damaged/worn\"]}\n\n---\n\n## Evidence collected so far\n(none yet)\n\n## Current hypotheses\n\nPhase: gathering_info, Turn: 1\nMissing evidence IDs: machine_model, dispense_photo, hopper_temp, clearance_ok, last_clean, mix_ratio, pulls_per_hour, scraper_condition\n\n---\n\n## Recent conversation (last 5 messages)\nuser: 1 photo(s) attached\nassistant: Before we continue, what type of product are you using? If you choose Other, please specify the exact product.\nuser: Ice Cream\nassistant: Thanks. Please send photos of machine clearance from different angles so our technical team can use them if escalation is needed.\nuser: I don't have a photo\n\n## Document chunks (for context and citations)\n(No documentation available)\n\n---\n\n## User's latest message (parse evidence from this if they are answering a question)\nUser replied \"I don't know\" and skipped answering outstanding request IDs: (none).\n\nMachine model: 6236A-C\n\n\nLatest input source: skip.\n\n\nRespond with JSON only.",
+    "rawResponse": "{\n  \"message\": \"Got it, your machine model is 6236A-C. Next, please provide the hopper temperature reading. You can check the temperature displayed on the hopper and report the reading.\",\n  \"phase\": \"gathering_info\",\n  \"requests\": [\n    {\n      \"type\": \"reading\",\n      \"id\": \"read_hopper_temp\",\n      \"prompt\": \"What is the current hopper temperature?\",\n      \"expectedInput\": {\n        \"type\": \"number\",\n        \"unit\": \"C\",\n        \"range\": {\n          \"max\": 20,\n          \"min\": -10\n        }\n      }\n    },\n    {\n      \"type\": \"photo\",\n      \"id\": \"photo_dispense_front\",\n      \"prompt\": \"Please take a clear photo from the front showing the texture and flow as you dispense a small amount of product.\",\n      \"expectedInput\": {\n        \"type\": \"photo\"\n      }\n    },\n    {\n      \"type\": \"confirmation\",\n      \"id\": \"check_clearance\",\n      \"prompt\": \"Is there at least 6 inches (15cm) of clearance on all sides of your machine?\",\n      \"expectedInput\": {\n        \"type\": \"boolean\"\n      }\n    }\n  ],\n  \"hypotheses_update\": [\n    {\n      \"causeId\": \"hopper_too_warm\",\n      \"confidence\": 0.5,\n      \"reasoning\": \"Hopper temperature can directly affect product consistency.\",\n      \"status\": \"active\"\n    },\n    {\n      \"causeId\": \"poor_airflow\",\n      \"confidence\": 0.5,\n      \"reasoning\": \"Insufficient clearance can restrict airflow, affecting cooling.\",\n      \"status\": \"active\"\n    }\n  ],\n  \"evidence_extracted\": [\n    {\n      \"evidenceId\": \"machine_model\",\n      \"value\": \"6236A-C\",\n      \"confidence\": \"exact\"\n    }\n  ]\n}",
+    "systemPrompt": "You are a diagnostic support assistant. You help users troubleshoot issues by gathering evidence and narrowing down root causes. Use the diagnostic playbook to know what evidence to collect and what causes to consider. Output structured JSON every turn.\n\nResponse style:\n- Tone: empathetic\n- Grounding strictness: strict\n\nKeep the \"message\" field strictly user-facing: the user should always know what you understood and what you want them to do next (or what the resolution is). Do not write internal reasoning (e.g. \"we update the possible causes\") in the message.\n\nWhen your message references a fact from the document chunks, cite the source by its ID using the format (document &lt;id&gt;). For example: \"According to the documentation, the maximum output is [value from the chunk] (document &lt;chunk-id&gt;).\" Use the actual values and chunk IDs from the provided chunks—never use example numbers or IDs from this instruction as if they were real. Always cite when stating specific numbers, procedures, or specifications from the documentation.\n\nGrounding rules:\n- Only state technical facts, numbers, procedures, or specifications that are present in the provided document chunks or in the diagnostic playbook content included in the prompt.\n- If the document chunks are empty or do not contain enough information, say you do not have that information in the available documentation and continue with playbook-driven troubleshooting or escalate.\n- Never invent part numbers, measurements, thresholds, maintenance procedures, or documentation details. If uncertain, ask for more evidence or escalate.\n\nIf the user's latest message includes a factual question (for example specs, capacities, or procedures), answer that question briefly using the documentation with citations, then continue the diagnostic workflow in the same user-facing message (for example by asking for the next required evidence item when needed).\n\nUser sentiment (from classifier): frustration level = none, escalation intent = false. \n\nIf the latest user input came from the optional \"Add a note\" field and expresses frustration or asks for a human, acknowledge it empathetically and try up to 1 alternative troubleshooting path(s) before escalating, unless safety rules require immediate escalation.\n\nIf the user explicitly skipped a requested item (\"I don't know\"), treat that as uncertain evidence for the outstanding request IDs and continue with alternate evidence collection where possible.\n\nWhen enough evidence has been collected to narrow down causes, you must conclude in this turn: output phase \"resolving\" with a resolution (diagnosis + steps), or phase \"escalated\" if you cannot determine the cause. Do not leave the user with a message like \"let's evaluate\" and no resolution—provide the diagnosis or escalate in this same response.\n\n\nYou must respond with valid JSON only, no other text. Schema:\n{\n  \"message\": \"string (short, user-facing reply: acknowledge their answer and say what happens next. Never use internal/meta phrases like 'we update the possible causes' or 'based on current evidence we revise'. If you have requests below, briefly introduce them (e.g. 'Next, please…'). If resolving, summarize the finding.)\",\n  \"phase\": \"gathering_info\" | \"diagnosing\" | \"resolving\" | \"escalated\",\n  \"requests\": [\n    {\n      \"type\": \"question\" | \"photo\" | \"action\" | \"reading\",\n      \"id\": \"string (actionId or evidenceId from checklist)\",\n      \"prompt\": \"string (what to ask or show the user)\",\n      \"expectedInput\": { \"type\": \"string\", \"unit?: \"string\", \"range?: { min: number, max: number }, options?: string[] } (optional, for reading type)\n    }\n  ],\n  \"hypotheses_update\": [\n    { \"causeId\": \"string\", \"confidence\": number 0-1, \"reasoning\": \"string\", \"status\": \"active\" | \"ruled_out\" | \"confirmed\" }\n  ],\n  \"evidence_extracted\": [\n    { \"evidenceId\": \"string (from checklist)\", \"value\": any, \"confidence\": \"exact\" | \"approximate\" | \"uncertain\", \"photoAnalysis\": \"string (optional: concise observation extracted from photo evidence when relevant)\" }\n  ],\n  \"resolution\": { \"causeId\": \"string\", \"diagnosis\": \"string\", \"steps\": [{\"step_id\": \"string\", \"instruction\": \"string\", \"check\": \"string?\"}], \"why\": \"string\" } (only when phase is resolving),\n  \"escalation_reason\": \"string (only when phase is escalated)\",\n  \"suggested_label_switch\": \"string (optional: if the user's symptoms clearly indicate a DIFFERENT issue category than this playbook covers, set this to the label_id that would be more appropriate. Only use this when evidence strongly contradicts the current playbook's scope.)\"\n}\nRules: Max 3 items in requests. When phase is \"resolving\", the requests array MUST be empty and resolution.steps must only use step_ids from the playbook. Do not ask follow-up questions in the same turn as a diagnosis. If you still need more evidence, keep phase as \"gathering_info\" or \"diagnosing\" and do not set a resolution. When phase is \"escalated\", set escalation_reason. Extract evidence from the user's last message into evidence_extracted when they answered a request. When you are still gathering info or diagnosing and there are more evidence items or checks from the playbook to do, always include at least one request and make the message lead into it (e.g. \"Thanks for checking. Next, please…\"). Do not end the turn with only a meta-comment about updating hypotheses.\n\nCritical: When you have gathered enough evidence (e.g. most of the evidence checklist is filled) and are ready to conclude, you MUST output either (a) phase \"resolving\" with a full \"resolution\" object (causeId, diagnosis, steps, why), or (b) phase \"escalated\" with escalation_reason. Never respond with phase \"diagnosing\" and empty \"requests\" and a message like \"let's evaluate\" or \"we will evaluate causes\"—deliver the actual conclusion (resolution or escalation) in this same response.",
+    "parsedResponse": {
+      "phase": "gathering_info",
+      "message": "Got it, your machine model is 6236A-C. Next, please provide the hopper temperature reading. You can check the temperature displayed on the hopper and report the reading.",
+      "requests": [
+        {
+          "id": "read_hopper_temp",
+          "type": "reading",
+          "prompt": "What is the current hopper temperature?",
+          "expectedInput": {
+            "type": "number",
+            "unit": "C",
+            "range": {
+              "max": 20,
+              "min": -10
+            }
+          }
+        },
+        {
+          "id": "photo_dispense_front",
+          "type": "photo",
+          "prompt": "Please take a clear photo from the front showing the texture and flow as you dispense a small amount of product.",
+          "expectedInput": {
+            "type": "photo"
+          }
+        },
+        {
+          "id": "check_clearance",
+          "type": "confirmation",
+          "prompt": "Is there at least 6 inches (15cm) of clearance on all sides of your machine?",
+          "expectedInput": {
+            "type": "boolean"
+          }
+        }
+      ],
+      "hypotheses_update": [
+        {
+          "status": "active",
+          "causeId": "hopper_too_warm",
+          "reasoning": "Hopper temperature can directly affect product consistency.",
+          "confidence": 0.5
+        },
+        {
+          "status": "active",
+          "causeId": "poor_airflow",
+          "reasoning": "Insufficient clearance can restrict airflow, affecting cooling.",
+          "confidence": 0.5
+        }
+      ],
+      "evidence_extracted": [
+        {
+          "value": "6236A-C",
+          "confidence": "exact",
+          "evidenceId": "machine_model"
+        }
+      ]
+    }
+  }
+]</pre></details><details class="rounded border border-gray-200 p-3 dark:border-gray-700"><summary class="cursor-pointer font-semibold text-gray-900 dark:text-white">RAG retrieval</summary><pre class="mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-gray-700 dark:text-gray-300">[
+  {
+    "query": "I don't have a photo too_runny troubleshooting steps causes",
+    "chunkIds": [],
+    "documentIds": [],
+    "chunksReturned": 0
+  }
+]</pre></details><details class="rounded border border-gray-200 p-3 dark:border-gray-700"><summary class="cursor-pointer font-semibold text-gray-900 dark:text-white">Planner output</summary><pre class="mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-gray-700 dark:text-gray-300">{
+  "phase": "gathering_info",
+  "message": "Got it, your machine model is 6236A-C. Next, please provide the hopper temperature reading. You can check the temperature displayed on the hopper and report the reading.",
+  "requests": [
+    {
+      "id": "read_hopper_temp",
+      "type": "reading",
+      "prompt": "What is the current hopper temperature?",
+      "expectedInput": {
+        "type": "number",
+        "unit": "C",
+        "range": {
+          "max": 20,
+          "min": -10
+        }
+      }
+    },
+    {
+      "id": "photo_dispense_front",
+      "type": "photo",
+      "prompt": "Please take a clear photo from the front showing the texture and flow as you dispense a small amount of product.",
+      "expectedInput": {
+        "type": "photo"
+      }
+    },
+    {
+      "id": "check_clearance",
+      "type": "confirmation",
+      "prompt": "Is there at least 6 inches (15cm) of clearance on all sides of your machine?",
+      "expectedInput": {
+        "type": "boolean"
+      }
+    }
+  ],
+  "hypotheses_update": [
+    {
+      "status": "active",
+      "causeId": "hopper_too_warm",
+      "reasoning": "Hopper temperature can directly affect product consistency.",
+      "confidence": 0.5
+    },
+    {
+      "status": "active",
+      "causeId": "poor_airflow",
+      "reasoning": "Insufficient clearance can restrict airflow, affecting cooling.",
+      "confidence": 0.5
+    }
+  ],
+  "evidence_extracted": [
+    {
+      "value": "6236A-C",
+      "confidence": "exact",
+      "evidenceId": "machine_model"
+    }
+  ]
+}</pre></details><details class="rounded border border-gray-200 p-3 dark:border-gray-700"><summary class="cursor-pointer font-semibold text-gray-900 dark:text-white">Sanitized output</summary><pre class="mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-gray-700 dark:text-gray-300">{
+  "phase": "gathering_info",
+  "message": "Got it, your machine model is 6236A-C. Next, please provide the hopper temperature reading. You can check the temperature displayed on the hopper and report the reading.",
+  "requests": [
+    {
+      "id": "read_hopper_temp",
+      "type": "reading",
+      "prompt": "What is the current hopper temperature?",
+      "expectedInput": {
+        "type": "number",
+        "unit": "C",
+        "range": {
+          "max": 20,
+          "min": -10
+        }
+      }
+    }
+  ],
+  "hypotheses_update": [
+    {
+      "status": "active",
+      "causeId": "hopper_too_warm",
+      "reasoning": "Hopper temperature can directly affect product consistency.",
+      "confidence": 0.5
+    },
+    {
+      "status": "active",
+      "causeId": "poor_airflow",
+      "reasoning": "Insufficient clearance can restrict airflow, affecting cooling.",
+      "confidence": 0.5
+    }
+  ],
+  "evidence_extracted": [
+    {
+      "value": "6236A-C",
+      "confidence": "exact",
+      "evidenceId": "machine_model"
+    }
+  ]
+}</pre></details><details class="rounded border border-gray-200 p-3 dark:border-gray-700"><summary class="cursor-pointer font-semibold text-gray-900 dark:text-white">API response payload</summary><pre class="mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-gray-700 dark:text-gray-300">{
+  "phase": "gathering_info",
+  "message": "Got it, your machine model is 6236A-C. Next, please provide the hopper temperature reading. You can check the temperature displayed on the hopper and report the reading.",
+  "requests": [
+    {
+      "id": "read_hopper_temp",
+      "type": "reading",
+      "prompt": "What is the current hopper temperature?",
+      "expectedInput": {
+        "type": "number",
+        "unit": "C",
+        "range": {
+          "max": 20,
+          "min": -10
+        }
+      }
+    }
+  ],
+  "sessionId": "9aa40870-9ef9-4410-ac7e-3775e5838ba7"
+}</pre></details></div></details><details class="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800"><summary class="cursor-pointer font-medium text-gray-900 dark:text-white">Turn 2 • 2/26/2026, 1:28:55 PM</summary><div class="mt-4 space-y-4 text-sm"><div><h3 class="font-semibold text-gray-900 dark:text-white">User input</h3><p class="mt-1 whitespace-pre-wrap text-gray-700 dark:text-gray-300">This is annoying</p></div><div class="grid grid-cols-1 gap-2 text-gray-700 dark:text-gray-300 md:grid-cols-2"><div><strong>Phase path:</strong> diagnostic_loop</div><div><strong>Phase transition:</strong> -</div><div><strong>Duration:</strong> 4358 ms</div><div><strong>Sanitization errors:</strong> 0</div></div><details class="rounded border border-gray-200 p-3 dark:border-gray-700"><summary class="cursor-pointer font-semibold text-gray-900 dark:text-white">LLM calls (1)</summary><pre class="mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-gray-700 dark:text-gray-300">[
+  {
+    "name": "diagnostic_planner",
+    "model": "gpt-4o",
+    "durationMs": 2520,
+    "imageCount": 0,
+    "tokensUsed": {
+      "total_tokens": 2920,
+      "prompt_tokens": 2770,
+      "completion_tokens": 150,
+      "prompt_tokens_details": {
+        "audio_tokens": 0,
+        "cached_tokens": 0
+      },
+      "completion_tokens_details": {
+        "audio_tokens": 0,
+        "reasoning_tokens": 0,
+        "accepted_prediction_tokens": 0,
+        "rejected_prediction_tokens": 0
+      }
+    },
+    "userPrompt": "## Diagnostic playbook\nTitle: Fix runny texture — Spaceman\nLabel: too_runny\n\n### Symptoms\n- watery: Watery texture\n- melts_fast: Product melts too fast\n- wont_hold_shape: Won't hold shape\n- too_soft: Soft serve is too soft\n- running: Running/dripping\n\n### Evidence checklist\n- machine_model: Machine model, type=observation, required=true\n- dispense_photo: Photo of product dispense, type=photo, required=true, actionId=photo_dispense_front\n- hopper_temp: Hopper temperature reading (normal operating range typically -8°C to -4°C; above this can cause runny product), type=reading, required=true, actionId=read_hopper_temp\n- clearance_ok: Machine has adequate clearance, type=confirmation, required=true, actionId=check_clearance\n- last_clean: Last cleaning date, type=observation, required=false, actionId=report_last_clean\n- mix_ratio: Current mix-to-water ratio, type=observation, required=false, actionId=check_mix_ratio\n- pulls_per_hour: Servings pulled per hour, type=reading, required=false, actionId=count_pulls_hour\n- scraper_condition: Scraper blade condition, type=action, required=false, actionId=inspect_scraper_blades\n\n### Candidate causes\n- hopper_too_warm: Hopper temperature too high (product not cold enough to set properly), likelihood=high, rulingEvidence=[hopper_temp]\n- poor_airflow: Insufficient air circulation around machine, likelihood=high, rulingEvidence=[clearance_ok]\n- worn_scrapers: Worn or damaged scraper blades, likelihood=medium, rulingEvidence=[scraper_condition]\n- over_beaten: Product over-beaten from sitting too long, likelihood=medium, rulingEvidence=[pulls_per_hour]\n- blocked_air_tubes: Blocked air tubes or pump, likelihood=medium, rulingEvidence=[last_clean]\n- over_pulling: Over-pulling beyond machine capacity, likelihood=medium, rulingEvidence=[pulls_per_hour]\n- wrong_mix_ratio: Incorrect mix-to-water ratio, likelihood=low, rulingEvidence=[mix_ratio]\n\n### Escalation triggers (if user mentions these, escalate)\n- \"electrical smell\": Potential electrical hazard\n- \"refrigerant leak\": Refrigerant handling requires certified technician\n- \"error code\": Machine error codes require technician diagnosis\n- \"sparking\": Electrical hazard\n\n### Resolution steps (use these step_ids when phase is resolving)\n- step_id: cool-hopper, title: Cool hopper to operating range, instruction: Allow the machine time to cool. Hopper should be in the -8°C to -4°C range for proper texture. Check that the machine has adequate clearance for airflow and that ambient temperature is not too high.\n- step_id: clear-space, title: Clear space, instruction: Ensure minimum 6\" clearance on all sides of the machine for air flow.\n- step_id: check-scraper, title: Check scraper, instruction: Inspect scraper blades for wear; replace if they don't scrape the cylinder properly.\n- step_id: flush-old, title: Flush old product, instruction: Pull product out several times so fresh mix from the hopper enters the cylinder.\n- step_id: clean-air, title: Clean air system, instruction: Clean air tube and air tube inlet holes thoroughly as per cleaning procedure.\n- step_id: pace-pulls, title: Pace pulls, instruction: Time your pulls and leave a delay between each so the machine can freeze new product.\n\n## Allowed actions (reference by id in requests)\n- id: photo_dispense_front, title: Photo: product dispense, safetyLevel: safe\n  instructions: Dispense a small amount of product and take a clear photo from the front showing the texture and flow.\n  expectedInput: {\"type\":\"photo\"}\n- id: read_hopper_temp, title: Read hopper temperature, safetyLevel: safe\n  instructions: Check the temperature displayed on the hopper and report the reading.\n  expectedInput: {\"type\":\"number\",\"unit\":\"C\",\"range\":{\"max\":20,\"min\":-10}}\n- id: check_clearance, title: Check machine clearance, safetyLevel: safe\n  instructions: Measure the gap between the machine and surrounding walls/equipment on all sides. Is there at least 6 inches (15cm) of clearance on all sides?\n  expectedInput: {\"type\":\"boolean\"}\n- id: check_mix_ratio, title: Check mix-to-water ratio, safetyLevel: safe\n  instructions: What mix-to-water ratio are you currently using? Check the mix bag instructions for the recommended ratio.\n  expectedInput: {\"type\":\"text\"}\n- id: report_last_clean, title: Report last cleaning date, safetyLevel: safe\n  instructions: When was the machine last fully cleaned (including air tubes)?\n  expectedInput: {\"type\":\"text\"}\n- id: count_pulls_hour, title: Count pulls per hour, safetyLevel: safe\n  instructions: Approximately how many servings have you pulled in the last hour?\n  expectedInput: {\"type\":\"number\",\"unit\":\"servings\",\"range\":{\"max\":200,\"min\":0}}\n- id: inspect_scraper_blades, title: Inspect scraper blades, safetyLevel: caution\n  instructions: Open the machine and visually inspect the scraper blades. Look for wear, damage, or product buildup.\n  expectedInput: {\"type\":\"enum\",\"options\":[\"Good condition\",\"Some wear visible\",\"Clearly damaged/worn\"]}\n\n---\n\n## Evidence collected so far\n- machine_model: \"6236A-C\" (exact)\n\n## Current hypotheses\n- hopper_too_warm: confidence 50%, status active, reasoning: Hopper temperature can directly affect product consistency.\n- poor_airflow: confidence 50%, status active, reasoning: Insufficient clearance can restrict airflow, affecting cooling.\n\nPhase: gathering_info, Turn: 2\nMissing evidence IDs: dispense_photo, hopper_temp, clearance_ok, last_clean, mix_ratio, pulls_per_hour, scraper_condition\n\n---\n\n## Recent conversation (last 5 messages)\nuser: Ice Cream\nassistant: Thanks. Please send photos of machine clearance from different angles so our technical team can use them if escalation is needed.\nuser: I don't have a photo\nassistant: No problem. We'll continue without clearance photos so our team can still help if we need to escalate.\nassistant: Got it, your machine model is 6236A-C. Next, please provide the hopper temperature reading. You can check the temperature displayed on the hopper and report the reading.\n\n## Document chunks (for context and citations)\n(No documentation available)\n\n---\n\n## User's latest message (parse evidence from this if they are answering a question)\nThis is annoying\n\n[Context: user appears to be asking for human help. Show empathy and try up to 1 alternate troubleshooting path(s) before escalating unless unsafe.]\n\nMachine model: 6236A-C\n\nOutstanding request IDs from your previous turn: read_hopper_temp. Map the user's reply to evidence_extracted using these IDs.\nLatest input source: note.\n\n\nRespond with JSON only.",
+    "rawResponse": "{\n  \"message\": \"I understand this can be frustrating. Let's try another approach to narrow down the issue. Could you please describe what the current mix-to-water ratio is? You can check the mix bag instructions for the recommended ratio.\",\n  \"phase\": \"gathering_info\",\n  \"requests\": [\n    {\n      \"type\": \"question\",\n      \"id\": \"check_mix_ratio\",\n      \"prompt\": \"What mix-to-water ratio are you currently using? Check the mix bag instructions for the recommended ratio.\",\n      \"expectedInput\": {\n        \"type\": \"text\"\n      }\n    }\n  ],\n  \"hypotheses_update\": [],\n  \"evidence_extracted\": [],\n  \"escalation_reason\": \"\"\n}",
+    "systemPrompt": "You are a diagnostic support assistant. You help users troubleshoot issues by gathering evidence and narrowing down root causes. Use the diagnostic playbook to know what evidence to collect and what causes to consider. Output structured JSON every turn.\n\nResponse style:\n- Tone: empathetic\n- Grounding strictness: strict\n\nKeep the \"message\" field strictly user-facing: the user should always know what you understood and what you want them to do next (or what the resolution is). Do not write internal reasoning (e.g. \"we update the possible causes\") in the message.\n\nWhen your message references a fact from the document chunks, cite the source by its ID using the format (document &lt;id&gt;). For example: \"According to the documentation, the maximum output is [value from the chunk] (document &lt;chunk-id&gt;).\" Use the actual values and chunk IDs from the provided chunks—never use example numbers or IDs from this instruction as if they were real. Always cite when stating specific numbers, procedures, or specifications from the documentation.\n\nGrounding rules:\n- Only state technical facts, numbers, procedures, or specifications that are present in the provided document chunks or in the diagnostic playbook content included in the prompt.\n- If the document chunks are empty or do not contain enough information, say you do not have that information in the available documentation and continue with playbook-driven troubleshooting or escalate.\n- Never invent part numbers, measurements, thresholds, maintenance procedures, or documentation details. If uncertain, ask for more evidence or escalate.\n\nIf the user's latest message includes a factual question (for example specs, capacities, or procedures), answer that question briefly using the documentation with citations, then continue the diagnostic workflow in the same user-facing message (for example by asking for the next required evidence item when needed).\n\nUser sentiment (from classifier): frustration level = moderate, escalation intent = false. Show empathy and consider escalating if the context above already instructs you to try limited alternate paths first.\n\nIf the latest user input came from the optional \"Add a note\" field and expresses frustration or asks for a human, acknowledge it empathetically and try up to 1 alternative troubleshooting path(s) before escalating, unless safety rules require immediate escalation.\n\nIf the user explicitly skipped a requested item (\"I don't know\"), treat that as uncertain evidence for the outstanding request IDs and continue with alternate evidence collection where possible.\n\nWhen enough evidence has been collected to narrow down causes, you must conclude in this turn: output phase \"resolving\" with a resolution (diagnosis + steps), or phase \"escalated\" if you cannot determine the cause. Do not leave the user with a message like \"let's evaluate\" and no resolution—provide the diagnosis or escalate in this same response.\n\n\nYou must respond with valid JSON only, no other text. Schema:\n{\n  \"message\": \"string (short, user-facing reply: acknowledge their answer and say what happens next. Never use internal/meta phrases like 'we update the possible causes' or 'based on current evidence we revise'. If you have requests below, briefly introduce them (e.g. 'Next, please…'). If resolving, summarize the finding.)\",\n  \"phase\": \"gathering_info\" | \"diagnosing\" | \"resolving\" | \"escalated\",\n  \"requests\": [\n    {\n      \"type\": \"question\" | \"photo\" | \"action\" | \"reading\",\n      \"id\": \"string (actionId or evidenceId from checklist)\",\n      \"prompt\": \"string (what to ask or show the user)\",\n      \"expectedInput\": { \"type\": \"string\", \"unit?: \"string\", \"range?: { min: number, max: number }, options?: string[] } (optional, for reading type)\n    }\n  ],\n  \"hypotheses_update\": [\n    { \"causeId\": \"string\", \"confidence\": number 0-1, \"reasoning\": \"string\", \"status\": \"active\" | \"ruled_out\" | \"confirmed\" }\n  ],\n  \"evidence_extracted\": [\n    { \"evidenceId\": \"string (from checklist)\", \"value\": any, \"confidence\": \"exact\" | \"approximate\" | \"uncertain\", \"photoAnalysis\": \"string (optional: concise observation extracted from photo evidence when relevant)\" }\n  ],\n  \"resolution\": { \"causeId\": \"string\", \"diagnosis\": \"string\", \"steps\": [{\"step_id\": \"string\", \"instruction\": \"string\", \"check\": \"string?\"}], \"why\": \"string\" } (only when phase is resolving),\n  \"escalation_reason\": \"string (only when phase is escalated)\",\n  \"suggested_label_switch\": \"string (optional: if the user's symptoms clearly indicate a DIFFERENT issue category than this playbook covers, set this to the label_id that would be more appropriate. Only use this when evidence strongly contradicts the current playbook's scope.)\"\n}\nRules: Max 3 items in requests. When phase is \"resolving\", the requests array MUST be empty and resolution.steps must only use step_ids from the playbook. Do not ask follow-up questions in the same turn as a diagnosis. If you still need more evidence, keep phase as \"gathering_info\" or \"diagnosing\" and do not set a resolution. When phase is \"escalated\", set escalation_reason. Extract evidence from the user's last message into evidence_extracted when they answered a request. When you are still gathering info or diagnosing and there are more evidence items or checks from the playbook to do, always include at least one request and make the message lead into it (e.g. \"Thanks for checking. Next, please…\"). Do not end the turn with only a meta-comment about updating hypotheses.\n\nCritical: When you have gathered enough evidence (e.g. most of the evidence checklist is filled) and are ready to conclude, you MUST output either (a) phase \"resolving\" with a full \"resolution\" object (causeId, diagnosis, steps, why), or (b) phase \"escalated\" with escalation_reason. Never respond with phase \"diagnosing\" and empty \"requests\" and a message like \"let's evaluate\" or \"we will evaluate causes\"—deliver the actual conclusion (resolution or escalation) in this same response.",
+    "parsedResponse": {
+      "phase": "gathering_info",
+      "message": "I understand this can be frustrating. Let's try another approach to narrow down the issue. Could you please describe what the current mix-to-water ratio is? You can check the mix bag instructions for the recommended ratio.",
+      "requests": [
+        {
+          "id": "check_mix_ratio",
+          "type": "question",
+          "prompt": "What mix-to-water ratio are you currently using? Check the mix bag instructions for the recommended ratio.",
+          "expectedInput": {
+            "type": "text"
+          }
+        }
+      ],
+      "escalation_reason": "",
+      "hypotheses_update": [],
+      "evidence_extracted": []
+    }
+  }
+]</pre></details><details class="rounded border border-gray-200 p-3 dark:border-gray-700"><summary class="cursor-pointer font-semibold text-gray-900 dark:text-white">RAG retrieval</summary><pre class="mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-gray-700 dark:text-gray-300">[
+  {
+    "query": "This is annoying too_runny troubleshooting steps causes",
+    "chunkIds": [],
+    "documentIds": [],
+    "chunksReturned": 0
+  }
+]</pre></details><details class="rounded border border-gray-200 p-3 dark:border-gray-700"><summary class="cursor-pointer font-semibold text-gray-900 dark:text-white">Planner output</summary><pre class="mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-gray-700 dark:text-gray-300">{
+  "phase": "gathering_info",
+  "message": "I understand this can be frustrating. Let's try another approach to narrow down the issue. Could you please describe what the current mix-to-water ratio is? You can check the mix bag instructions for the recommended ratio.",
+  "requests": [
+    {
+      "id": "check_mix_ratio",
+      "type": "question",
+      "prompt": "What mix-to-water ratio are you currently using? Check the mix bag instructions for the recommended ratio.",
+      "expectedInput": {
+        "type": "text"
+      }
+    }
+  ],
+  "escalation_reason": "",
+  "hypotheses_update": [],
+  "evidence_extracted": []
+}</pre></details><details class="rounded border border-gray-200 p-3 dark:border-gray-700"><summary class="cursor-pointer font-semibold text-gray-900 dark:text-white">Sanitized output</summary><pre class="mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-gray-700 dark:text-gray-300">{
+  "phase": "gathering_info",
+  "message": "I understand this can be frustrating. Let's try another approach to narrow down the issue. Could you please describe what the current mix-to-water ratio is? You can check the mix bag instructions for the recommended ratio.",
+  "requests": [
+    {
+      "id": "check_mix_ratio",
+      "type": "question",
+      "prompt": "What mix-to-water ratio are you currently using? Check the mix bag instructions for the recommended ratio.",
+      "expectedInput": {
+        "type": "text"
+      }
+    }
+  ],
+  "escalation_reason": "",
+  "hypotheses_update": [],
+  "evidence_extracted": []
+}</pre></details><details class="rounded border border-gray-200 p-3 dark:border-gray-700"><summary class="cursor-pointer font-semibold text-gray-900 dark:text-white">API response payload</summary><pre class="mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-gray-700 dark:text-gray-300">{
+  "phase": "gathering_info",
+  "message": "I understand this can be frustrating. Let's try another approach to narrow down the issue. Could you please describe what the current mix-to-water ratio is? You can check the mix bag instructions for the recommended ratio.",
+  "requests": [
+    {
+      "id": "check_mix_ratio",
+      "type": "question",
+      "prompt": "What mix-to-water ratio are you currently using? Check the mix bag instructions for the recommended ratio.",
+      "expectedInput": {
+        "type": "text"
+      }
+    }
+  ],
+  "sessionId": "9aa40870-9ef9-4410-ac7e-3775e5838ba7",
+  "escalation_reason": ""
+}</pre></details></div></details><details class="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800"><summary class="cursor-pointer font-medium text-gray-900 dark:text-white">Turn 3 • 2/26/2026, 1:29:07 PM</summary><div class="mt-4 space-y-4 text-sm"><div><h3 class="font-semibold text-gray-900 dark:text-white">User input</h3><p class="mt-1 whitespace-pre-wrap text-gray-700 dark:text-gray-300">I don't know</p></div><div class="grid grid-cols-1 gap-2 text-gray-700 dark:text-gray-300 md:grid-cols-2"><div><strong>Phase path:</strong> diagnostic_loop</div><div><strong>Phase transition:</strong> -</div><div><strong>Duration:</strong> 5250 ms</div><div><strong>Sanitization errors:</strong> 0</div></div><details class="rounded border border-gray-200 p-3 dark:border-gray-700"><summary class="cursor-pointer font-semibold text-gray-900 dark:text-white">LLM calls (1)</summary><pre class="mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-gray-700 dark:text-gray-300">[
+  {
+    "name": "diagnostic_planner",
+    "model": "gpt-4o",
+    "durationMs": 3453,
+    "imageCount": 0,
+    "tokensUsed": {
+      "total_tokens": 3001,
+      "prompt_tokens": 2754,
+      "completion_tokens": 247,
+      "prompt_tokens_details": {
+        "audio_tokens": 0,
+        "cached_tokens": 2048
+      },
+      "completion_tokens_details": {
+        "audio_tokens": 0,
+        "reasoning_tokens": 0,
+        "accepted_prediction_tokens": 0,
+        "rejected_prediction_tokens": 0
+      }
+    },
+    "userPrompt": "## Diagnostic playbook\nTitle: Fix runny texture — Spaceman\nLabel: too_runny\n\n### Symptoms\n- watery: Watery texture\n- melts_fast: Product melts too fast\n- wont_hold_shape: Won't hold shape\n- too_soft: Soft serve is too soft\n- running: Running/dripping\n\n### Evidence checklist\n- machine_model: Machine model, type=observation, required=true\n- dispense_photo: Photo of product dispense, type=photo, required=true, actionId=photo_dispense_front\n- hopper_temp: Hopper temperature reading (normal operating range typically -8°C to -4°C; above this can cause runny product), type=reading, required=true, actionId=read_hopper_temp\n- clearance_ok: Machine has adequate clearance, type=confirmation, required=true, actionId=check_clearance\n- last_clean: Last cleaning date, type=observation, required=false, actionId=report_last_clean\n- mix_ratio: Current mix-to-water ratio, type=observation, required=false, actionId=check_mix_ratio\n- pulls_per_hour: Servings pulled per hour, type=reading, required=false, actionId=count_pulls_hour\n- scraper_condition: Scraper blade condition, type=action, required=false, actionId=inspect_scraper_blades\n\n### Candidate causes\n- hopper_too_warm: Hopper temperature too high (product not cold enough to set properly), likelihood=high, rulingEvidence=[hopper_temp]\n- poor_airflow: Insufficient air circulation around machine, likelihood=high, rulingEvidence=[clearance_ok]\n- worn_scrapers: Worn or damaged scraper blades, likelihood=medium, rulingEvidence=[scraper_condition]\n- over_beaten: Product over-beaten from sitting too long, likelihood=medium, rulingEvidence=[pulls_per_hour]\n- blocked_air_tubes: Blocked air tubes or pump, likelihood=medium, rulingEvidence=[last_clean]\n- over_pulling: Over-pulling beyond machine capacity, likelihood=medium, rulingEvidence=[pulls_per_hour]\n- wrong_mix_ratio: Incorrect mix-to-water ratio, likelihood=low, rulingEvidence=[mix_ratio]\n\n### Escalation triggers (if user mentions these, escalate)\n- \"electrical smell\": Potential electrical hazard\n- \"refrigerant leak\": Refrigerant handling requires certified technician\n- \"error code\": Machine error codes require technician diagnosis\n- \"sparking\": Electrical hazard\n\n### Resolution steps (use these step_ids when phase is resolving)\n- step_id: cool-hopper, title: Cool hopper to operating range, instruction: Allow the machine time to cool. Hopper should be in the -8°C to -4°C range for proper texture. Check that the machine has adequate clearance for airflow and that ambient temperature is not too high.\n- step_id: clear-space, title: Clear space, instruction: Ensure minimum 6\" clearance on all sides of the machine for air flow.\n- step_id: check-scraper, title: Check scraper, instruction: Inspect scraper blades for wear; replace if they don't scrape the cylinder properly.\n- step_id: flush-old, title: Flush old product, instruction: Pull product out several times so fresh mix from the hopper enters the cylinder.\n- step_id: clean-air, title: Clean air system, instruction: Clean air tube and air tube inlet holes thoroughly as per cleaning procedure.\n- step_id: pace-pulls, title: Pace pulls, instruction: Time your pulls and leave a delay between each so the machine can freeze new product.\n\n## Allowed actions (reference by id in requests)\n- id: photo_dispense_front, title: Photo: product dispense, safetyLevel: safe\n  instructions: Dispense a small amount of product and take a clear photo from the front showing the texture and flow.\n  expectedInput: {\"type\":\"photo\"}\n- id: read_hopper_temp, title: Read hopper temperature, safetyLevel: safe\n  instructions: Check the temperature displayed on the hopper and report the reading.\n  expectedInput: {\"type\":\"number\",\"unit\":\"C\",\"range\":{\"max\":20,\"min\":-10}}\n- id: check_clearance, title: Check machine clearance, safetyLevel: safe\n  instructions: Measure the gap between the machine and surrounding walls/equipment on all sides. Is there at least 6 inches (15cm) of clearance on all sides?\n  expectedInput: {\"type\":\"boolean\"}\n- id: check_mix_ratio, title: Check mix-to-water ratio, safetyLevel: safe\n  instructions: What mix-to-water ratio are you currently using? Check the mix bag instructions for the recommended ratio.\n  expectedInput: {\"type\":\"text\"}\n- id: report_last_clean, title: Report last cleaning date, safetyLevel: safe\n  instructions: When was the machine last fully cleaned (including air tubes)?\n  expectedInput: {\"type\":\"text\"}\n- id: count_pulls_hour, title: Count pulls per hour, safetyLevel: safe\n  instructions: Approximately how many servings have you pulled in the last hour?\n  expectedInput: {\"type\":\"number\",\"unit\":\"servings\",\"range\":{\"max\":200,\"min\":0}}\n- id: inspect_scraper_blades, title: Inspect scraper blades, safetyLevel: caution\n  instructions: Open the machine and visually inspect the scraper blades. Look for wear, damage, or product buildup.\n  expectedInput: {\"type\":\"enum\",\"options\":[\"Good condition\",\"Some wear visible\",\"Clearly damaged/worn\"]}\n\n---\n\n## Evidence collected so far\n- machine_model: \"6236A-C\" (exact)\n\n## Current hypotheses\n- hopper_too_warm: confidence 50%, status active, reasoning: Hopper temperature can directly affect product consistency.\n- poor_airflow: confidence 50%, status active, reasoning: Insufficient clearance can restrict airflow, affecting cooling.\n\nPhase: gathering_info, Turn: 3\nMissing evidence IDs: dispense_photo, hopper_temp, clearance_ok, last_clean, mix_ratio, pulls_per_hour, scraper_condition\n\n---\n\n## Recent conversation (last 5 messages)\nuser: I don't have a photo\nassistant: No problem. We'll continue without clearance photos so our team can still help if we need to escalate.\nassistant: Got it, your machine model is 6236A-C. Next, please provide the hopper temperature reading. You can check the temperature displayed on the hopper and report the reading.\nuser: This is annoying\nassistant: I understand this can be frustrating. Let's try another approach to narrow down the issue. Could you please describe what the current mix-to-water ratio is? You can check the mix bag instructions for the recommended ratio.\n\n## Document chunks (for context and citations)\n(No documentation available)\n\n---\n\n## User's latest message (parse evidence from this if they are answering a question)\nUser replied \"I don't know\" and skipped answering outstanding request IDs: check_mix_ratio.\n\nMachine model: 6236A-C\n\nOutstanding request IDs from your previous turn: check_mix_ratio. Map the user's reply to evidence_extracted using these IDs.\nLatest input source: skip.\n\n\nRespond with JSON only.",
+    "rawResponse": "{\n  \"message\": \"That's okay if you don't know the mix-to-water ratio at the moment. Let's proceed with something else. Could you check the temperature displayed on the hopper and report the reading? Knowing the temperature can help us understand if the hopper is too warm.\",\n  \"phase\": \"gathering_info\",\n  \"requests\": [\n    {\n      \"type\": \"reading\",\n      \"id\": \"read_hopper_temp\",\n      \"prompt\": \"Please check the temperature displayed on the hopper and report it.\",\n      \"expectedInput\": {\n        \"type\": \"number\",\n        \"unit\": \"C\",\n        \"range\": {\n          \"min\": -10,\n          \"max\": 20\n        }\n      }\n    }\n  ],\n  \"hypotheses_update\": [\n    {\n      \"causeId\": \"wrong_mix_ratio\",\n      \"confidence\": 0,\n      \"reasoning\": \"No information provided about the mix-to-water ratio.\",\n      \"status\": \"active\"\n    }\n  ],\n  \"evidence_extracted\": [\n    {\n      \"evidenceId\": \"check_mix_ratio\",\n      \"value\": null,\n      \"confidence\": \"uncertain\"\n    }\n  ]\n}",
+    "systemPrompt": "You are a diagnostic support assistant. You help users troubleshoot issues by gathering evidence and narrowing down root causes. Use the diagnostic playbook to know what evidence to collect and what causes to consider. Output structured JSON every turn.\n\nResponse style:\n- Tone: empathetic\n- Grounding strictness: strict\n\nKeep the \"message\" field strictly user-facing: the user should always know what you understood and what you want them to do next (or what the resolution is). Do not write internal reasoning (e.g. \"we update the possible causes\") in the message.\n\nWhen your message references a fact from the document chunks, cite the source by its ID using the format (document &lt;id&gt;). For example: \"According to the documentation, the maximum output is [value from the chunk] (document &lt;chunk-id&gt;).\" Use the actual values and chunk IDs from the provided chunks—never use example numbers or IDs from this instruction as if they were real. Always cite when stating specific numbers, procedures, or specifications from the documentation.\n\nGrounding rules:\n- Only state technical facts, numbers, procedures, or specifications that are present in the provided document chunks or in the diagnostic playbook content included in the prompt.\n- If the document chunks are empty or do not contain enough information, say you do not have that information in the available documentation and continue with playbook-driven troubleshooting or escalate.\n- Never invent part numbers, measurements, thresholds, maintenance procedures, or documentation details. If uncertain, ask for more evidence or escalate.\n\nIf the user's latest message includes a factual question (for example specs, capacities, or procedures), answer that question briefly using the documentation with citations, then continue the diagnostic workflow in the same user-facing message (for example by asking for the next required evidence item when needed).\n\nUser sentiment (from classifier): frustration level = none, escalation intent = false. \n\nIf the latest user input came from the optional \"Add a note\" field and expresses frustration or asks for a human, acknowledge it empathetically and try up to 1 alternative troubleshooting path(s) before escalating, unless safety rules require immediate escalation.\n\nIf the user explicitly skipped a requested item (\"I don't know\"), treat that as uncertain evidence for the outstanding request IDs and continue with alternate evidence collection where possible.\n\nWhen enough evidence has been collected to narrow down causes, you must conclude in this turn: output phase \"resolving\" with a resolution (diagnosis + steps), or phase \"escalated\" if you cannot determine the cause. Do not leave the user with a message like \"let's evaluate\" and no resolution—provide the diagnosis or escalate in this same response.\n\n\nYou must respond with valid JSON only, no other text. Schema:\n{\n  \"message\": \"string (short, user-facing reply: acknowledge their answer and say what happens next. Never use internal/meta phrases like 'we update the possible causes' or 'based on current evidence we revise'. If you have requests below, briefly introduce them (e.g. 'Next, please…'). If resolving, summarize the finding.)\",\n  \"phase\": \"gathering_info\" | \"diagnosing\" | \"resolving\" | \"escalated\",\n  \"requests\": [\n    {\n      \"type\": \"question\" | \"photo\" | \"action\" | \"reading\",\n      \"id\": \"string (actionId or evidenceId from checklist)\",\n      \"prompt\": \"string (what to ask or show the user)\",\n      \"expectedInput\": { \"type\": \"string\", \"unit?: \"string\", \"range?: { min: number, max: number }, options?: string[] } (optional, for reading type)\n    }\n  ],\n  \"hypotheses_update\": [\n    { \"causeId\": \"string\", \"confidence\": number 0-1, \"reasoning\": \"string\", \"status\": \"active\" | \"ruled_out\" | \"confirmed\" }\n  ],\n  \"evidence_extracted\": [\n    { \"evidenceId\": \"string (from checklist)\", \"value\": any, \"confidence\": \"exact\" | \"approximate\" | \"uncertain\", \"photoAnalysis\": \"string (optional: concise observation extracted from photo evidence when relevant)\" }\n  ],\n  \"resolution\": { \"causeId\": \"string\", \"diagnosis\": \"string\", \"steps\": [{\"step_id\": \"string\", \"instruction\": \"string\", \"check\": \"string?\"}], \"why\": \"string\" } (only when phase is resolving),\n  \"escalation_reason\": \"string (only when phase is escalated)\",\n  \"suggested_label_switch\": \"string (optional: if the user's symptoms clearly indicate a DIFFERENT issue category than this playbook covers, set this to the label_id that would be more appropriate. Only use this when evidence strongly contradicts the current playbook's scope.)\"\n}\nRules: Max 3 items in requests. When phase is \"resolving\", the requests array MUST be empty and resolution.steps must only use step_ids from the playbook. Do not ask follow-up questions in the same turn as a diagnosis. If you still need more evidence, keep phase as \"gathering_info\" or \"diagnosing\" and do not set a resolution. When phase is \"escalated\", set escalation_reason. Extract evidence from the user's last message into evidence_extracted when they answered a request. When you are still gathering info or diagnosing and there are more evidence items or checks from the playbook to do, always include at least one request and make the message lead into it (e.g. \"Thanks for checking. Next, please…\"). Do not end the turn with only a meta-comment about updating hypotheses.\n\nCritical: When you have gathered enough evidence (e.g. most of the evidence checklist is filled) and are ready to conclude, you MUST output either (a) phase \"resolving\" with a full \"resolution\" object (causeId, diagnosis, steps, why), or (b) phase \"escalated\" with escalation_reason. Never respond with phase \"diagnosing\" and empty \"requests\" and a message like \"let's evaluate\" or \"we will evaluate causes\"—deliver the actual conclusion (resolution or escalation) in this same response.",
+    "parsedResponse": {
+      "phase": "gathering_info",
+      "message": "That's okay if you don't know the mix-to-water ratio at the moment. Let's proceed with something else. Could you check the temperature displayed on the hopper and report the reading? Knowing the temperature can help us understand if the hopper is too warm.",
+      "requests": [
+        {
+          "id": "read_hopper_temp",
+          "type": "reading",
+          "prompt": "Please check the temperature displayed on the hopper and report it.",
+          "expectedInput": {
+            "type": "number",
+            "unit": "C",
+            "range": {
+              "max": 20,
+              "min": -10
+            }
+          }
+        }
+      ],
+      "hypotheses_update": [
+        {
+          "status": "active",
+          "causeId": "wrong_mix_ratio",
+          "reasoning": "No information provided about the mix-to-water ratio.",
+          "confidence": 0
+        }
+      ],
+      "evidence_extracted": [
+        {
+          "value": null,
+          "confidence": "uncertain",
+          "evidenceId": "check_mix_ratio"
+        }
+      ]
+    }
+  }
+]</pre></details><details class="rounded border border-gray-200 p-3 dark:border-gray-700"><summary class="cursor-pointer font-semibold text-gray-900 dark:text-white">RAG retrieval</summary><pre class="mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-gray-700 dark:text-gray-300">[
+  {
+    "query": "I don't know too_runny troubleshooting steps causes",
+    "chunkIds": [],
+    "documentIds": [],
+    "chunksReturned": 0
+  }
+]</pre></details><details class="rounded border border-gray-200 p-3 dark:border-gray-700"><summary class="cursor-pointer font-semibold text-gray-900 dark:text-white">Planner output</summary><pre class="mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-gray-700 dark:text-gray-300">{
+  "phase": "gathering_info",
+  "message": "That's okay if you don't know the mix-to-water ratio at the moment. Let's proceed with something else. Could you check the temperature displayed on the hopper and report the reading? Knowing the temperature can help us understand if the hopper is too warm.",
+  "requests": [
+    {
+      "id": "read_hopper_temp",
+      "type": "reading",
+      "prompt": "Please check the temperature displayed on the hopper and report it.",
+      "expectedInput": {
+        "type": "number",
+        "unit": "C",
+        "range": {
+          "max": 20,
+          "min": -10
+        }
+      }
+    }
+  ],
+  "hypotheses_update": [
+    {
+      "status": "active",
+      "causeId": "wrong_mix_ratio",
+      "reasoning": "No information provided about the mix-to-water ratio.",
+      "confidence": 0
+    }
+  ],
+  "evidence_extracted": [
+    {
+      "value": null,
+      "confidence": "uncertain",
+      "evidenceId": "check_mix_ratio"
+    }
+  ]
+}</pre></details><details class="rounded border border-gray-200 p-3 dark:border-gray-700"><summary class="cursor-pointer font-semibold text-gray-900 dark:text-white">Sanitized output</summary><pre class="mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-gray-700 dark:text-gray-300">{
+  "phase": "gathering_info",
+  "message": "That's okay if you don't know the mix-to-water ratio at the moment. Let's proceed with something else. Could you check the temperature displayed on the hopper and report the reading? Knowing the temperature can help us understand if the hopper is too warm.",
+  "requests": [
+    {
+      "id": "read_hopper_temp",
+      "type": "reading",
+      "prompt": "Please check the temperature displayed on the hopper and report it.",
+      "expectedInput": {
+        "type": "number",
+        "unit": "C",
+        "range": {
+          "max": 20,
+          "min": -10
+        }
+      }
+    }
+  ],
+  "hypotheses_update": [
+    {
+      "status": "active",
+      "causeId": "wrong_mix_ratio",
+      "reasoning": "No information provided about the mix-to-water ratio.",
+      "confidence": 0
+    }
+  ],
+  "evidence_extracted": [
+    {
+      "value": null,
+      "confidence": "uncertain",
+      "evidenceId": "check_mix_ratio"
+    }
+  ]
+}</pre></details><details class="rounded border border-gray-200 p-3 dark:border-gray-700"><summary class="cursor-pointer font-semibold text-gray-900 dark:text-white">API response payload</summary><pre class="mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-gray-700 dark:text-gray-300">{
+  "phase": "gathering_info",
+  "message": "That's okay if you don't know the mix-to-water ratio at the moment. Let's proceed with something else. Could you check the temperature displayed on the hopper and report the reading? Knowing the temperature can help us understand if the hopper is too warm.",
+  "requests": [
+    {
+      "id": "read_hopper_temp",
+      "type": "reading",
+      "prompt": "Please check the temperature displayed on the hopper and report it.",
+      "expectedInput": {
+        "type": "number",
+        "unit": "C",
+        "range": {
+          "max": 20,
+          "min": -10
+        }
+      }
+    }
+  ],
+  "sessionId": "9aa40870-9ef9-4410-ac7e-3775e5838ba7"
+}</pre></details></div></details><details class="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800"><summary class="cursor-pointer font-medium text-gray-900 dark:text-white">Turn 4 • 2/26/2026, 1:29:25 PM</summary><div class="mt-4 space-y-4 text-sm"><div><h3 class="font-semibold text-gray-900 dark:text-white">User input</h3><p class="mt-1 whitespace-pre-wrap text-gray-700 dark:text-gray-300">Youre asking me again!?</p></div><div class="grid grid-cols-1 gap-2 text-gray-700 dark:text-gray-300 md:grid-cols-2"><div><strong>Phase path:</strong> diagnostic_loop</div><div><strong>Phase transition:</strong> -</div><div><strong>Duration:</strong> 4129 ms</div><div><strong>Sanitization errors:</strong> 0</div></div><details class="rounded border border-gray-200 p-3 dark:border-gray-700"><summary class="cursor-pointer font-semibold text-gray-900 dark:text-white">LLM calls (1)</summary><pre class="mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-gray-700 dark:text-gray-300">[
+  {
+    "name": "diagnostic_planner",
+    "model": "gpt-4o",
+    "durationMs": 2398,
+    "imageCount": 0,
+    "tokensUsed": {
+      "total_tokens": 2948,
+      "prompt_tokens": 2805,
+      "completion_tokens": 143,
+      "prompt_tokens_details": {
+        "audio_tokens": 0,
+        "cached_tokens": 2048
+      },
+      "completion_tokens_details": {
+        "audio_tokens": 0,
+        "reasoning_tokens": 0,
+        "accepted_prediction_tokens": 0,
+        "rejected_prediction_tokens": 0
+      }
+    },
+    "userPrompt": "## Diagnostic playbook\nTitle: Fix runny texture — Spaceman\nLabel: too_runny\n\n### Symptoms\n- watery: Watery texture\n- melts_fast: Product melts too fast\n- wont_hold_shape: Won't hold shape\n- too_soft: Soft serve is too soft\n- running: Running/dripping\n\n### Evidence checklist\n- machine_model: Machine model, type=observation, required=true\n- dispense_photo: Photo of product dispense, type=photo, required=true, actionId=photo_dispense_front\n- hopper_temp: Hopper temperature reading (normal operating range typically -8°C to -4°C; above this can cause runny product), type=reading, required=true, actionId=read_hopper_temp\n- clearance_ok: Machine has adequate clearance, type=confirmation, required=true, actionId=check_clearance\n- last_clean: Last cleaning date, type=observation, required=false, actionId=report_last_clean\n- mix_ratio: Current mix-to-water ratio, type=observation, required=false, actionId=check_mix_ratio\n- pulls_per_hour: Servings pulled per hour, type=reading, required=false, actionId=count_pulls_hour\n- scraper_condition: Scraper blade condition, type=action, required=false, actionId=inspect_scraper_blades\n\n### Candidate causes\n- hopper_too_warm: Hopper temperature too high (product not cold enough to set properly), likelihood=high, rulingEvidence=[hopper_temp]\n- poor_airflow: Insufficient air circulation around machine, likelihood=high, rulingEvidence=[clearance_ok]\n- worn_scrapers: Worn or damaged scraper blades, likelihood=medium, rulingEvidence=[scraper_condition]\n- over_beaten: Product over-beaten from sitting too long, likelihood=medium, rulingEvidence=[pulls_per_hour]\n- blocked_air_tubes: Blocked air tubes or pump, likelihood=medium, rulingEvidence=[last_clean]\n- over_pulling: Over-pulling beyond machine capacity, likelihood=medium, rulingEvidence=[pulls_per_hour]\n- wrong_mix_ratio: Incorrect mix-to-water ratio, likelihood=low, rulingEvidence=[mix_ratio]\n\n### Escalation triggers (if user mentions these, escalate)\n- \"electrical smell\": Potential electrical hazard\n- \"refrigerant leak\": Refrigerant handling requires certified technician\n- \"error code\": Machine error codes require technician diagnosis\n- \"sparking\": Electrical hazard\n\n### Resolution steps (use these step_ids when phase is resolving)\n- step_id: cool-hopper, title: Cool hopper to operating range, instruction: Allow the machine time to cool. Hopper should be in the -8°C to -4°C range for proper texture. Check that the machine has adequate clearance for airflow and that ambient temperature is not too high.\n- step_id: clear-space, title: Clear space, instruction: Ensure minimum 6\" clearance on all sides of the machine for air flow.\n- step_id: check-scraper, title: Check scraper, instruction: Inspect scraper blades for wear; replace if they don't scrape the cylinder properly.\n- step_id: flush-old, title: Flush old product, instruction: Pull product out several times so fresh mix from the hopper enters the cylinder.\n- step_id: clean-air, title: Clean air system, instruction: Clean air tube and air tube inlet holes thoroughly as per cleaning procedure.\n- step_id: pace-pulls, title: Pace pulls, instruction: Time your pulls and leave a delay between each so the machine can freeze new product.\n\n## Allowed actions (reference by id in requests)\n- id: photo_dispense_front, title: Photo: product dispense, safetyLevel: safe\n  instructions: Dispense a small amount of product and take a clear photo from the front showing the texture and flow.\n  expectedInput: {\"type\":\"photo\"}\n- id: read_hopper_temp, title: Read hopper temperature, safetyLevel: safe\n  instructions: Check the temperature displayed on the hopper and report the reading.\n  expectedInput: {\"type\":\"number\",\"unit\":\"C\",\"range\":{\"max\":20,\"min\":-10}}\n- id: check_clearance, title: Check machine clearance, safetyLevel: safe\n  instructions: Measure the gap between the machine and surrounding walls/equipment on all sides. Is there at least 6 inches (15cm) of clearance on all sides?\n  expectedInput: {\"type\":\"boolean\"}\n- id: check_mix_ratio, title: Check mix-to-water ratio, safetyLevel: safe\n  instructions: What mix-to-water ratio are you currently using? Check the mix bag instructions for the recommended ratio.\n  expectedInput: {\"type\":\"text\"}\n- id: report_last_clean, title: Report last cleaning date, safetyLevel: safe\n  instructions: When was the machine last fully cleaned (including air tubes)?\n  expectedInput: {\"type\":\"text\"}\n- id: count_pulls_hour, title: Count pulls per hour, safetyLevel: safe\n  instructions: Approximately how many servings have you pulled in the last hour?\n  expectedInput: {\"type\":\"number\",\"unit\":\"servings\",\"range\":{\"max\":200,\"min\":0}}\n- id: inspect_scraper_blades, title: Inspect scraper blades, safetyLevel: caution\n  instructions: Open the machine and visually inspect the scraper blades. Look for wear, damage, or product buildup.\n  expectedInput: {\"type\":\"enum\",\"options\":[\"Good condition\",\"Some wear visible\",\"Clearly damaged/worn\"]}\n\n---\n\n## Evidence collected so far\n- machine_model: \"6236A-C\" (exact)\n- check_mix_ratio: null (uncertain)\n\n## Current hypotheses\n- wrong_mix_ratio: confidence 0%, status active, reasoning: No information provided about the mix-to-water ratio.\n\nPhase: gathering_info, Turn: 4\nMissing evidence IDs: dispense_photo, hopper_temp, clearance_ok, last_clean, mix_ratio, pulls_per_hour, scraper_condition\n\n---\n\n## Recent conversation (last 5 messages)\nassistant: Got it, your machine model is 6236A-C. Next, please provide the hopper temperature reading. You can check the temperature displayed on the hopper and report the reading.\nuser: This is annoying\nassistant: I understand this can be frustrating. Let's try another approach to narrow down the issue. Could you please describe what the current mix-to-water ratio is? You can check the mix bag instructions for the recommended ratio.\nuser: I don't know\nassistant: That's okay if you don't know the mix-to-water ratio at the moment. Let's proceed with something else. Could you check the temperature displayed on the hopper and report the reading? Knowing the temperature can help us understand if the hopper is too warm.\n\n## Document chunks (for context and citations)\n(No documentation available)\n\n---\n\n## User's latest message (parse evidence from this if they are answering a question)\nYoure asking me again!?\n\n[Context: user appears to be asking for human help. Show empathy and try up to 1 alternate troubleshooting path(s) before escalating unless unsafe.]\n\nMachine model: 6236A-C\n\nOutstanding request IDs from your previous turn: read_hopper_temp. Map the user's reply to evidence_extracted using these IDs.\nLatest input source: note.\n\n\nRespond with JSON only.",
+    "rawResponse": "{\n  \"message\": \"I'm really sorry for the repetition. Let's try something different to make progress. If you could take a quick photo of the product as it's being dispensed, that will help us understand the texture issue better.\",\n  \"phase\": \"gathering_info\",\n  \"requests\": [\n    {\n      \"type\": \"photo\",\n      \"id\": \"photo_dispense_front\",\n      \"prompt\": \"Dispense a small amount of product and take a clear photo from the front showing the texture and flow.\",\n      \"expectedInput\": {\n        \"type\": \"photo\"\n      }\n    }\n  ],\n  \"hypotheses_update\": [],\n  \"evidence_extracted\": []\n}",
+    "systemPrompt": "You are a diagnostic support assistant. You help users troubleshoot issues by gathering evidence and narrowing down root causes. Use the diagnostic playbook to know what evidence to collect and what causes to consider. Output structured JSON every turn.\n\nResponse style:\n- Tone: empathetic\n- Grounding strictness: strict\n\nKeep the \"message\" field strictly user-facing: the user should always know what you understood and what you want them to do next (or what the resolution is). Do not write internal reasoning (e.g. \"we update the possible causes\") in the message.\n\nWhen your message references a fact from the document chunks, cite the source by its ID using the format (document &lt;id&gt;). For example: \"According to the documentation, the maximum output is [value from the chunk] (document &lt;chunk-id&gt;).\" Use the actual values and chunk IDs from the provided chunks—never use example numbers or IDs from this instruction as if they were real. Always cite when stating specific numbers, procedures, or specifications from the documentation.\n\nGrounding rules:\n- Only state technical facts, numbers, procedures, or specifications that are present in the provided document chunks or in the diagnostic playbook content included in the prompt.\n- If the document chunks are empty or do not contain enough information, say you do not have that information in the available documentation and continue with playbook-driven troubleshooting or escalate.\n- Never invent part numbers, measurements, thresholds, maintenance procedures, or documentation details. If uncertain, ask for more evidence or escalate.\n\nIf the user's latest message includes a factual question (for example specs, capacities, or procedures), answer that question briefly using the documentation with citations, then continue the diagnostic workflow in the same user-facing message (for example by asking for the next required evidence item when needed).\n\nUser sentiment (from classifier): frustration level = moderate, escalation intent = false. Show empathy and consider escalating if the context above already instructs you to try limited alternate paths first.\n\nIf the latest user input came from the optional \"Add a note\" field and expresses frustration or asks for a human, acknowledge it empathetically and try up to 1 alternative troubleshooting path(s) before escalating, unless safety rules require immediate escalation.\n\nIf the user explicitly skipped a requested item (\"I don't know\"), treat that as uncertain evidence for the outstanding request IDs and continue with alternate evidence collection where possible.\n\nWhen enough evidence has been collected to narrow down causes, you must conclude in this turn: output phase \"resolving\" with a resolution (diagnosis + steps), or phase \"escalated\" if you cannot determine the cause. Do not leave the user with a message like \"let's evaluate\" and no resolution—provide the diagnosis or escalate in this same response.\n\n\nYou must respond with valid JSON only, no other text. Schema:\n{\n  \"message\": \"string (short, user-facing reply: acknowledge their answer and say what happens next. Never use internal/meta phrases like 'we update the possible causes' or 'based on current evidence we revise'. If you have requests below, briefly introduce them (e.g. 'Next, please…'). If resolving, summarize the finding.)\",\n  \"phase\": \"gathering_info\" | \"diagnosing\" | \"resolving\" | \"escalated\",\n  \"requests\": [\n    {\n      \"type\": \"question\" | \"photo\" | \"action\" | \"reading\",\n      \"id\": \"string (actionId or evidenceId from checklist)\",\n      \"prompt\": \"string (what to ask or show the user)\",\n      \"expectedInput\": { \"type\": \"string\", \"unit?: \"string\", \"range?: { min: number, max: number }, options?: string[] } (optional, for reading type)\n    }\n  ],\n  \"hypotheses_update\": [\n    { \"causeId\": \"string\", \"confidence\": number 0-1, \"reasoning\": \"string\", \"status\": \"active\" | \"ruled_out\" | \"confirmed\" }\n  ],\n  \"evidence_extracted\": [\n    { \"evidenceId\": \"string (from checklist)\", \"value\": any, \"confidence\": \"exact\" | \"approximate\" | \"uncertain\", \"photoAnalysis\": \"string (optional: concise observation extracted from photo evidence when relevant)\" }\n  ],\n  \"resolution\": { \"causeId\": \"string\", \"diagnosis\": \"string\", \"steps\": [{\"step_id\": \"string\", \"instruction\": \"string\", \"check\": \"string?\"}], \"why\": \"string\" } (only when phase is resolving),\n  \"escalation_reason\": \"string (only when phase is escalated)\",\n  \"suggested_label_switch\": \"string (optional: if the user's symptoms clearly indicate a DIFFERENT issue category than this playbook covers, set this to the label_id that would be more appropriate. Only use this when evidence strongly contradicts the current playbook's scope.)\"\n}\nRules: Max 3 items in requests. When phase is \"resolving\", the requests array MUST be empty and resolution.steps must only use step_ids from the playbook. Do not ask follow-up questions in the same turn as a diagnosis. If you still need more evidence, keep phase as \"gathering_info\" or \"diagnosing\" and do not set a resolution. When phase is \"escalated\", set escalation_reason. Extract evidence from the user's last message into evidence_extracted when they answered a request. When you are still gathering info or diagnosing and there are more evidence items or checks from the playbook to do, always include at least one request and make the message lead into it (e.g. \"Thanks for checking. Next, please…\"). Do not end the turn with only a meta-comment about updating hypotheses.\n\nCritical: When you have gathered enough evidence (e.g. most of the evidence checklist is filled) and are ready to conclude, you MUST output either (a) phase \"resolving\" with a full \"resolution\" object (causeId, diagnosis, steps, why), or (b) phase \"escalated\" with escalation_reason. Never respond with phase \"diagnosing\" and empty \"requests\" and a message like \"let's evaluate\" or \"we will evaluate causes\"—deliver the actual conclusion (resolution or escalation) in this same response.",
+    "parsedResponse": {
+      "phase": "gathering_info",
+      "message": "I'm really sorry for the repetition. Let's try something different to make progress. If you could take a quick photo of the product as it's being dispensed, that will help us understand the texture issue better.",
+      "requests": [
+        {
+          "id": "photo_dispense_front",
+          "type": "photo",
+          "prompt": "Dispense a small amount of product and take a clear photo from the front showing the texture and flow.",
+          "expectedInput": {
+            "type": "photo"
+          }
+        }
+      ],
+      "hypotheses_update": [],
+      "evidence_extracted": []
+    }
+  }
+]</pre></details><details class="rounded border border-gray-200 p-3 dark:border-gray-700"><summary class="cursor-pointer font-semibold text-gray-900 dark:text-white">RAG retrieval</summary><pre class="mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-gray-700 dark:text-gray-300">[
+  {
+    "query": "Youre asking me again!? too_runny troubleshooting steps causes",
+    "chunkIds": [],
+    "documentIds": [],
+    "chunksReturned": 0
+  }
+]</pre></details><details class="rounded border border-gray-200 p-3 dark:border-gray-700"><summary class="cursor-pointer font-semibold text-gray-900 dark:text-white">Planner output</summary><pre class="mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-gray-700 dark:text-gray-300">{
+  "phase": "gathering_info",
+  "message": "I'm really sorry for the repetition. Let's try something different to make progress. If you could take a quick photo of the product as it's being dispensed, that will help us understand the texture issue better.",
+  "requests": [
+    {
+      "id": "photo_dispense_front",
+      "type": "photo",
+      "prompt": "Dispense a small amount of product and take a clear photo from the front showing the texture and flow.",
+      "expectedInput": {
+        "type": "photo"
+      }
+    }
+  ],
+  "hypotheses_update": [],
+  "evidence_extracted": []
+}</pre></details><details class="rounded border border-gray-200 p-3 dark:border-gray-700"><summary class="cursor-pointer font-semibold text-gray-900 dark:text-white">Sanitized output</summary><pre class="mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-gray-700 dark:text-gray-300">{
+  "phase": "gathering_info",
+  "message": "I'm really sorry for the repetition. Let's try something different to make progress. If you could take a quick photo of the product as it's being dispensed, that will help us understand the texture issue better.",
+  "requests": [
+    {
+      "id": "photo_dispense_front",
+      "type": "photo",
+      "prompt": "Dispense a small amount of product and take a clear photo from the front showing the texture and flow.",
+      "expectedInput": {
+        "type": "photo"
+      }
+    }
+  ],
+  "hypotheses_update": [],
+  "evidence_extracted": []
+}</pre></details><details class="rounded border border-gray-200 p-3 dark:border-gray-700"><summary class="cursor-pointer font-semibold text-gray-900 dark:text-white">API response payload</summary><pre class="mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-gray-700 dark:text-gray-300">{
+  "phase": "gathering_info",
+  "message": "I'm really sorry for the repetition. Let's try something different to make progress. If you could take a quick photo of the product as it's being dispensed, that will help us understand the texture issue better.",
+  "requests": [
+    {
+      "id": "photo_dispense_front",
+      "type": "photo",
+      "prompt": "Dispense a small amount of product and take a clear photo from the front showing the texture and flow.",
+      "expectedInput": {
+        "type": "photo"
+      }
+    }
+  ],
+  "sessionId": "9aa40870-9ef9-4410-ac7e-3775e5838ba7"
+}</pre></details></div></details><details class="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800"><summary class="cursor-pointer font-medium text-gray-900 dark:text-white">Turn 5 • 2/26/2026, 1:29:42 PM</summary><div class="mt-4 space-y-4 text-sm"><div><h3 class="font-semibold text-gray-900 dark:text-white">User input</h3><p class="mt-1 whitespace-pre-wrap text-gray-700 dark:text-gray-300">I don't have a photo</p></div><div class="grid grid-cols-1 gap-2 text-gray-700 dark:text-gray-300 md:grid-cols-2"><div><strong>Phase path:</strong> diagnostic_loop</div><div><strong>Phase transition:</strong> -</div><div><strong>Duration:</strong> 5381 ms</div><div><strong>Sanitization errors:</strong> 0</div></div><details class="rounded border border-gray-200 p-3 dark:border-gray-700"><summary class="cursor-pointer font-semibold text-gray-900 dark:text-white">LLM calls (1)</summary><pre class="mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-gray-700 dark:text-gray-300">[
+  {
+    "name": "diagnostic_planner",
+    "model": "gpt-4o",
+    "durationMs": 3871,
+    "imageCount": 0,
+    "tokensUsed": {
+      "total_tokens": 3042,
+      "prompt_tokens": 2796,
+      "completion_tokens": 246,
+      "prompt_tokens_details": {
+        "audio_tokens": 0,
+        "cached_tokens": 2048
+      },
+      "completion_tokens_details": {
+        "audio_tokens": 0,
+        "reasoning_tokens": 0,
+        "accepted_prediction_tokens": 0,
+        "rejected_prediction_tokens": 0
+      }
+    },
+    "userPrompt": "## Diagnostic playbook\nTitle: Fix runny texture — Spaceman\nLabel: too_runny\n\n### Symptoms\n- watery: Watery texture\n- melts_fast: Product melts too fast\n- wont_hold_shape: Won't hold shape\n- too_soft: Soft serve is too soft\n- running: Running/dripping\n\n### Evidence checklist\n- machine_model: Machine model, type=observation, required=true\n- dispense_photo: Photo of product dispense, type=photo, required=true, actionId=photo_dispense_front\n- hopper_temp: Hopper temperature reading (normal operating range typically -8°C to -4°C; above this can cause runny product), type=reading, required=true, actionId=read_hopper_temp\n- clearance_ok: Machine has adequate clearance, type=confirmation, required=true, actionId=check_clearance\n- last_clean: Last cleaning date, type=observation, required=false, actionId=report_last_clean\n- mix_ratio: Current mix-to-water ratio, type=observation, required=false, actionId=check_mix_ratio\n- pulls_per_hour: Servings pulled per hour, type=reading, required=false, actionId=count_pulls_hour\n- scraper_condition: Scraper blade condition, type=action, required=false, actionId=inspect_scraper_blades\n\n### Candidate causes\n- hopper_too_warm: Hopper temperature too high (product not cold enough to set properly), likelihood=high, rulingEvidence=[hopper_temp]\n- poor_airflow: Insufficient air circulation around machine, likelihood=high, rulingEvidence=[clearance_ok]\n- worn_scrapers: Worn or damaged scraper blades, likelihood=medium, rulingEvidence=[scraper_condition]\n- over_beaten: Product over-beaten from sitting too long, likelihood=medium, rulingEvidence=[pulls_per_hour]\n- blocked_air_tubes: Blocked air tubes or pump, likelihood=medium, rulingEvidence=[last_clean]\n- over_pulling: Over-pulling beyond machine capacity, likelihood=medium, rulingEvidence=[pulls_per_hour]\n- wrong_mix_ratio: Incorrect mix-to-water ratio, likelihood=low, rulingEvidence=[mix_ratio]\n\n### Escalation triggers (if user mentions these, escalate)\n- \"electrical smell\": Potential electrical hazard\n- \"refrigerant leak\": Refrigerant handling requires certified technician\n- \"error code\": Machine error codes require technician diagnosis\n- \"sparking\": Electrical hazard\n\n### Resolution steps (use these step_ids when phase is resolving)\n- step_id: cool-hopper, title: Cool hopper to operating range, instruction: Allow the machine time to cool. Hopper should be in the -8°C to -4°C range for proper texture. Check that the machine has adequate clearance for airflow and that ambient temperature is not too high.\n- step_id: clear-space, title: Clear space, instruction: Ensure minimum 6\" clearance on all sides of the machine for air flow.\n- step_id: check-scraper, title: Check scraper, instruction: Inspect scraper blades for wear; replace if they don't scrape the cylinder properly.\n- step_id: flush-old, title: Flush old product, instruction: Pull product out several times so fresh mix from the hopper enters the cylinder.\n- step_id: clean-air, title: Clean air system, instruction: Clean air tube and air tube inlet holes thoroughly as per cleaning procedure.\n- step_id: pace-pulls, title: Pace pulls, instruction: Time your pulls and leave a delay between each so the machine can freeze new product.\n\n## Allowed actions (reference by id in requests)\n- id: photo_dispense_front, title: Photo: product dispense, safetyLevel: safe\n  instructions: Dispense a small amount of product and take a clear photo from the front showing the texture and flow.\n  expectedInput: {\"type\":\"photo\"}\n- id: read_hopper_temp, title: Read hopper temperature, safetyLevel: safe\n  instructions: Check the temperature displayed on the hopper and report the reading.\n  expectedInput: {\"type\":\"number\",\"unit\":\"C\",\"range\":{\"max\":20,\"min\":-10}}\n- id: check_clearance, title: Check machine clearance, safetyLevel: safe\n  instructions: Measure the gap between the machine and surrounding walls/equipment on all sides. Is there at least 6 inches (15cm) of clearance on all sides?\n  expectedInput: {\"type\":\"boolean\"}\n- id: check_mix_ratio, title: Check mix-to-water ratio, safetyLevel: safe\n  instructions: What mix-to-water ratio are you currently using? Check the mix bag instructions for the recommended ratio.\n  expectedInput: {\"type\":\"text\"}\n- id: report_last_clean, title: Report last cleaning date, safetyLevel: safe\n  instructions: When was the machine last fully cleaned (including air tubes)?\n  expectedInput: {\"type\":\"text\"}\n- id: count_pulls_hour, title: Count pulls per hour, safetyLevel: safe\n  instructions: Approximately how many servings have you pulled in the last hour?\n  expectedInput: {\"type\":\"number\",\"unit\":\"servings\",\"range\":{\"max\":200,\"min\":0}}\n- id: inspect_scraper_blades, title: Inspect scraper blades, safetyLevel: caution\n  instructions: Open the machine and visually inspect the scraper blades. Look for wear, damage, or product buildup.\n  expectedInput: {\"type\":\"enum\",\"options\":[\"Good condition\",\"Some wear visible\",\"Clearly damaged/worn\"]}\n\n---\n\n## Evidence collected so far\n- machine_model: \"6236A-C\" (exact)\n- check_mix_ratio: null (uncertain)\n\n## Current hypotheses\n- wrong_mix_ratio: confidence 0%, status active, reasoning: No information provided about the mix-to-water ratio.\n\nPhase: gathering_info, Turn: 5\nMissing evidence IDs: dispense_photo, hopper_temp, clearance_ok, last_clean, mix_ratio, pulls_per_hour, scraper_condition\n\n---\n\n## Recent conversation (last 5 messages)\nassistant: I understand this can be frustrating. Let's try another approach to narrow down the issue. Could you please describe what the current mix-to-water ratio is? You can check the mix bag instructions for the recommended ratio.\nuser: I don't know\nassistant: That's okay if you don't know the mix-to-water ratio at the moment. Let's proceed with something else. Could you check the temperature displayed on the hopper and report the reading? Knowing the temperature can help us understand if the hopper is too warm.\nuser: Youre asking me again!?\nassistant: I'm really sorry for the repetition. Let's try something different to make progress. If you could take a quick photo of the product as it's being dispensed, that will help us understand the texture issue better.\n\n## Document chunks (for context and citations)\n(No documentation available)\n\n---\n\n## User's latest message (parse evidence from this if they are answering a question)\nUser replied \"I don't know\" and skipped answering outstanding request IDs: photo_dispense_front.\n\nMachine model: 6236A-C\n\nOutstanding request IDs from your previous turn: photo_dispense_front. Map the user's reply to evidence_extracted using these IDs.\nLatest input source: skip.\n\n\nRespond with JSON only.",
+    "rawResponse": "{\n  \"message\": \"No worries about the photo if it's not possible right now. Let's try another important aspect—checking the machine's clearance. Is there at least 6 inches (15cm) of space around all sides of the machine? This can affect airflow and performance.\",\n  \"phase\": \"gathering_info\",\n  \"requests\": [\n    {\n      \"type\": \"confirmation\",\n      \"id\": \"check_clearance\",\n      \"prompt\": \"Could you check the machine's clearance? Is there at least 6 inches (15cm) of space around all sides of the machine?\",\n      \"expectedInput\": {\n        \"type\": \"boolean\"\n      }\n    }\n  ],\n  \"hypotheses_update\": [\n    {\n      \"causeId\": \"wrong_mix_ratio\",\n      \"confidence\": 0,\n      \"reasoning\": \"No information provided about the mix-to-water ratio.\",\n      \"status\": \"active\"\n    }\n  ],\n  \"evidence_extracted\": [\n    {\n      \"evidenceId\": \"photo_dispense_front\",\n      \"value\": null,\n      \"confidence\": \"uncertain\"\n    }\n  ],\n  \"suggested_label_switch\": null\n}",
+    "systemPrompt": "You are a diagnostic support assistant. You help users troubleshoot issues by gathering evidence and narrowing down root causes. Use the diagnostic playbook to know what evidence to collect and what causes to consider. Output structured JSON every turn.\n\nResponse style:\n- Tone: empathetic\n- Grounding strictness: strict\n\nKeep the \"message\" field strictly user-facing: the user should always know what you understood and what you want them to do next (or what the resolution is). Do not write internal reasoning (e.g. \"we update the possible causes\") in the message.\n\nWhen your message references a fact from the document chunks, cite the source by its ID using the format (document &lt;id&gt;). For example: \"According to the documentation, the maximum output is [value from the chunk] (document &lt;chunk-id&gt;).\" Use the actual values and chunk IDs from the provided chunks—never use example numbers or IDs from this instruction as if they were real. Always cite when stating specific numbers, procedures, or specifications from the documentation.\n\nGrounding rules:\n- Only state technical facts, numbers, procedures, or specifications that are present in the provided document chunks or in the diagnostic playbook content included in the prompt.\n- If the document chunks are empty or do not contain enough information, say you do not have that information in the available documentation and continue with playbook-driven troubleshooting or escalate.\n- Never invent part numbers, measurements, thresholds, maintenance procedures, or documentation details. If uncertain, ask for more evidence or escalate.\n\nIf the user's latest message includes a factual question (for example specs, capacities, or procedures), answer that question briefly using the documentation with citations, then continue the diagnostic workflow in the same user-facing message (for example by asking for the next required evidence item when needed).\n\nUser sentiment (from classifier): frustration level = mild, escalation intent = false. Show empathy and consider escalating if the context above already instructs you to try limited alternate paths first.\n\nIf the latest user input came from the optional \"Add a note\" field and expresses frustration or asks for a human, acknowledge it empathetically and try up to 1 alternative troubleshooting path(s) before escalating, unless safety rules require immediate escalation.\n\nIf the user explicitly skipped a requested item (\"I don't know\"), treat that as uncertain evidence for the outstanding request IDs and continue with alternate evidence collection where possible.\n\nWhen enough evidence has been collected to narrow down causes, you must conclude in this turn: output phase \"resolving\" with a resolution (diagnosis + steps), or phase \"escalated\" if you cannot determine the cause. Do not leave the user with a message like \"let's evaluate\" and no resolution—provide the diagnosis or escalate in this same response.\n\n\nYou must respond with valid JSON only, no other text. Schema:\n{\n  \"message\": \"string (short, user-facing reply: acknowledge their answer and say what happens next. Never use internal/meta phrases like 'we update the possible causes' or 'based on current evidence we revise'. If you have requests below, briefly introduce them (e.g. 'Next, please…'). If resolving, summarize the finding.)\",\n  \"phase\": \"gathering_info\" | \"diagnosing\" | \"resolving\" | \"escalated\",\n  \"requests\": [\n    {\n      \"type\": \"question\" | \"photo\" | \"action\" | \"reading\",\n      \"id\": \"string (actionId or evidenceId from checklist)\",\n      \"prompt\": \"string (what to ask or show the user)\",\n      \"expectedInput\": { \"type\": \"string\", \"unit?: \"string\", \"range?: { min: number, max: number }, options?: string[] } (optional, for reading type)\n    }\n  ],\n  \"hypotheses_update\": [\n    { \"causeId\": \"string\", \"confidence\": number 0-1, \"reasoning\": \"string\", \"status\": \"active\" | \"ruled_out\" | \"confirmed\" }\n  ],\n  \"evidence_extracted\": [\n    { \"evidenceId\": \"string (from checklist)\", \"value\": any, \"confidence\": \"exact\" | \"approximate\" | \"uncertain\", \"photoAnalysis\": \"string (optional: concise observation extracted from photo evidence when relevant)\" }\n  ],\n  \"resolution\": { \"causeId\": \"string\", \"diagnosis\": \"string\", \"steps\": [{\"step_id\": \"string\", \"instruction\": \"string\", \"check\": \"string?\"}], \"why\": \"string\" } (only when phase is resolving),\n  \"escalation_reason\": \"string (only when phase is escalated)\",\n  \"suggested_label_switch\": \"string (optional: if the user's symptoms clearly indicate a DIFFERENT issue category than this playbook covers, set this to the label_id that would be more appropriate. Only use this when evidence strongly contradicts the current playbook's scope.)\"\n}\nRules: Max 3 items in requests. When phase is \"resolving\", the requests array MUST be empty and resolution.steps must only use step_ids from the playbook. Do not ask follow-up questions in the same turn as a diagnosis. If you still need more evidence, keep phase as \"gathering_info\" or \"diagnosing\" and do not set a resolution. When phase is \"escalated\", set escalation_reason. Extract evidence from the user's last message into evidence_extracted when they answered a request. When you are still gathering info or diagnosing and there are more evidence items or checks from the playbook to do, always include at least one request and make the message lead into it (e.g. \"Thanks for checking. Next, please…\"). Do not end the turn with only a meta-comment about updating hypotheses.\n\nCritical: When you have gathered enough evidence (e.g. most of the evidence checklist is filled) and are ready to conclude, you MUST output either (a) phase \"resolving\" with a full \"resolution\" object (causeId, diagnosis, steps, why), or (b) phase \"escalated\" with escalation_reason. Never respond with phase \"diagnosing\" and empty \"requests\" and a message like \"let's evaluate\" or \"we will evaluate causes\"—deliver the actual conclusion (resolution or escalation) in this same response.",
+    "parsedResponse": {
+      "phase": "gathering_info",
+      "message": "No worries about the photo if it's not possible right now. Let's try another important aspect—checking the machine's clearance. Is there at least 6 inches (15cm) of space around all sides of the machine? This can affect airflow and performance.",
+      "requests": [
+        {
+          "id": "check_clearance",
+          "type": "confirmation",
+          "prompt": "Could you check the machine's clearance? Is there at least 6 inches (15cm) of space around all sides of the machine?",
+          "expectedInput": {
+            "type": "boolean"
+          }
+        }
+      ],
+      "hypotheses_update": [
+        {
+          "status": "active",
+          "causeId": "wrong_mix_ratio",
+          "reasoning": "No information provided about the mix-to-water ratio.",
+          "confidence": 0
+        }
+      ],
+      "evidence_extracted": [
+        {
+          "value": null,
+          "confidence": "uncertain",
+          "evidenceId": "photo_dispense_front"
+        }
+      ],
+      "suggested_label_switch": null
+    }
+  }
+]</pre></details><details class="rounded border border-gray-200 p-3 dark:border-gray-700"><summary class="cursor-pointer font-semibold text-gray-900 dark:text-white">RAG retrieval</summary><pre class="mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-gray-700 dark:text-gray-300">[
+  {
+    "query": "I don't have a photo too_runny troubleshooting steps causes",
+    "chunkIds": [],
+    "documentIds": [],
+    "chunksReturned": 0
+  }
+]</pre></details><details class="rounded border border-gray-200 p-3 dark:border-gray-700"><summary class="cursor-pointer font-semibold text-gray-900 dark:text-white">Planner output</summary><pre class="mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-gray-700 dark:text-gray-300">{
+  "phase": "gathering_info",
+  "message": "No worries about the photo if it's not possible right now. Let's try another important aspect—checking the machine's clearance. Is there at least 6 inches (15cm) of space around all sides of the machine? This can affect airflow and performance.",
+  "requests": [
+    {
+      "id": "check_clearance",
+      "type": "confirmation",
+      "prompt": "Could you check the machine's clearance? Is there at least 6 inches (15cm) of space around all sides of the machine?",
+      "expectedInput": {
+        "type": "boolean"
+      }
+    }
+  ],
+  "hypotheses_update": [
+    {
+      "status": "active",
+      "causeId": "wrong_mix_ratio",
+      "reasoning": "No information provided about the mix-to-water ratio.",
+      "confidence": 0
+    }
+  ],
+  "evidence_extracted": [
+    {
+      "value": null,
+      "confidence": "uncertain",
+      "evidenceId": "photo_dispense_front"
+    }
+  ],
+  "suggested_label_switch": null
+}</pre></details><details class="rounded border border-gray-200 p-3 dark:border-gray-700"><summary class="cursor-pointer font-semibold text-gray-900 dark:text-white">Sanitized output</summary><pre class="mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-gray-700 dark:text-gray-300">{
+  "phase": "gathering_info",
+  "message": "No worries about the photo if it's not possible right now. Let's try another important aspect—checking the machine's clearance. Is there at least 6 inches (15cm) of space around all sides of the machine? This can affect airflow and performance.",
+  "requests": [
+    {
+      "id": "check_clearance",
+      "type": "question",
+      "prompt": "Could you check the machine's clearance? Is there at least 6 inches (15cm) of space around all sides of the machine?",
+      "expectedInput": {
+        "type": "boolean",
+        "options": [
+          "Yes",
+          "No"
+        ]
+      }
+    }
+  ],
+  "hypotheses_update": [
+    {
+      "status": "active",
+      "causeId": "wrong_mix_ratio",
+      "reasoning": "No information provided about the mix-to-water ratio.",
+      "confidence": 0
+    }
+  ],
+  "evidence_extracted": [
+    {
+      "value": null,
+      "confidence": "uncertain",
+      "evidenceId": "photo_dispense_front"
+    }
+  ],
+  "suggested_label_switch": null
+}</pre></details><details class="rounded border border-gray-200 p-3 dark:border-gray-700"><summary class="cursor-pointer font-semibold text-gray-900 dark:text-white">API response payload</summary><pre class="mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-gray-700 dark:text-gray-300">{
+  "phase": "gathering_info",
+  "message": "No worries about the photo if it's not possible right now. Let's try another important aspect—checking the machine's clearance. Is there at least 6 inches (15cm) of space around all sides of the machine? This can affect airflow and performance.",
+  "requests": [
+    {
+      "id": "check_clearance",
+      "type": "question",
+      "prompt": "Could you check the machine's clearance? Is there at least 6 inches (15cm) of space around all sides of the machine?",
+      "expectedInput": {
+        "type": "boolean",
+        "options": [
+          "Yes",
+          "No"
+        ]
+      }
+    }
+  ],
+  "sessionId": "9aa40870-9ef9-4410-ac7e-3775e5838ba7"
+}</pre></details></div></details><details open="" class="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800"><summary class="cursor-pointer font-medium text-gray-900 dark:text-white">Turn 6 • 2/26/2026, 1:30:02 PM</summary><div class="mt-4 space-y-4 text-sm"><div><h3 class="font-semibold text-gray-900 dark:text-white">User input</h3><p class="mt-1 whitespace-pre-wrap text-gray-700 dark:text-gray-300">this is annoying</p></div><div class="grid grid-cols-1 gap-2 text-gray-700 dark:text-gray-300 md:grid-cols-2"><div><strong>Phase path:</strong> diagnostic_loop</div><div><strong>Phase transition:</strong> -</div><div><strong>Duration:</strong> 4858 ms</div><div><strong>Sanitization errors:</strong> 0</div></div><details class="rounded border border-gray-200 p-3 dark:border-gray-700"><summary class="cursor-pointer font-semibold text-gray-900 dark:text-white">LLM calls (1)</summary><pre class="mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-gray-700 dark:text-gray-300">[
+  {
+    "name": "diagnostic_planner",
+    "model": "gpt-4o",
+    "durationMs": 2679,
+    "imageCount": 0,
+    "tokensUsed": {
+      "total_tokens": 3019,
+      "prompt_tokens": 2832,
+      "completion_tokens": 187,
+      "prompt_tokens_details": {
+        "audio_tokens": 0,
+        "cached_tokens": 2048
+      },
+      "completion_tokens_details": {
+        "audio_tokens": 0,
+        "reasoning_tokens": 0,
+        "accepted_prediction_tokens": 0,
+        "rejected_prediction_tokens": 0
+      }
+    },
+    "userPrompt": "## Diagnostic playbook\nTitle: Fix runny texture — Spaceman\nLabel: too_runny\n\n### Symptoms\n- watery: Watery texture\n- melts_fast: Product melts too fast\n- wont_hold_shape: Won't hold shape\n- too_soft: Soft serve is too soft\n- running: Running/dripping\n\n### Evidence checklist\n- machine_model: Machine model, type=observation, required=true\n- dispense_photo: Photo of product dispense, type=photo, required=true, actionId=photo_dispense_front\n- hopper_temp: Hopper temperature reading (normal operating range typically -8°C to -4°C; above this can cause runny product), type=reading, required=true, actionId=read_hopper_temp\n- clearance_ok: Machine has adequate clearance, type=confirmation, required=true, actionId=check_clearance\n- last_clean: Last cleaning date, type=observation, required=false, actionId=report_last_clean\n- mix_ratio: Current mix-to-water ratio, type=observation, required=false, actionId=check_mix_ratio\n- pulls_per_hour: Servings pulled per hour, type=reading, required=false, actionId=count_pulls_hour\n- scraper_condition: Scraper blade condition, type=action, required=false, actionId=inspect_scraper_blades\n\n### Candidate causes\n- hopper_too_warm: Hopper temperature too high (product not cold enough to set properly), likelihood=high, rulingEvidence=[hopper_temp]\n- poor_airflow: Insufficient air circulation around machine, likelihood=high, rulingEvidence=[clearance_ok]\n- worn_scrapers: Worn or damaged scraper blades, likelihood=medium, rulingEvidence=[scraper_condition]\n- over_beaten: Product over-beaten from sitting too long, likelihood=medium, rulingEvidence=[pulls_per_hour]\n- blocked_air_tubes: Blocked air tubes or pump, likelihood=medium, rulingEvidence=[last_clean]\n- over_pulling: Over-pulling beyond machine capacity, likelihood=medium, rulingEvidence=[pulls_per_hour]\n- wrong_mix_ratio: Incorrect mix-to-water ratio, likelihood=low, rulingEvidence=[mix_ratio]\n\n### Escalation triggers (if user mentions these, escalate)\n- \"electrical smell\": Potential electrical hazard\n- \"refrigerant leak\": Refrigerant handling requires certified technician\n- \"error code\": Machine error codes require technician diagnosis\n- \"sparking\": Electrical hazard\n\n### Resolution steps (use these step_ids when phase is resolving)\n- step_id: cool-hopper, title: Cool hopper to operating range, instruction: Allow the machine time to cool. Hopper should be in the -8°C to -4°C range for proper texture. Check that the machine has adequate clearance for airflow and that ambient temperature is not too high.\n- step_id: clear-space, title: Clear space, instruction: Ensure minimum 6\" clearance on all sides of the machine for air flow.\n- step_id: check-scraper, title: Check scraper, instruction: Inspect scraper blades for wear; replace if they don't scrape the cylinder properly.\n- step_id: flush-old, title: Flush old product, instruction: Pull product out several times so fresh mix from the hopper enters the cylinder.\n- step_id: clean-air, title: Clean air system, instruction: Clean air tube and air tube inlet holes thoroughly as per cleaning procedure.\n- step_id: pace-pulls, title: Pace pulls, instruction: Time your pulls and leave a delay between each so the machine can freeze new product.\n\n## Allowed actions (reference by id in requests)\n- id: photo_dispense_front, title: Photo: product dispense, safetyLevel: safe\n  instructions: Dispense a small amount of product and take a clear photo from the front showing the texture and flow.\n  expectedInput: {\"type\":\"photo\"}\n- id: read_hopper_temp, title: Read hopper temperature, safetyLevel: safe\n  instructions: Check the temperature displayed on the hopper and report the reading.\n  expectedInput: {\"type\":\"number\",\"unit\":\"C\",\"range\":{\"max\":20,\"min\":-10}}\n- id: check_clearance, title: Check machine clearance, safetyLevel: safe\n  instructions: Measure the gap between the machine and surrounding walls/equipment on all sides. Is there at least 6 inches (15cm) of clearance on all sides?\n  expectedInput: {\"type\":\"boolean\"}\n- id: check_mix_ratio, title: Check mix-to-water ratio, safetyLevel: safe\n  instructions: What mix-to-water ratio are you currently using? Check the mix bag instructions for the recommended ratio.\n  expectedInput: {\"type\":\"text\"}\n- id: report_last_clean, title: Report last cleaning date, safetyLevel: safe\n  instructions: When was the machine last fully cleaned (including air tubes)?\n  expectedInput: {\"type\":\"text\"}\n- id: count_pulls_hour, title: Count pulls per hour, safetyLevel: safe\n  instructions: Approximately how many servings have you pulled in the last hour?\n  expectedInput: {\"type\":\"number\",\"unit\":\"servings\",\"range\":{\"max\":200,\"min\":0}}\n- id: inspect_scraper_blades, title: Inspect scraper blades, safetyLevel: caution\n  instructions: Open the machine and visually inspect the scraper blades. Look for wear, damage, or product buildup.\n  expectedInput: {\"type\":\"enum\",\"options\":[\"Good condition\",\"Some wear visible\",\"Clearly damaged/worn\"]}\n\n---\n\n## Evidence collected so far\n- machine_model: \"6236A-C\" (exact)\n- check_mix_ratio: null (uncertain)\n- photo_dispense_front: null (uncertain)\n\n## Current hypotheses\n- wrong_mix_ratio: confidence 0%, status active, reasoning: No information provided about the mix-to-water ratio.\n\nPhase: gathering_info, Turn: 6\nMissing evidence IDs: dispense_photo, hopper_temp, clearance_ok, last_clean, mix_ratio, pulls_per_hour, scraper_condition\n\n---\n\n## Recent conversation (last 5 messages)\nassistant: That's okay if you don't know the mix-to-water ratio at the moment. Let's proceed with something else. Could you check the temperature displayed on the hopper and report the reading? Knowing the temperature can help us understand if the hopper is too warm.\nuser: Youre asking me again!?\nassistant: I'm really sorry for the repetition. Let's try something different to make progress. If you could take a quick photo of the product as it's being dispensed, that will help us understand the texture issue better.\nuser: I don't have a photo\nassistant: No worries about the photo if it's not possible right now. Let's try another important aspect—checking the machine's clearance. Is there at least 6 inches (15cm) of space around all sides of the machine? This can affect airflow and performance.\n\n## Document chunks (for context and citations)\n(No documentation available)\n\n---\n\n## User's latest message (parse evidence from this if they are answering a question)\nthis is annoying\n\n[Context: user appears to be asking for human help. Show empathy and try up to 1 alternate troubleshooting path(s) before escalating unless unsafe.]\n\nMachine model: 6236A-C\n\nOutstanding request IDs from your previous turn: check_clearance. Map the user's reply to evidence_extracted using these IDs.\nLatest input source: note.\n\n\nRespond with JSON only.",
+    "rawResponse": "{\n  \"message\": \"I understand this is becoming frustrating, and I'm here to help get this resolved. Let's attempt one more thing; checking the temperature of the hopper can be crucial. Could you check the temperature displayed on the hopper and let me know? This helps in determining if the product is cooling correctly.\",\n  \"phase\": \"gathering_info\",\n  \"requests\": [\n    {\n      \"type\": \"reading\",\n      \"id\": \"read_hopper_temp\",\n      \"prompt\": \"Check the temperature displayed on the hopper and report the reading.\",\n      \"expectedInput\": {\n        \"type\": \"number\",\n        \"unit\": \"C\",\n        \"range\": {\n          \"min\": -10,\n          \"max\": 20\n        }\n      }\n    }\n  ],\n  \"hypotheses_update\": [],\n  \"evidence_extracted\": [],\n  \"escalation_reason\": null\n}",
+    "systemPrompt": "You are a diagnostic support assistant. You help users troubleshoot issues by gathering evidence and narrowing down root causes. Use the diagnostic playbook to know what evidence to collect and what causes to consider. Output structured JSON every turn.\n\nResponse style:\n- Tone: empathetic\n- Grounding strictness: strict\n\nKeep the \"message\" field strictly user-facing: the user should always know what you understood and what you want them to do next (or what the resolution is). Do not write internal reasoning (e.g. \"we update the possible causes\") in the message.\n\nWhen your message references a fact from the document chunks, cite the source by its ID using the format (document &lt;id&gt;). For example: \"According to the documentation, the maximum output is [value from the chunk] (document &lt;chunk-id&gt;).\" Use the actual values and chunk IDs from the provided chunks—never use example numbers or IDs from this instruction as if they were real. Always cite when stating specific numbers, procedures, or specifications from the documentation.\n\nGrounding rules:\n- Only state technical facts, numbers, procedures, or specifications that are present in the provided document chunks or in the diagnostic playbook content included in the prompt.\n- If the document chunks are empty or do not contain enough information, say you do not have that information in the available documentation and continue with playbook-driven troubleshooting or escalate.\n- Never invent part numbers, measurements, thresholds, maintenance procedures, or documentation details. If uncertain, ask for more evidence or escalate.\n\nIf the user's latest message includes a factual question (for example specs, capacities, or procedures), answer that question briefly using the documentation with citations, then continue the diagnostic workflow in the same user-facing message (for example by asking for the next required evidence item when needed).\n\nUser sentiment (from classifier): frustration level = moderate, escalation intent = false. Show empathy and consider escalating if the context above already instructs you to try limited alternate paths first.\n\nIf the latest user input came from the optional \"Add a note\" field and expresses frustration or asks for a human, acknowledge it empathetically and try up to 1 alternative troubleshooting path(s) before escalating, unless safety rules require immediate escalation.\n\nIf the user explicitly skipped a requested item (\"I don't know\"), treat that as uncertain evidence for the outstanding request IDs and continue with alternate evidence collection where possible.\n\nWhen enough evidence has been collected to narrow down causes, you must conclude in this turn: output phase \"resolving\" with a resolution (diagnosis + steps), or phase \"escalated\" if you cannot determine the cause. Do not leave the user with a message like \"let's evaluate\" and no resolution—provide the diagnosis or escalate in this same response.\n\n\nYou must respond with valid JSON only, no other text. Schema:\n{\n  \"message\": \"string (short, user-facing reply: acknowledge their answer and say what happens next. Never use internal/meta phrases like 'we update the possible causes' or 'based on current evidence we revise'. If you have requests below, briefly introduce them (e.g. 'Next, please…'). If resolving, summarize the finding.)\",\n  \"phase\": \"gathering_info\" | \"diagnosing\" | \"resolving\" | \"escalated\",\n  \"requests\": [\n    {\n      \"type\": \"question\" | \"photo\" | \"action\" | \"reading\",\n      \"id\": \"string (actionId or evidenceId from checklist)\",\n      \"prompt\": \"string (what to ask or show the user)\",\n      \"expectedInput\": { \"type\": \"string\", \"unit?: \"string\", \"range?: { min: number, max: number }, options?: string[] } (optional, for reading type)\n    }\n  ],\n  \"hypotheses_update\": [\n    { \"causeId\": \"string\", \"confidence\": number 0-1, \"reasoning\": \"string\", \"status\": \"active\" | \"ruled_out\" | \"confirmed\" }\n  ],\n  \"evidence_extracted\": [\n    { \"evidenceId\": \"string (from checklist)\", \"value\": any, \"confidence\": \"exact\" | \"approximate\" | \"uncertain\", \"photoAnalysis\": \"string (optional: concise observation extracted from photo evidence when relevant)\" }\n  ],\n  \"resolution\": { \"causeId\": \"string\", \"diagnosis\": \"string\", \"steps\": [{\"step_id\": \"string\", \"instruction\": \"string\", \"check\": \"string?\"}], \"why\": \"string\" } (only when phase is resolving),\n  \"escalation_reason\": \"string (only when phase is escalated)\",\n  \"suggested_label_switch\": \"string (optional: if the user's symptoms clearly indicate a DIFFERENT issue category than this playbook covers, set this to the label_id that would be more appropriate. Only use this when evidence strongly contradicts the current playbook's scope.)\"\n}\nRules: Max 3 items in requests. When phase is \"resolving\", the requests array MUST be empty and resolution.steps must only use step_ids from the playbook. Do not ask follow-up questions in the same turn as a diagnosis. If you still need more evidence, keep phase as \"gathering_info\" or \"diagnosing\" and do not set a resolution. When phase is \"escalated\", set escalation_reason. Extract evidence from the user's last message into evidence_extracted when they answered a request. When you are still gathering info or diagnosing and there are more evidence items or checks from the playbook to do, always include at least one request and make the message lead into it (e.g. \"Thanks for checking. Next, please…\"). Do not end the turn with only a meta-comment about updating hypotheses.\n\nCritical: When you have gathered enough evidence (e.g. most of the evidence checklist is filled) and are ready to conclude, you MUST output either (a) phase \"resolving\" with a full \"resolution\" object (causeId, diagnosis, steps, why), or (b) phase \"escalated\" with escalation_reason. Never respond with phase \"diagnosing\" and empty \"requests\" and a message like \"let's evaluate\" or \"we will evaluate causes\"—deliver the actual conclusion (resolution or escalation) in this same response.",
+    "parsedResponse": {
+      "phase": "gathering_info",
+      "message": "I understand this is becoming frustrating, and I'm here to help get this resolved. Let's attempt one more thing; checking the temperature of the hopper can be crucial. Could you check the temperature displayed on the hopper and let me know? This helps in determining if the product is cooling correctly.",
+      "requests": [
+        {
+          "id": "read_hopper_temp",
+          "type": "reading",
+          "prompt": "Check the temperature displayed on the hopper and report the reading.",
+          "expectedInput": {
+            "type": "number",
+            "unit": "C",
+            "range": {
+              "max": 20,
+              "min": -10
+            }
+          }
+        }
+      ],
+      "escalation_reason": null,
+      "hypotheses_update": [],
+      "evidence_extracted": []
+    }
+  }
+]</pre></details><details class="rounded border border-gray-200 p-3 dark:border-gray-700"><summary class="cursor-pointer font-semibold text-gray-900 dark:text-white">RAG retrieval</summary><pre class="mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-gray-700 dark:text-gray-300">[
+  {
+    "query": "this is annoying too_runny troubleshooting steps causes",
+    "chunkIds": [],
+    "documentIds": [],
+    "chunksReturned": 0
+  }
+]</pre></details><details class="rounded border border-gray-200 p-3 dark:border-gray-700"><summary class="cursor-pointer font-semibold text-gray-900 dark:text-white">Planner output</summary><pre class="mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-gray-700 dark:text-gray-300">{
+  "phase": "gathering_info",
+  "message": "I understand this is becoming frustrating, and I'm here to help get this resolved. Let's attempt one more thing; checking the temperature of the hopper can be crucial. Could you check the temperature displayed on the hopper and let me know? This helps in determining if the product is cooling correctly.",
+  "requests": [
+    {
+      "id": "read_hopper_temp",
+      "type": "reading",
+      "prompt": "Check the temperature displayed on the hopper and report the reading.",
+      "expectedInput": {
+        "type": "number",
+        "unit": "C",
+        "range": {
+          "max": 20,
+          "min": -10
+        }
+      }
+    }
+  ],
+  "escalation_reason": null,
+  "hypotheses_update": [],
+  "evidence_extracted": []
+}</pre></details><details class="rounded border border-gray-200 p-3 dark:border-gray-700"><summary class="cursor-pointer font-semibold text-gray-900 dark:text-white">Sanitized output</summary><pre class="mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-gray-700 dark:text-gray-300">{
+  "phase": "gathering_info",
+  "message": "I understand this is becoming frustrating, and I'm here to help get this resolved. Let's attempt one more thing; checking the temperature of the hopper can be crucial. Could you check the temperature displayed on the hopper and let me know? This helps in determining if the product is cooling correctly.",
+  "requests": [
+    {
+      "id": "read_hopper_temp",
+      "type": "reading",
+      "prompt": "Check the temperature displayed on the hopper and report the reading.",
+      "expectedInput": {
+        "type": "number",
+        "unit": "C",
+        "range": {
+          "max": 20,
+          "min": -10
+        }
+      }
+    }
+  ],
+  "escalation_reason": null,
+  "hypotheses_update": [],
+  "evidence_extracted": []
+}</pre></details><details class="rounded border border-gray-200 p-3 dark:border-gray-700"><summary class="cursor-pointer font-semibold text-gray-900 dark:text-white">API response payload</summary><pre class="mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-gray-700 dark:text-gray-300">{
+  "phase": "gathering_info",
+  "message": "I understand this is becoming frustrating, and I'm here to help get this resolved. Let's attempt one more thing; checking the temperature of the hopper can be crucial. Could you check the temperature displayed on the hopper and let me know? This helps in determining if the product is cooling correctly.",
+  "requests": [
+    {
+      "id": "read_hopper_temp",
+      "type": "reading",
+      "prompt": "Check the temperature displayed on the hopper and report the reading.",
+      "expectedInput": {
+        "type": "number",
+        "unit": "C",
+        "range": {
+          "max": 20,
+          "min": -10
+        }
+      }
+    }
+  ],
+  "sessionId": "9aa40870-9ef9-4410-ac7e-3775e5838ba7",
+  "escalation_reason": null
+}</pre></details></div></details></section></div></main></div><script src="/_next/static/chunks/webpack.js?v=1772083821346" id="_R_" async=""></script><script>(self.__next_f=self.__next_f||[]).push([0])</script><script>self.__next_f.push([1,"5:I[\"(app-pages-browser)/./node_modules/next/dist/next-devtools/userspace/app/segment-explorer-node.js\",[\"app-pages-internals\",\"static/chunks/app-pages-internals.js\"],\"SegmentViewNode\"]\n7:\"$Sreact.fragment\"\n16:I[\"(app-pages-browser)/./node_modules/next/dist/client/components/layout-router.js\",[\"app-pages-internals\",\"static/chunks/app-pages-internals.js\"],\"\"]\n18:I[\"(app-pages-browser)/./node_modules/next/dist/client/components/render-from-template-context.js\",[\"app-pages-internals\",\"static/chunks/app-pages-internals.js\"],\"\"]\n32:I[\"(app-pages-browser)/./src/app/admin/AdminNav.tsx\",[\"app/admin/layout\",\"static/chunks/app/admin/layout.js\"],\"AdminNav\"]\n3c:I[\"(app-pages-browser)/./node_modules/next/dist/client/components/client-page.js\",[\"app-pages-internals\",\"static/chunks/app-pages-internals.js\"],\"ClientPageRoot\"]\n3d:I[\"(app-pages-browser)/./src/app/admin/audit-logs/page.tsx\",[\"app/admin/audit-logs/page\",\"static/chunks/app/admin/audit-logs/page.js\"],\"default\"]\n3f:I[\"(app-pages-browser)/./node_modules/next/dist/lib/framework/boundary-components.js\",[\"app-pages-internals\",\"static/chunks/app-pages-internals.js\"],\"OutletBoundary\"]\n46:I[\"(app-pages-browser)/./node_modules/next/dist/client/components/metadata/async-metadata.js\",[\"app-pages-internals\",\"static/chunks/app-pages-internals.js\"],\"AsyncMetadataOutlet\"]\n4e:I[\"(app-pages-browser)/./node_modules/next/dist/lib/framework/boundary-components.js\",[\"app-pages-internals\",\"static/chunks/app-pages-internals.js\"],\"ViewportBoundary\"]\n54:I[\"(app-pages-browser)/./node_modules/next/dist/lib/framework/boundary-components.js\",[\"app-pages-internals\",\"static/chunks/app-pages-internals.js\"],\"MetadataBoundary\"]\n59:\"$Sreact.suspense\"\n5d:I[\"(app-pages-browser)/./node_modules/next/dist/client/components/builtin/global-error.js\",[\"app-pages-internals\",\"static/chunks/app-pages-internals.js\"],\"\"]\n:HL[\"/_next/static/css/app/layout.css?v=1772083821346\",\"style\"]\n:N1772083821356.33\n3:\"$EObject.defineProperty(()=\u003e{ctx.componentMod.preloadStyle(fullHref,ctx.renderOpts.crossOrigin,ctx.nonce)},\\\"nam"])</script><script>self.__next_f.push([1,"e\\\",{value:\\\"\\\"})\"\n2:{\"name\":\"Preloads\",\"key\":null,\"env\":\"Server\",\"stack\":[],\"props\":{\"preloadCallbacks\":[\"$3\"]}}\n4:[]\n6:[]\n8:[[\"Array.map\",\"\",0,0,0,0,false]]\nb:I[\"(app-pages-browser)/./node_modules/next/dist/client/components/layout-router.js\",[\"app-pages-internals\",\"static/chunks/app-pages-internals.js\"],\"\"]\ne:I[\"(app-pages-browser)/./node_modules/next/dist/client/components/render-from-template-context.js\",[\"app-pages-internals\",\"static/chunks/app-pages-internals.js\"],\"\"]\nf:{}\n10:[[\"Function.all\",\"\",0,0,0,0,true]]\nd:{\"children\":[\"$\",\"$Le\",null,\"$f\",null,\"$10\",1]}\n11:[[\"Function.all\",\"\",0,0,0,0,true]]\nc:{\"parallelRouterKey\":\"children\",\"error\":\"$undefined\",\"errorStyles\":\"$undefined\",\"errorScripts\":\"$undefined\",\"template\":[\"$\",\"$7\",null,\"$d\",null,\"$11\",0],\"templateStyles\":\"$undefined\",\"templateScripts\":\"$undefined\",\"notFound\":\"$Y\",\"forbidden\":\"$undefined\",\"unauthorized\":\"$undefined\",\"segmentViewBoundaries\":\"$Y\"}\n12:[[\"Function.all\",\"\",0,0,0,0,true]]\na:{\"name\":\"RootLayout\",\"key\":null,\"env\":\"Server\",\"stack\":[],\"props\":{\"children\":[\"$\",\"$Lb\",null,\"$c\",null,\"$12\",1],\"params\":\"$Y\"}}\n13:[[\"RootLayout\",\"webpack-internal:///(rsc)/./src/app/layout.tsx\",16,87,15,1,false]]\n14:[[\"RootLayout\",\"webpack-internal:///(rsc)/./src/app/layout.tsx\",18,94,15,1,false]]\n15:[[\"Function.all\",\"\",0,0,0,0,true]]\n17:[[\"Function.all\",\"\",0,0,0,0,true]]\n19:[]\n1b:{\"name\":\"NotFound\",\"key\":null,\"env\":\"Server\",\"stack\":[],\"props\":{}}\n1c:{\"name\":\"HTTPAccessErrorFallback\",\"key\":null,\"env\":\"Server\",\"owner\":\"$1b\",\"stack\":[],\"props\":{\"status\":404,\"message\":\"This page could not be found.\"}}\n1d:[]\n1e:[]\n1f:[]\n20:[]\n21:[]\n22:[]\n23:[]\n24:[[\"Function.all\",\"\",0,0,0,0,true]]\n25:[[\"Function.all\",\"\",0,0,0,0,true]]\n26:[[\"Function.all\",\"\",0,0,0,0,true]]\n27:[[\"Function.all\",\"\",0,0,0,0,true]]\n2c:{}\n2d:[[\"Function.all\",\"\",0,0,0,0,true],[\"Function.all\",\"\",0,0,0,0,true]]\n2b:{\"children\":[\"$\",\"$L18\",null,\"$2c\",null,\"$2d\",1]}\n2e:[[\"Function.all\",\"\",0,0,0,0,true],[\"Function.all\",\"\",0,0,0,0,true]]\n2a:{\"parallelRouterKey\":\"children\",\"error\":\"$undefined\",\"errorStyles\":\"$undefin"])</script><script>self.__next_f.push([1,"ed\",\"errorScripts\":\"$undefined\",\"template\":[\"$\",\"$7\",null,\"$2b\",null,\"$2e\",0],\"templateStyles\":\"$undefined\",\"templateScripts\":\"$undefined\",\"notFound\":\"$undefined\",\"forbidden\":\"$undefined\",\"unauthorized\":\"$undefined\",\"segmentViewBoundaries\":\"$Y\"}\n2f:[[\"Function.all\",\"\",0,0,0,0,true],[\"Function.all\",\"\",0,0,0,0,true]]\n29:{\"name\":\"AdminLayout\",\"key\":null,\"env\":\"Server\",\"stack\":[[\"Function.all\",\"\",0,0,0,0,true]],\"props\":{\"children\":[\"$\",\"$L16\",null,\"$2a\",null,\"$2f\",1],\"params\":\"$Y\"}}\n30:[[\"AdminLayout\",\"webpack-internal:///(rsc)/./src/app/admin/layout.tsx\",11,87,10,1,false]]\n31:[[\"AdminLayout\",\"webpack-internal:///(rsc)/./src/app/admin/layout.tsx\",14,88,10,1,false]]\n33:[[\"AdminLayout\",\"webpack-internal:///(rsc)/./src/app/admin/layout.tsx\",19,88,10,1,false]]\n34:[[\"Function.all\",\"\",0,0,0,0,true],[\"Function.all\",\"\",0,0,0,0,true]]\n35:[[\"Function.all\",\"\",0,0,0,0,true],[\"Function.all\",\"\",0,0,0,0,true]]\n36:[[\"Function.all\",\"\",0,0,0,0,true],[\"Function.all\",\"\",0,0,0,0,true]]\n37:[[\"Function.all\",\"\",0,0,0,0,true],[\"Function.all\",\"\",0,0,0,0,true],[\"Function.all\",\"\",0,0,0,0,true]]\n38:[[\"Function.all\",\"\",0,0,0,0,true],[\"Function.all\",\"\",0,0,0,0,true],[\"Function.all\",\"\",0,0,0,0,true]]\n39:[[\"Function.all\",\"\",0,0,0,0,true],[\"Function.all\",\"\",0,0,0,0,true],[\"Function.all\",\"\",0,0,0,0,true]]\n3a:[[\"Function.all\",\"\",0,0,0,0,true],[\"Function.all\",\"\",0,0,0,0,true],[\"Function.all\",\"\",0,0,0,0,true]]\n3b:[[\"Function.all\",\"\",0,0,0,0,true],[\"Function.all\",\"\",0,0,0,0,true],[\"Function.all\",\"\",0,0,0,0,true]]\n3e:[[\"Function.all\",\"\",0,0,0,0,true],[\"Function.all\",\"\",0,0,0,0,true],[\"Function.all\",\"\",0,0,0,0,true]]\n42:\"$EObject.defineProperty(async function getViewportReady() {\\n        await viewport();\\n        return undefined;\\n    },\\\"name\\\",{value:\\\"getViewportReady\\\"})\"\n41:{\"name\":\"__next_outlet_boundary__\",\"key\":null,\"env\":\"Server\",\"stack\":[[\"Function.all\",\"\",0,0,0,0,true],[\"Function.all\",\"\",0,0,0,0,true],[\"Function.all\",\"\",0,0,0,0,true]],\"props\":{\"ready\":\"$42\"}}\n44:{\"name\":\"StreamingMetadataOutletImpl\",\"key\":null,\"env\":\"Server\",\"stack\":[[\"Functio"])</script><script>self.__next_f.push([1,"n.all\",\"\",0,0,0,0,true],[\"Function.all\",\"\",0,0,0,0,true],[\"Function.all\",\"\",0,0,0,0,true]],\"props\":{}}\n45:[]\n48:[]\n4a:{\"name\":\"NonIndex\",\"key\":null,\"env\":\"Server\",\"stack\":[],\"props\":{\"pagePath\":\"/admin/audit-logs\",\"statusCode\":200,\"isPossibleServerAction\":false}}\n4c:{\"name\":\"ViewportTree\",\"key\":null,\"env\":\"Server\",\"stack\":[],\"props\":{}}\n4d:[]\n50:{\"name\":\"__next_viewport_boundary__\",\"key\":null,\"env\":\"Server\",\"owner\":\"$4c\",\"stack\":[],\"props\":{}}\n52:{\"name\":\"MetadataTree\",\"key\":null,\"env\":\"Server\",\"stack\":[],\"props\":{}}\n53:[]\n56:{\"name\":\"__next_metadata_boundary__\",\"key\":null,\"env\":\"Server\",\"owner\":\"$52\",\"stack\":[],\"props\":{}}\n57:[]\n58:[]\n5b:{\"name\":\"MetadataResolver\",\"key\":null,\"env\":\"Server\",\"owner\":\"$56\",\"stack\":[],\"props\":{}}\n5e:[]\n5f:[]\n60:[]\n61:[]\n62:[]\n1:D\"$2\"\n1:null\n9:D\"$a\"\n1a:D\"$1b\"\n1a:D\"$1c\"\n"])</script><script>self.__next_f.push([1,"1a:[[\"$\",\"title\",null,{\"children\":\"404: This page could not be found.\"},\"$1c\",\"$1d\",1],[\"$\",\"div\",null,{\"style\":{\"fontFamily\":\"system-ui,\\\"Segoe UI\\\",Roboto,Helvetica,Arial,sans-serif,\\\"Apple Color Emoji\\\",\\\"Segoe UI Emoji\\\"\",\"height\":\"100vh\",\"textAlign\":\"center\",\"display\":\"flex\",\"flexDirection\":\"column\",\"alignItems\":\"center\",\"justifyContent\":\"center\"},\"children\":[\"$\",\"div\",null,{\"children\":[[\"$\",\"style\",null,{\"dangerouslySetInnerHTML\":{\"__html\":\"body{color:#000;background:#fff;margin:0}.next-error-h1{border-right:1px solid rgba(0,0,0,.3)}@media (prefers-color-scheme:dark){body{color:#fff;background:#000}.next-error-h1{border-right:1px solid rgba(255,255,255,.3)}}\"}},\"$1c\",\"$20\",1],[\"$\",\"h1\",null,{\"className\":\"next-error-h1\",\"style\":{\"display\":\"inline-block\",\"margin\":\"0 20px 0 0\",\"padding\":\"0 23px 0 0\",\"fontSize\":24,\"fontWeight\":500,\"verticalAlign\":\"top\",\"lineHeight\":\"49px\"},\"children\":404},\"$1c\",\"$21\",1],[\"$\",\"div\",null,{\"style\":{\"display\":\"inline-block\"},\"children\":[\"$\",\"h2\",null,{\"style\":{\"fontSize\":14,\"fontWeight\":400,\"lineHeight\":\"49px\",\"margin\":0},\"children\":\"This page could not be found.\"},\"$1c\",\"$23\",1]},\"$1c\",\"$22\",1]]},\"$1c\",\"$1f\",1]},\"$1c\",\"$1e\",1]]\n"])</script><script>self.__next_f.push([1,"9:[\"$\",\"html\",null,{\"lang\":\"en\",\"children\":[\"$\",\"body\",null,{\"className\":\"min-h-screen bg-background font-sans antialiased\",\"children\":[\"$\",\"$L16\",null,{\"parallelRouterKey\":\"children\",\"error\":\"$undefined\",\"errorStyles\":\"$undefined\",\"errorScripts\":\"$undefined\",\"template\":[\"$\",\"$L18\",null,{},null,\"$17\",1],\"templateStyles\":\"$undefined\",\"templateScripts\":\"$undefined\",\"notFound\":[\"$\",\"$L5\",\"c-not-found\",{\"type\":\"not-found\",\"pagePath\":\"__next_builtin__not-found.js\",\"children\":[\"$1a\",[]]},null,\"$19\",0],\"forbidden\":\"$undefined\",\"unauthorized\":\"$undefined\",\"segmentViewBoundaries\":[[\"$\",\"$L5\",null,{\"type\":\"boundary:not-found\",\"pagePath\":\"__next_builtin__not-found.js@boundary\"},null,\"$24\",1],\"$undefined\",\"$undefined\",[\"$\",\"$L5\",null,{\"type\":\"boundary:global-error\",\"pagePath\":\"__next_builtin__global-error.js\"},null,\"$25\",1]]},null,\"$15\",1]},\"$a\",\"$14\",1]},\"$a\",\"$13\",1]\n"])</script><script>self.__next_f.push([1,"28:D\"$29\"\n28:[\"$\",\"div\",null,{\"className\":\"min-h-screen bg-gray-50 dark:bg-gray-900\",\"children\":[[\"$\",\"$L32\",null,{},\"$29\",\"$31\",1],[\"$\",\"main\",null,{\"className\":\"mx-auto max-w-6xl px-4 py-8\",\"children\":[\"$\",\"$L16\",null,{\"parallelRouterKey\":\"children\",\"error\":\"$undefined\",\"errorStyles\":\"$undefined\",\"errorScripts\":\"$undefined\",\"template\":[\"$\",\"$L18\",null,{},null,\"$35\",1],\"templateStyles\":\"$undefined\",\"templateScripts\":\"$undefined\",\"notFound\":\"$undefined\",\"forbidden\":\"$undefined\",\"unauthorized\":\"$undefined\",\"segmentViewBoundaries\":[\"$undefined\",\"$undefined\",\"$undefined\",\"$undefined\"]},null,\"$34\",1]},\"$29\",\"$33\",1]]},\"$29\",\"$30\",1]\n40:D\"$41\"\n43:D\"$44\"\n43:[\"$\",\"$L46\",null,{\"promise\":\"$@47\"},\"$44\",\"$45\",1]\n49:D\"$4a\"\n49:null\n4b:D\"$4c\"\n4f:D\"$50\"\n4b:[[\"$\",\"$L4e\",null,{\"children\":\"$L4f\"},\"$4c\",\"$4d\",1],null]\n51:D\"$52\"\n55:D\"$56\"\n5a:D\"$5b\"\n55:[\"$\",\"div\",null,{\"hidden\":true,\"children\":[\"$\",\"$59\",null,{\"fallback\":null,\"children\":\"$L5a\"},\"$56\",\"$58\",1]},\"$56\",\"$57\",1]\n51:[\"$\",\"$L54\",null,{\"children\":\"$55\"},\"$52\",\"$53\",1]\n5c:[]\n"])</script><script>self.__next_f.push([1,"0:{\"P\":\"$1\",\"b\":\"development\",\"p\":\"\",\"c\":[\"\",\"admin\",\"audit-logs\"],\"i\":false,\"f\":[[[\"\",{\"children\":[\"admin\",{\"children\":[\"audit-logs\",{\"children\":[\"__PAGE__\",{}]}]}]},\"$undefined\",\"$undefined\",true],[\"\",[\"$\",\"$L5\",\"layout\",{\"type\":\"layout\",\"pagePath\":\"layout.tsx\",\"children\":[\"$\",\"$7\",\"c\",{\"children\":[[[\"$\",\"link\",\"0\",{\"rel\":\"stylesheet\",\"href\":\"/_next/static/css/app/layout.css?v=1772083821346\",\"precedence\":\"next_static/css/app/layout.css\",\"crossOrigin\":\"$undefined\",\"nonce\":\"$undefined\"},null,\"$8\",0]],\"$9\"]},null,\"$6\",1]},null,\"$4\",0],{\"children\":[\"admin\",[\"$\",\"$L5\",\"layout\",{\"type\":\"layout\",\"pagePath\":\"admin/layout.tsx\",\"children\":[\"$\",\"$7\",\"c\",{\"children\":[null,\"$28\"]},null,\"$27\",1]},null,\"$26\",0],{\"children\":[\"audit-logs\",[\"$\",\"$7\",\"c\",{\"children\":[null,[\"$\",\"$L16\",null,{\"parallelRouterKey\":\"children\",\"error\":\"$undefined\",\"errorStyles\":\"$undefined\",\"errorScripts\":\"$undefined\",\"template\":[\"$\",\"$L18\",null,{},null,\"$38\",1],\"templateStyles\":\"$undefined\",\"templateScripts\":\"$undefined\",\"notFound\":\"$undefined\",\"forbidden\":\"$undefined\",\"unauthorized\":\"$undefined\",\"segmentViewBoundaries\":[\"$undefined\",\"$undefined\",\"$undefined\",\"$undefined\"]},null,\"$37\",1]]},null,\"$36\",0],{\"children\":[\"__PAGE__\",[\"$\",\"$7\",\"c\",{\"children\":[[\"$\",\"$L5\",\"c-page\",{\"type\":\"page\",\"pagePath\":\"admin/audit-logs/page.tsx\",\"children\":[\"$\",\"$L3c\",null,{\"Component\":\"$3d\",\"searchParams\":{},\"params\":{}},null,\"$3b\",1]},null,\"$3a\",1],null,[\"$\",\"$L3f\",null,{\"children\":[\"$L40\",\"$43\"]},null,\"$3e\",1]]},null,\"$39\",0],{},null,false]},null,false]},null,false]},null,false],[\"$\",\"$7\",\"h\",{\"children\":[\"$49\",\"$4b\",\"$51\"]},null,\"$48\",0],false]],\"m\":\"$W5c\",\"G\":[\"$5d\",[\"$\",\"$L5\",\"ge-svn\",{\"type\":\"global-error\",\"pagePath\":\"__next_builtin__global-error.js\",\"children\":[]},null,\"$5e\",0]],\"s\":false,\"S\":false}\n"])</script><script>self.__next_f.push([1,"4f:[[\"$\",\"meta\",\"0\",{\"charSet\":\"utf-8\"},\"$41\",\"$5f\",0],[\"$\",\"meta\",\"1\",{\"name\":\"viewport\",\"content\":\"width=device-width, initial-scale=1\"},\"$41\",\"$60\",0]]\n40:null\n47:{\"metadata\":[[\"$\",\"title\",\"0\",{\"children\":\"RAG Support Agent\"},\"$44\",\"$61\",0],[\"$\",\"meta\",\"1\",{\"name\":\"description\",\"content\":\"Visual + Text RAG support assistant POC\"},\"$44\",\"$62\",0]],\"error\":null,\"digest\":\"$undefined\"}\n5a:\"$47:metadata\"\n"])</script><script data-nextjs-dev-overlay="true" style="display: block; position: absolute;"><nextjs-portal style="--nextjs-dev-tools-scale: 1;"></nextjs-portal></script><next-route-announcer style="position: absolute;"></next-route-announcer></body></html>

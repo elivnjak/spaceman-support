@@ -1,11 +1,9 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { ensureMaintenanceTable } from "@/lib/db/ensure-maintenance-table";
 import { maintenanceConfig } from "@/lib/db/schema";
 import { readStorageFile } from "@/lib/storage";
 
 export async function GET() {
-  await ensureMaintenanceTable();
   const [config] = await db
     .select({ iconPath: maintenanceConfig.iconPath })
     .from(maintenanceConfig)

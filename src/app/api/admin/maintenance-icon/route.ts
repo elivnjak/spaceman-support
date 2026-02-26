@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { ensureMaintenanceTable } from "@/lib/db/ensure-maintenance-table";
 import { maintenanceConfig } from "@/lib/db/schema";
 import {
   deleteStorageFile,
@@ -11,7 +10,6 @@ import {
 } from "@/lib/storage";
 
 export async function POST(request: Request) {
-  await ensureMaintenanceTable();
   const formData = await request.formData();
   const file = formData.get("file") as File | null;
   if (!file || !(file instanceof File)) {
@@ -56,7 +54,6 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE() {
-  await ensureMaintenanceTable();
   const [config] = await db.select().from(maintenanceConfig).limit(1);
   if (!config?.iconPath) {
     return NextResponse.json({ ok: true });
