@@ -267,6 +267,30 @@ function isIdontHavePhotoMessage(content: string): boolean {
   return noPhotoPatterns.some((p) => p.test(n));
 }
 
+function parseYesNoMessage(content: string): boolean | null {
+  const n = normalizeUserMessage(content);
+  if (!n) return null;
+  const yesPatterns = [
+    /^y(es|eah|ep)?\.?$/i,
+    /^sure\.?$/i,
+    /^i do\.?$/i,
+    /^know both\.?$/i,
+    /^yes[, ]+i know (them|both)\.?$/i,
+  ];
+  const noPatterns = [
+    /^n(o|ope)?\.?$/i,
+    /^nah\.?$/i,
+    /^i don'?t\.?$/i,
+    /^i don'?t know\.?$/i,
+    /^i don'?t know (them|both)\.?$/i,
+    /^not sure\.?$/i,
+    /^no[, ]+i don'?t know (them|both)\.?$/i,
+  ];
+  if (yesPatterns.some((p) => p.test(n))) return true;
+  if (noPatterns.some((p) => p.test(n))) return false;
+  return null;
+}
+
 function countConsecutiveSkipTurns(messages: ChatMessage[]): number {
   let count = 0;
   for (let i = messages.length - 1; i >= 0; i--) {
@@ -820,26 +844,45 @@ export async function POST(request: Request) {
           audit.logPhasePath("nameplate_check");
           sendEvent("stage", JSON.stringify({ message: STAGE_MESSAGES.requesting_nameplate }));
           const { instructionText, guideImages } = await getNameplatePrompt();
+          const activeSession = session;
+          const previousAssistantMessage = [...messages]
+            .reverse()
+            .find((entry) => entry.role === "assistant") as
+            | (ChatMessage & { requests?: PlannerOutput["requests"] })
+            | undefined;
+          const pendingRequestIds = new Set(
+            (previousAssistantMessage?.requests ?? []).map((request) => request.id)
+          );
+          const awaitingManualAvailability = pendingRequestIds.has("nameplate_manual_known");
+          const awaitingManualModel = pendingRequestIds.has("nameplate_manual_model");
+          const awaitingManualSerial =
+            pendingRequestIds.has("nameplate_manual_serial") ||
+            pendingRequestIds.has("nameplate_manual_serial_retry");
+          const isManualSerialRetry = pendingRequestIds.has("nameplate_manual_serial_retry");
+          const unsupportedMessage =
+            `Your machine isn't a ${intentManifest.safety.supportedBrand} machine. We only support ${intentManifest.safety.supportedBrand} machines.`;
 
-          if (imageBuffers.length === 0 && isSkipSignal(message)) {
-            const escalationMessage =
-              "We need the machine name plate to proceed with diagnosis. I'm connecting you with a technician who can help without it.";
+          const escalateFromNameplate = async (
+            escalationMessage: string,
+            escalationReason: string,
+            labelId: string
+          ) => {
             messages.push({
               role: "assistant",
               content: escalationMessage,
               timestamp: new Date().toISOString(),
             });
-            const evidence = (session.evidence as Record<string, unknown>) ?? {};
-            const hypotheses = (session.hypotheses as unknown[]) ?? [];
+            const evidence = (activeSession.evidence as Record<string, unknown>) ?? {};
+            const hypotheses = (activeSession.hypotheses as unknown[]) ?? [];
             const escalationHandoff = buildEscalationHandoff({
               sessionId,
-              userName: session.userName ?? null,
-              userPhone: session.userPhone ?? null,
-              machineModel: session.machineModel ?? null,
-              escalationReason: "User does not have a photo of the machine name plate.",
+              userName: activeSession.userName ?? null,
+              userPhone: activeSession.userPhone ?? null,
+              machineModel: activeSession.machineModel ?? null,
+              escalationReason,
               playbookTitle: "Pre-diagnosis",
-              labelId: "nameplate_skip",
-              turnCount: session.turnCount ?? 0,
+              labelId,
+              turnCount: activeSession.turnCount ?? 0,
               evidence: evidence as Parameters<typeof buildEscalationHandoff>[0]["evidence"],
               hypotheses: hypotheses as Parameters<typeof buildEscalationHandoff>[0]["hypotheses"],
               messages,
@@ -850,8 +893,246 @@ export async function POST(request: Request) {
                 messages,
                 phase: "escalated",
                 status: "escalated",
-                escalationReason: "User does not have a photo of the machine name plate.",
+                escalationReason,
                 escalationHandoff: escalationHandoff,
+                updatedAt: new Date(),
+              })
+              .where(eq(diagnosticSessions.id, sessionId));
+            sendEvent(
+              controller,
+              "message",
+              JSON.stringify({
+                sessionId,
+                message: escalationMessage,
+                phase: "escalated",
+                requests: [],
+                escalation_reason: escalationReason,
+              })
+            );
+            sendEscalationWebhook(escalationHandoff).catch(() => {});
+            closeController(controller);
+          };
+
+          const finalizeNameplateDetails = async (
+            extractedModelInput: string,
+            extractedSerialInput: string,
+            source: "photo" | "manual",
+            manualRetry = false
+          ) => {
+            const extractedModel = extractedModelInput.trim();
+            const extractedSerial = extractedSerialInput.trim();
+            const { valid, canonical } = await validateModel(extractedModel);
+            if (!valid) {
+              messages.push({
+                role: "assistant",
+                content: unsupportedMessage,
+                timestamp: new Date().toISOString(),
+              });
+              await db
+                .update(diagnosticSessions)
+                .set({
+                  machineModel: canonical || extractedModel,
+                  serialNumber: extractedSerial,
+                  messages,
+                  phase: "unsupported_model",
+                  status: "resolved",
+                  updatedAt: new Date(),
+                })
+                .where(eq(diagnosticSessions.id, sessionId));
+
+              sendEvent(
+                controller,
+                "message",
+                JSON.stringify({
+                  sessionId,
+                  message: unsupportedMessage,
+                  phase: "unsupported_model",
+                  requests: [],
+                })
+              );
+              closeController(controller);
+              return;
+            }
+
+            const manufacturingYear = parseManufacturingYear(extractedSerial);
+            if (manufacturingYear == null) {
+              if (source === "manual") {
+                if (manualRetry) {
+                  await escalateFromNameplate(
+                    "I still can't determine the machine age from that serial number. I'm connecting you with a technician to continue.",
+                    "Could not determine machine age from manually provided serial number.",
+                    "nameplate_manual_serial_unreadable"
+                  );
+                  return;
+                }
+                const retrySerialMessage =
+                  "I couldn't determine the manufacturing year from that serial number. Please re-enter the full serial number exactly as shown on the machine.";
+                const assistantTurn: ChatMessage & {
+                  requests?: PlannerOutput["requests"];
+                } = {
+                  role: "assistant",
+                  content: retrySerialMessage,
+                  timestamp: new Date().toISOString(),
+                  requests: [
+                    {
+                      type: "question",
+                      id: "nameplate_manual_serial_retry",
+                      prompt: "Please re-enter the machine serial number.",
+                      expectedInput: { type: "text" },
+                    },
+                  ],
+                };
+                messages.push(assistantTurn);
+                await db
+                  .update(diagnosticSessions)
+                  .set({
+                    machineModel: canonical,
+                    serialNumber: extractedSerial,
+                    messages,
+                    phase: "nameplate_check",
+                    status: "active",
+                    updatedAt: new Date(),
+                  })
+                  .where(eq(diagnosticSessions.id, sessionId));
+
+                sendEvent(
+                  controller,
+                  "message",
+                  JSON.stringify({
+                    sessionId,
+                    message: retrySerialMessage,
+                    phase: "nameplate_check",
+                    requests: assistantTurn.requests,
+                  })
+                );
+                closeController(controller);
+                return;
+              }
+              const retrySerialMessage =
+                "I found the serial number but couldn't read its manufacturing year. Please upload a clearer name plate photo where the serial is fully visible.";
+              const assistantTurn: ChatMessage & {
+                requests?: PlannerOutput["requests"];
+                guideImages?: string[];
+              } = {
+                role: "assistant",
+                content: retrySerialMessage,
+                timestamp: new Date().toISOString(),
+                requests: [
+                  {
+                    type: "photo",
+                    id: "nameplate_serial_retry",
+                    prompt: "Please upload a clearer photo of the serial number on the name plate.",
+                    expectedInput: { type: "photo" },
+                  },
+                ],
+                guideImages: guideImages.length > 0 ? guideImages : undefined,
+              };
+              messages.push(assistantTurn);
+              await db
+                .update(diagnosticSessions)
+                .set({
+                  machineModel: canonical,
+                  serialNumber: extractedSerial,
+                  messages,
+                  phase: "nameplate_check",
+                  status: "active",
+                  updatedAt: new Date(),
+                })
+                .where(eq(diagnosticSessions.id, sessionId));
+
+              sendEvent(
+                controller,
+                "message",
+                JSON.stringify({
+                  sessionId,
+                  message: retrySerialMessage,
+                  phase: "nameplate_check",
+                  requests: assistantTurn.requests,
+                  guideImages: guideImages.length > 0 ? guideImages : undefined,
+                })
+              );
+              closeController(controller);
+              return;
+            }
+
+            const currentYear = new Date().getFullYear();
+            const isOlderThanFiveYears =
+              currentYear - manufacturingYear >
+              intentManifest.safety.machineAgeThresholdYears;
+            if (isOlderThanFiveYears) {
+              const escalationMessage =
+                `This machine appears to be more than ${intentManifest.safety.machineAgeThresholdYears} years old, so I'm connecting you with a technical specialist.`;
+              messages.push({
+                role: "assistant",
+                content: escalationMessage,
+                timestamp: new Date().toISOString(),
+              });
+              await db
+                .update(diagnosticSessions)
+                .set({
+                  machineModel: canonical,
+                  serialNumber: extractedSerial,
+                  manufacturingYear,
+                  messages,
+                  phase: "escalated",
+                  status: "escalated",
+                  escalationReason: `Machine is more than ${intentManifest.safety.machineAgeThresholdYears} years old based on serial number.`,
+                  updatedAt: new Date(),
+                })
+                .where(eq(diagnosticSessions.id, sessionId));
+
+              sendEvent(
+                controller,
+                "message",
+                JSON.stringify({
+                  sessionId,
+                  message: escalationMessage,
+                  phase: "escalated",
+                  requests: [],
+                  escalation_reason: `Machine is more than ${intentManifest.safety.machineAgeThresholdYears} years old based on serial number.`,
+                })
+              );
+              closeController(controller);
+              return;
+            }
+
+            triageHistory = prependSubstantiveUserHistory(triageHistory, messages);
+            const triagePreview = triageHistory
+              .filter((h) => h.role === "user")
+              .map((h) => h.content.slice(0, 40))
+              .join(" | ");
+            console.log(
+              `[chat] phase: nameplate_check -> product_type_check (session=${sessionId}) triageHistory items=${triageHistory.length} user_preview="${triagePreview}${triagePreview.length >= 80 ? "…" : ""}"`
+            );
+            const availableProductTypes = await getProductTypeOptions();
+            const productTypeOptions = availableProductTypes.map((item) => item.name);
+            const responseMessage =
+              "Before we continue, what type of product are you using? If you choose Other, please specify the exact product.";
+            const assistantTurn: ChatMessage & { requests?: PlannerOutput["requests"] } = {
+              role: "assistant",
+              content: responseMessage,
+              timestamp: new Date().toISOString(),
+              requests: [
+                {
+                  type: "question",
+                  id: "product_type",
+                  prompt: "What type of product are you using?",
+                  expectedInput: { type: "enum", options: productTypeOptions },
+                },
+              ],
+            };
+            messages.push(assistantTurn);
+
+            await db
+              .update(diagnosticSessions)
+              .set({
+                machineModel: canonical,
+                serialNumber: extractedSerial,
+                manufacturingYear,
+                triageHistory,
+                messages,
+                phase: "product_type_check",
+                status: "active",
                 updatedAt: new Date(),
               })
               .where(eq(diagnosticSessions.id, sessionId));
@@ -861,13 +1142,261 @@ export async function POST(request: Request) {
               "message",
               JSON.stringify({
                 sessionId,
-                message: escalationMessage,
-                phase: "escalated",
-                requests: [],
-                escalation_reason: "User does not have a photo of the machine name plate.",
+                message: responseMessage,
+                phase: "product_type_check",
+                requests: assistantTurn.requests,
               })
             );
-            sendEscalationWebhook(escalationHandoff).catch(() => {});
+            closeController(controller);
+          };
+
+          if (imageBuffers.length === 0 && awaitingManualAvailability) {
+            const knowsManualDetails = isIdontKnowMessage(message)
+              ? false
+              : parseYesNoMessage(message);
+            if (knowsManualDetails == null) {
+              const responseMessage =
+                "If you don't have a photo, do you know both the machine model and serial number so you can enter them manually?";
+              const assistantTurn: ChatMessage & { requests?: PlannerOutput["requests"] } = {
+                role: "assistant",
+                content: responseMessage,
+                timestamp: new Date().toISOString(),
+                requests: [
+                  {
+                    type: "question",
+                    id: "nameplate_manual_known",
+                    prompt: "Do you know both the machine model and serial number?",
+                    expectedInput: {
+                      type: "enum",
+                      options: ["Yes, I know both", "No, I don't know them"],
+                    },
+                  },
+                ],
+              };
+              messages.push(assistantTurn);
+              await db
+                .update(diagnosticSessions)
+                .set({
+                  messages,
+                  phase: "nameplate_check",
+                  status: "active",
+                  updatedAt: new Date(),
+                })
+                .where(eq(diagnosticSessions.id, sessionId));
+              sendEvent(
+                controller,
+                "message",
+                JSON.stringify({
+                  sessionId,
+                  message: responseMessage,
+                  phase: "nameplate_check",
+                  requests: assistantTurn.requests,
+                })
+              );
+              closeController(controller);
+              return;
+            }
+
+            if (!knowsManualDetails) {
+              await escalateFromNameplate(
+                "No problem. Since we don't have a name plate photo or manual model/serial details, I'm connecting you with a technician to continue.",
+                "User does not have a photo of the machine name plate and cannot provide model/serial manually.",
+                "nameplate_manual_unknown"
+              );
+              return;
+            }
+
+            const responseMessage = "Great. Please enter the machine model number.";
+            const assistantTurn: ChatMessage & { requests?: PlannerOutput["requests"] } = {
+              role: "assistant",
+              content: responseMessage,
+              timestamp: new Date().toISOString(),
+              requests: [
+                {
+                  type: "question",
+                  id: "nameplate_manual_model",
+                  prompt: "Enter the machine model number.",
+                  expectedInput: { type: "text" },
+                },
+              ],
+            };
+            messages.push(assistantTurn);
+            await db
+              .update(diagnosticSessions)
+              .set({
+                messages,
+                phase: "nameplate_check",
+                status: "active",
+                updatedAt: new Date(),
+              })
+              .where(eq(diagnosticSessions.id, sessionId));
+            sendEvent(
+              controller,
+              "message",
+              JSON.stringify({
+                sessionId,
+                message: responseMessage,
+                phase: "nameplate_check",
+                requests: assistantTurn.requests,
+              })
+            );
+            closeController(controller);
+            return;
+          }
+
+          if (imageBuffers.length === 0 && awaitingManualModel) {
+            const enteredModel = message.trim();
+            if (!enteredModel || isIdontKnowMessage(message)) {
+              await escalateFromNameplate(
+                "Since the model/serial details aren't available, I'm connecting you with a technician to continue.",
+                "User could not provide machine model during manual nameplate entry.",
+                "nameplate_manual_model_missing"
+              );
+              return;
+            }
+            const responseMessage = "Thanks. Please enter the machine serial number.";
+            const assistantTurn: ChatMessage & { requests?: PlannerOutput["requests"] } = {
+              role: "assistant",
+              content: responseMessage,
+              timestamp: new Date().toISOString(),
+              requests: [
+                {
+                  type: "question",
+                  id: "nameplate_manual_serial",
+                  prompt: "Enter the machine serial number.",
+                  expectedInput: { type: "text" },
+                },
+              ],
+            };
+            messages.push(assistantTurn);
+            await db
+              .update(diagnosticSessions)
+              .set({
+                machineModel: enteredModel,
+                messages,
+                phase: "nameplate_check",
+                status: "active",
+                updatedAt: new Date(),
+              })
+              .where(eq(diagnosticSessions.id, sessionId));
+
+            sendEvent(
+              controller,
+              "message",
+              JSON.stringify({
+                sessionId,
+                message: responseMessage,
+                phase: "nameplate_check",
+                requests: assistantTurn.requests,
+              })
+            );
+            closeController(controller);
+            return;
+          }
+
+          if (imageBuffers.length === 0 && awaitingManualSerial) {
+            const enteredSerial = message.trim();
+            const enteredModel = (activeSession.machineModel ?? "").trim();
+            if (!enteredSerial || isIdontKnowMessage(message)) {
+              await escalateFromNameplate(
+                "Since the model/serial details aren't available, I'm connecting you with a technician to continue.",
+                "User could not provide machine serial during manual nameplate entry.",
+                "nameplate_manual_serial_missing"
+              );
+              return;
+            }
+            if (!enteredModel) {
+              const responseMessage = "Please enter the machine model number first.";
+              const assistantTurn: ChatMessage & { requests?: PlannerOutput["requests"] } = {
+                role: "assistant",
+                content: responseMessage,
+                timestamp: new Date().toISOString(),
+                requests: [
+                  {
+                    type: "question",
+                    id: "nameplate_manual_model",
+                    prompt: "Enter the machine model number.",
+                    expectedInput: { type: "text" },
+                  },
+                ],
+              };
+              messages.push(assistantTurn);
+              await db
+                .update(diagnosticSessions)
+                .set({
+                  messages,
+                  phase: "nameplate_check",
+                  status: "active",
+                  updatedAt: new Date(),
+                })
+                .where(eq(diagnosticSessions.id, sessionId));
+              sendEvent(
+                controller,
+                "message",
+                JSON.stringify({
+                  sessionId,
+                  message: responseMessage,
+                  phase: "nameplate_check",
+                  requests: assistantTurn.requests,
+                })
+              );
+              closeController(controller);
+              return;
+            }
+
+            await finalizeNameplateDetails(
+              enteredModel,
+              enteredSerial,
+              "manual",
+              isManualSerialRetry
+            );
+            return;
+          }
+
+          if (
+            imageBuffers.length === 0 &&
+            (isSkipSignal(message) || isIdontHavePhotoMessage(message))
+          ) {
+            const responseMessage =
+              "No problem if you don't have a photo. Do you know both the machine model and serial number so you can enter them manually?";
+            const assistantTurn: ChatMessage & { requests?: PlannerOutput["requests"] } = {
+              role: "assistant",
+              content: responseMessage,
+              timestamp: new Date().toISOString(),
+              requests: [
+                {
+                  type: "question",
+                  id: "nameplate_manual_known",
+                  prompt: "Do you know both the machine model and serial number?",
+                  expectedInput: {
+                    type: "enum",
+                    options: ["Yes, I know both", "No, I don't know them"],
+                  },
+                },
+              ],
+            };
+            messages.push(assistantTurn);
+            await db
+              .update(diagnosticSessions)
+              .set({
+                machineModel: machineModel ?? session.machineModel ?? null,
+                messages,
+                phase: "nameplate_check",
+                status: "active",
+                updatedAt: new Date(),
+              })
+              .where(eq(diagnosticSessions.id, sessionId));
+
+            sendEvent(
+              controller,
+              "message",
+              JSON.stringify({
+                sessionId,
+                message: responseMessage,
+                phase: "nameplate_check",
+                requests: assistantTurn.requests,
+              })
+            );
             closeController(controller);
             return;
           }
@@ -921,9 +1450,6 @@ export async function POST(request: Request) {
 
           sendEvent("stage", JSON.stringify({ message: STAGE_MESSAGES.analysing_photos }));
 
-          const unsupportedMessage =
-            `Your machine isn't a ${intentManifest.safety.supportedBrand} machine. We only support ${intentManifest.safety.supportedBrand} machines.`;
-
           try {
             const extracted = await withKeepalive(
               controller,
@@ -963,206 +1489,23 @@ export async function POST(request: Request) {
                 })
                 .where(eq(diagnosticSessions.id, sessionId));
 
-            sendEvent(
-              controller,
-              "message",
-              JSON.stringify({
-                sessionId,
-                message: retryMessage,
-                phase: "nameplate_check",
-                requests: assistantTurn.requests,
-                guideImages: guideImages.length > 0 ? guideImages : undefined,
-              })
-            );
-            closeController(controller);
-            return;
-            }
-
-            const { valid, canonical } = await validateModel(extractedModel);
-            if (!valid) {
-              messages.push({
-                role: "assistant",
-                content: unsupportedMessage,
-                timestamp: new Date().toISOString(),
-              });
-              await db
-                .update(diagnosticSessions)
-                .set({
-                  machineModel: canonical || extractedModel,
-                  serialNumber: extractedSerial,
-                  messages,
-                  phase: "unsupported_model",
-                  status: "resolved",
-                  updatedAt: new Date(),
-                })
-                .where(eq(diagnosticSessions.id, sessionId));
-
               sendEvent(
                 controller,
                 "message",
                 JSON.stringify({
                   sessionId,
-                  message: unsupportedMessage,
-                  phase: "unsupported_model",
-                  requests: [],
+                  message: retryMessage,
+                  phase: "nameplate_check",
+                  requests: assistantTurn.requests,
+                  guideImages: guideImages.length > 0 ? guideImages : undefined,
                 })
               );
               closeController(controller);
               return;
             }
 
-            const manufacturingYear = parseManufacturingYear(extractedSerial);
-          if (manufacturingYear == null) {
-            const retrySerialMessage =
-              "I found the serial number but couldn't read its manufacturing year. Please upload a clearer name plate photo where the serial is fully visible.";
-            const assistantTurn: ChatMessage & {
-              requests?: PlannerOutput["requests"];
-              guideImages?: string[];
-            } = {
-              role: "assistant",
-              content: retrySerialMessage,
-              timestamp: new Date().toISOString(),
-              requests: [
-                {
-                  type: "photo",
-                  id: "nameplate_serial_retry",
-                  prompt: "Please upload a clearer photo of the serial number on the name plate.",
-                  expectedInput: { type: "photo" },
-                },
-              ],
-              guideImages: guideImages.length > 0 ? guideImages : undefined,
-            };
-            messages.push(assistantTurn);
-            await db
-              .update(diagnosticSessions)
-              .set({
-                machineModel: canonical,
-                serialNumber: extractedSerial,
-                messages,
-                phase: "nameplate_check",
-                status: "active",
-                updatedAt: new Date(),
-              })
-              .where(eq(diagnosticSessions.id, sessionId));
-
-            sendEvent(
-              controller,
-              "message",
-              JSON.stringify({
-                sessionId,
-                message: retrySerialMessage,
-                phase: "nameplate_check",
-                requests: assistantTurn.requests,
-                guideImages: guideImages.length > 0 ? guideImages : undefined,
-              })
-            );
-            closeController(controller);
+            await finalizeNameplateDetails(extractedModel, extractedSerial, "photo");
             return;
-          }
-          const currentYear = new Date().getFullYear();
-          const isOlderThanFiveYears =
-            currentYear - manufacturingYear >
-            intentManifest.safety.machineAgeThresholdYears;
-          if (isOlderThanFiveYears) {
-            const escalationMessage =
-              `This machine appears to be more than ${intentManifest.safety.machineAgeThresholdYears} years old, so I'm connecting you with a technical specialist.`;
-            messages.push({
-              role: "assistant",
-              content: escalationMessage,
-              timestamp: new Date().toISOString(),
-            });
-            await db
-              .update(diagnosticSessions)
-              .set({
-                machineModel: canonical,
-                serialNumber: extractedSerial,
-                manufacturingYear,
-                messages,
-                phase: "escalated",
-                status: "escalated",
-                escalationReason: `Machine is more than ${intentManifest.safety.machineAgeThresholdYears} years old based on serial number.`,
-                updatedAt: new Date(),
-              })
-              .where(eq(diagnosticSessions.id, sessionId));
-
-            sendEvent(
-              controller,
-              "message",
-              JSON.stringify({
-                sessionId,
-                message: escalationMessage,
-                phase: "escalated",
-                requests: [],
-                escalation_reason: `Machine is more than ${intentManifest.safety.machineAgeThresholdYears} years old based on serial number.`,
-              })
-            );
-            closeController(controller);
-            return;
-          }
-
-          triageHistory = prependSubstantiveUserHistory(triageHistory, messages);
-          const triagePreview = triageHistory
-            .filter((h) => h.role === "user")
-            .map((h) => h.content.slice(0, 40))
-            .join(" | ");
-          console.log(
-            `[chat] phase: nameplate_check -> product_type_check (session=${sessionId}) triageHistory items=${triageHistory.length} user_preview="${triagePreview}${triagePreview.length >= 80 ? "…" : ""}"`
-          );
-          const availableProductTypes = await getProductTypeOptions();
-          const productTypeOptions = availableProductTypes.map((item) => item.name);
-          const responseMessage =
-            "Before we continue, what type of product are you using? If you choose Other, please specify the exact product.";
-          const assistantTurn: ChatMessage & { requests?: PlannerOutput["requests"] } = {
-            role: "assistant",
-            content: responseMessage,
-            timestamp: new Date().toISOString(),
-            requests: [
-              {
-                type: "question",
-                id: "product_type",
-                prompt: "What type of product are you using?",
-                expectedInput: { type: "enum", options: productTypeOptions },
-              },
-            ],
-          };
-          messages.push(assistantTurn);
-
-          await db
-            .update(diagnosticSessions)
-            .set({
-              machineModel: canonical,
-              serialNumber: extractedSerial,
-              manufacturingYear,
-              triageHistory,
-              messages,
-              phase: "product_type_check",
-              status: "active",
-              updatedAt: new Date(),
-            })
-            .where(eq(diagnosticSessions.id, sessionId));
-
-          session = {
-            ...session,
-            machineModel: canonical,
-            serialNumber: extractedSerial,
-            manufacturingYear,
-            triageHistory,
-            phase: "product_type_check",
-            status: "active",
-          };
-
-          sendEvent(
-            controller,
-            "message",
-            JSON.stringify({
-              sessionId,
-              message: responseMessage,
-              phase: "product_type_check",
-              requests: assistantTurn.requests,
-            })
-          );
-          closeController(controller);
-          return;
           } catch {
             messages.push({
               role: "assistant",

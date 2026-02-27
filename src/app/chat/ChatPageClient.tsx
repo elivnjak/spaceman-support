@@ -318,6 +318,16 @@ export function ChatPageClient({ isHomePage }: ChatPageClientProps) {
     return [];
   };
 
+  const requestAlreadyHasUnknownOption = (req: RequestItem): boolean => {
+    const options = getRequestOptions(req);
+    if (options.length === 0) return false;
+    return options.some((opt) =>
+      /(don'?t know|do not know|not sure|unknown|no idea|unsure|can'?t say|cannot say|don'?t have|do not have)/i.test(
+        opt
+      )
+    );
+  };
+
   const submitRequestAnswers = (requests: RequestItem[]) => {
     if (loading) return;
     const built = buildResponseFromInputs(requests);
@@ -1058,13 +1068,15 @@ export function ChatPageClient({ isHomePage }: ChatPageClientProps) {
                                         {files.length > 0 ? `${files.length} photo(s) selected` : "Attach photo"}
                                       </button>
                                     )}
-                                    <button
-                                      type="button"
-                                      onClick={() => submitSingleRequestAnswer(req, SKIP_SIGNAL)}
-                                      className="text-xs font-medium text-blue-400 hover:text-blue-300 dark:text-blue-400 dark:hover:text-blue-300"
-                                    >
-                                      {inputKind === "photo" ? "I don't have a photo" : "I don't know"}
-                                    </button>
+                                    {!(inputKind !== "photo" && requestAlreadyHasUnknownOption(req)) && (
+                                      <button
+                                        type="button"
+                                        onClick={() => submitSingleRequestAnswer(req, SKIP_SIGNAL)}
+                                        className="text-xs font-medium text-blue-400 hover:text-blue-300 dark:text-blue-400 dark:hover:text-blue-300"
+                                      >
+                                        {inputKind === "photo" ? "I don't have a photo" : "I don't know"}
+                                      </button>
+                                    )}
                                   </div>
                                 )}
                                 {!isLatest && inputKind === "number" && req.expectedInput && (
