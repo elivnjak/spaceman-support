@@ -14,20 +14,21 @@ const DEFAULT_DESCRIPTION =
 export default async function HomePage() {
   let isMaintenance = false;
   let config: MaintenanceConfig | undefined;
+  let isAuthenticated = false;
 
   try {
+    const cookieStore = await cookies();
+    const token = cookieStore.get(getSessionCookieName())?.value?.trim();
+    if (token) {
+      const authSession = await validateSession(token);
+      isAuthenticated = Boolean(authSession);
+    }
+
     const [row] = await db.select().from(maintenanceConfig).limit(1);
     config = row;
 
     if (row?.enabled === true) {
-      const cookieStore = await cookies();
-      const token = cookieStore.get(getSessionCookieName())?.value?.trim();
-      if (!token) {
-        isMaintenance = true;
-      } else {
-        const session = await validateSession(token);
-        isMaintenance = !session;
-      }
+      isMaintenance = !isAuthenticated;
     }
   } catch {
     // Database unreachable (e.g. ECONNREFUSED): fail open and show chat
@@ -49,7 +50,7 @@ export default async function HomePage() {
   return (
     <main className="flex min-h-screen flex-col">
       <div className="min-h-0 flex-1">
-        <ChatPageClient isHomePage />
+        <ChatPageClient isHomePage isAuthenticated={isAuthenticated} />
       </div>
     </main>
   );

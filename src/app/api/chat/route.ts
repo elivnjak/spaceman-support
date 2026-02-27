@@ -63,8 +63,13 @@ const VERIFICATION_REQUEST_ID = "_verification";
 const VERIFICATION_REQUEST_OPTIONS = ["Yes, it's fixed", "No, still having issues"];
 const ESCALATION_OFFER_REQUEST_ID = "_escalation_offer";
 const SKIP_SIGNAL = "__skip__";
+const TECHNICAL_DIFFICULTIES_MESSAGE =
+  "We're experiencing technical difficulties right now. I'm connecting you with a technician to continue helping you.";
+const TECHNICAL_DIFFICULTIES_ESCALATION_REASON =
+  "Technical difficulties while processing chat request.";
 
 type InputSource = "chat" | "structured" | "skip" | "note";
+type DiagnosticSessionRow = typeof diagnosticSessions.$inferSelect;
 
 function getClientIp(request: Request): string | null {
   const forwardedFor = request.headers.get("x-forwarded-for");
@@ -98,6 +103,7 @@ function isControllerClosedError(err: unknown): boolean {
 
 function send(controller: ReadableStreamDefaultController<Uint8Array>, event: string, data: string) {
   try {
+    throw Error("THIS IS AN ERROR");
     const encoder = new TextEncoder();
     controller.enqueue(encoder.encode(`event: ${event}\ndata: ${data}\n\n`));
   } catch (err) {
@@ -419,6 +425,121 @@ async function getProductTypeOptions(): Promise<{ name: string; isOther: boolean
   ];
 }
 
+async function escalateOnTechnicalFailure(opts: {
+  existingSession: DiagnosticSessionRow | null;
+  sessionId: string | null;
+  userName: string | null;
+  userPhone: string | null;
+  machineModel: string | null;
+  playbookId: string | null;
+  turnCount: number;
+  messages: ChatMessage[];
+  evidence: Record<string, EvidenceRecord>;
+  hypotheses: HypothesisState[];
+}): Promise<{ sessionId: string; message: string; escalationReason: string }> {
+  let resolvedSession = opts.existingSession;
+
+  if (!resolvedSession && opts.sessionId) {
+    resolvedSession = (
+      await db
+        .select()
+        .from(diagnosticSessions)
+        .where(eq(diagnosticSessions.id, opts.sessionId))
+        .limit(1)
+    )[0] ?? null;
+  }
+
+  const playbookLookupId = opts.playbookId ?? resolvedSession?.playbookId ?? null;
+  const playbookRow = playbookLookupId
+    ? (
+      await db
+        .select({ title: playbooks.title, labelId: playbooks.labelId })
+        .from(playbooks)
+        .where(eq(playbooks.id, playbookLookupId))
+        .limit(1)
+    )[0]
+    : null;
+
+  const mergedMessages = [...opts.messages];
+  const lastMessage = mergedMessages[mergedMessages.length - 1];
+  if (
+    !lastMessage ||
+    lastMessage.role !== "assistant" ||
+    lastMessage.content !== TECHNICAL_DIFFICULTIES_MESSAGE
+  ) {
+    mergedMessages.push({
+      role: "assistant",
+      content: TECHNICAL_DIFFICULTIES_MESSAGE,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  if (!resolvedSession) {
+    const [created] = await db
+      .insert(diagnosticSessions)
+      .values({
+        status: "escalated",
+        userName: opts.userName,
+        userPhone: opts.userPhone,
+        machineModel: opts.machineModel,
+        playbookId: playbookLookupId,
+        triageHistory: [],
+        triageRound: 0,
+        messages: mergedMessages,
+        evidence: opts.evidence,
+        hypotheses: opts.hypotheses,
+        phase: "escalated",
+        turnCount: opts.turnCount,
+        escalationReason: TECHNICAL_DIFFICULTIES_ESCALATION_REASON,
+      })
+      .returning();
+    resolvedSession = created;
+  }
+
+  const evidenceForHandoff =
+    Object.keys(opts.evidence).length > 0
+      ? opts.evidence
+      : ((resolvedSession.evidence as Record<string, EvidenceRecord>) ?? {});
+  const hypothesesForHandoff =
+    opts.hypotheses.length > 0
+      ? opts.hypotheses
+      : ((resolvedSession.hypotheses as HypothesisState[]) ?? []);
+
+  const escalationHandoff = buildEscalationHandoff({
+    sessionId: resolvedSession.id,
+    userName: resolvedSession.userName ?? opts.userName,
+    userPhone: resolvedSession.userPhone ?? opts.userPhone,
+    machineModel: resolvedSession.machineModel ?? opts.machineModel,
+    escalationReason: TECHNICAL_DIFFICULTIES_ESCALATION_REASON,
+    playbookTitle: playbookRow?.title ?? "Technical failure",
+    labelId: playbookRow?.labelId ?? "system_error",
+    turnCount: Math.max(opts.turnCount, resolvedSession.turnCount ?? 0),
+    evidence: evidenceForHandoff,
+    hypotheses: hypothesesForHandoff,
+    messages: mergedMessages,
+  });
+
+  await db
+    .update(diagnosticSessions)
+    .set({
+      messages: mergedMessages,
+      phase: "escalated",
+      status: "escalated",
+      escalationReason: TECHNICAL_DIFFICULTIES_ESCALATION_REASON,
+      escalationHandoff,
+      updatedAt: new Date(),
+    })
+    .where(eq(diagnosticSessions.id, resolvedSession.id));
+
+  sendEscalationWebhook(escalationHandoff).catch(() => {});
+
+  return {
+    sessionId: resolvedSession.id,
+    message: TECHNICAL_DIFFICULTIES_MESSAGE,
+    escalationReason: TECHNICAL_DIFFICULTIES_ESCALATION_REASON,
+  };
+}
+
 export async function POST(request: Request) {
   const formData = await request.formData();
   const sessionIdRaw = (formData.get("sessionId") as string)?.trim() || null;
@@ -443,8 +564,9 @@ export async function POST(request: Request) {
     );
   }
 
-  const session = await getSessionFromRequest(request);
-  const isAdmin = session?.user?.role === "admin";
+  const authSession = await getSessionFromRequest(request);
+  const isAuthenticated = Boolean(authSession);
+  const isAdmin = authSession?.user?.role === "admin";
   const isNewSessionRequest = !sessionIdRaw;
 
   if (isNewSessionRequest && (!userName || !userPhone)) {
@@ -499,6 +621,14 @@ export async function POST(request: Request) {
   const stream = new ReadableStream({
     async start(controller) {
       let audit: AuditLogger | null = null;
+      let sessionForError: DiagnosticSessionRow | null = null;
+      let sessionIdForError: string | null = sessionIdRaw;
+      let messagesForError: ChatMessage[] = [];
+      let evidenceForError: Record<string, EvidenceRecord> = {};
+      let hypothesesForError: HypothesisState[] = [];
+      let turnCountForError = 0;
+      let playbookIdForError: string | null = null;
+      let machineModelForError: string | null = machineModel;
       const sendEvent = (
         ...args:
           | [string, string]
@@ -555,12 +685,15 @@ export async function POST(request: Request) {
           sessionId = session.id;
         } else {
           if (!session) {
-            sendEvent("error", JSON.stringify({ error: "Session not found." }));
-            closeController(controller);
-            return;
+            throw new Error("Session not found.");
           }
           sessionId = session.id;
         }
+        sessionForError = session;
+        sessionIdForError = sessionId;
+        machineModelForError = session.machineModel ?? machineModel;
+        playbookIdForError = session.playbookId ?? null;
+        turnCountForError = session.turnCount ?? 0;
 
         audit = new AuditLogger(sessionId, (session.turnCount ?? 0) + 1);
         audit.logSessionState("before", {
@@ -574,6 +707,7 @@ export async function POST(request: Request) {
         });
 
         const messages = (session!.messages as ChatMessage[]) ?? [];
+        messagesForError = messages;
         let imageBuffersForLlm = imageBuffers;
         let triageHistory = (session!.triageHistory as TriageHistoryItem[] | null) ?? [];
         let triageRound = session!.triageRound ?? 0;
@@ -2157,9 +2291,7 @@ export async function POST(request: Request) {
           ? (await db.select().from(playbooks).where(eq(playbooks.id, session.playbookId)))[0]
           : null;
         if (!playbookRow) {
-          sendEvent("error", JSON.stringify({ error: "No playbook found for this session." }));
-          closeController(controller);
-          return;
+          throw new Error("No playbook found for this session.");
         }
 
         const playbook: DiagnosticPlaybook = {
@@ -2178,6 +2310,11 @@ export async function POST(request: Request) {
         let hypotheses = (session.hypotheses as HypothesisState[]) ?? [];
         let phase: PlannerOutput["phase"] = session.phase as PlannerOutput["phase"];
         let turnCount = session.turnCount + 1;
+        evidenceForError = evidence;
+        hypothesesForError = hypotheses;
+        turnCountForError = turnCount;
+        playbookIdForError = playbook.id;
+        machineModelForError = session.machineModel ?? machineModelForError;
         let newFrustrationTurnCount: number | null = null;
         let newEscalationContextTurnCount: number | null = null;
 
@@ -2916,7 +3053,48 @@ export async function POST(request: Request) {
         const rawMsg = err instanceof Error ? err.message : String(err);
         const msg = rawMsg?.trim() ? rawMsg : "Unexpected chat error.";
         audit?.logError(msg);
-        sendEvent("error", JSON.stringify({ error: msg }));
+        if (isAuthenticated) {
+          sendEvent("error", JSON.stringify({ error: msg }));
+          closeController(controller);
+          return;
+        }
+
+        try {
+          const escalationPayload = await escalateOnTechnicalFailure({
+            existingSession: sessionForError,
+            sessionId: sessionIdForError,
+            userName: sessionForError?.userName ?? userName,
+            userPhone: sessionForError?.userPhone ?? userPhone,
+            machineModel: sessionForError?.machineModel ?? machineModelForError,
+            playbookId: sessionForError?.playbookId ?? playbookIdForError,
+            turnCount: turnCountForError,
+            messages: messagesForError,
+            evidence: evidenceForError,
+            hypotheses: hypothesesForError,
+          });
+          sendEvent(
+            "message",
+            JSON.stringify({
+              sessionId: escalationPayload.sessionId,
+              message: escalationPayload.message,
+              phase: "escalated",
+              requests: [],
+              escalation_reason: escalationPayload.escalationReason,
+            })
+          );
+        } catch (escalationErr) {
+          console.error("[chat] technical-failure escalation failed", escalationErr);
+          sendEvent(
+            "message",
+            JSON.stringify({
+              sessionId: sessionIdForError ?? crypto.randomUUID(),
+              message: TECHNICAL_DIFFICULTIES_MESSAGE,
+              phase: "escalated",
+              requests: [],
+              escalation_reason: TECHNICAL_DIFFICULTIES_ESCALATION_REASON,
+            })
+          );
+        }
         closeController(controller);
       } finally {
         audit?.flush().catch(() => {});

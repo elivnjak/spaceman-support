@@ -115,10 +115,14 @@ function getMessageSegments(
 export type ChatPageClientProps = {
   /** When true, hide the "Back" link (e.g. when chat is on the front page). */
   isHomePage?: boolean;
+  /** True when user has an authenticated admin/editor session. */
+  isAuthenticated?: boolean;
 };
 
 const INITIAL_ASSISTANT_MESSAGE =
   "Hi! What issue are you experiencing with your machine? You can also attach a photo if that helps.";
+const PUBLIC_TECHNICAL_DIFFICULTIES_MESSAGE =
+  "We're experiencing technical difficulties right now. I'm connecting you with a technician to continue helping you.";
 
 type InitialPhase = "idle" | "typing" | "done";
 
@@ -174,7 +178,7 @@ function toImageUrl(sessionId: string | null, img: string): string {
   return sessionId ? toSessionImageUrl(sessionId, img) : img;
 }
 
-export function ChatPageClient({ isHomePage }: ChatPageClientProps) {
+export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPageClientProps) {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [userName, setUserName] = useState("");
   const [userPhone, setUserPhone] = useState("");
@@ -528,6 +532,16 @@ export function ChatPageClient({ isHomePage }: ChatPageClientProps) {
 
     try {
       const res = await fetch("/api/chat", { method: "POST", body: form });
+      if (!res.ok) {
+        let msg = `Request failed (${res.status})`;
+        try {
+          const data = (await res.json()) as { error?: unknown };
+          msg = toDisplayString(data?.error, msg);
+        } catch {
+          // Non-JSON error body; keep fallback message
+        }
+        throw new Error(msg);
+      }
       if (!res.body) throw new Error("No response");
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
@@ -548,7 +562,31 @@ export function ChatPageClient({ isHomePage }: ChatPageClientProps) {
               const data = JSON.parse(dataMatch[1].trim());
               if (event === "stage") setStage(toDisplayString(data.message, ""));
               if (event === "message") payload = data as MessagePayload;
-              if (event === "error") setError(toDisplayString(data.error, "Error"));
+              if (event === "error") {
+                if (isAuthenticated) {
+                  setError(toDisplayString(data.error, "Error"));
+                } else {
+                  setError("");
+                  setMessages((prev) => {
+                    const last = prev[prev.length - 1];
+                    if (
+                      last?.role === "assistant" &&
+                      last.content === PUBLIC_TECHNICAL_DIFFICULTIES_MESSAGE
+                    ) {
+                      return prev;
+                    }
+                    return [
+                      ...prev,
+                      {
+                        role: "assistant",
+                        content: PUBLIC_TECHNICAL_DIFFICULTIES_MESSAGE,
+                        escalation_reason: "Technical difficulties while processing chat request.",
+                      },
+                    ];
+                  });
+                  setCurrentPhase("escalated");
+                }
+              }
             } catch (_) { }
           }
         }
@@ -584,7 +622,60 @@ export function ChatPageClient({ isHomePage }: ChatPageClientProps) {
         setConnectionInterrupted(true);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      if (isAuthenticated) {
+        setError(err instanceof Error ? err.message : String(err));
+      } else {
+        setError("");
+        let recovered = false;
+        if (sessionId) {
+          try {
+            const res = await fetch(`/api/chat/${sessionId}`);
+            if (res.ok) {
+              const session: {
+                id: string;
+                messages?: ChatMessage[];
+                phase?: string;
+                status?: string;
+                userName?: string | null;
+                userPhone?: string | null;
+              } = await res.json();
+              setUserName(session.userName ?? "");
+              setUserPhone(session.userPhone ?? "");
+              setMessages(
+                (session.messages ?? []).map((m) => ({
+                  ...m,
+                  images: m.images?.map((img) => toImageUrl(session.id, img)) ?? m.images,
+                }))
+              );
+              setCurrentPhase(session.phase ?? "collecting_issue");
+              recovered = true;
+            }
+          } catch {
+            // Recovery failed; fall through to generic assistant fallback
+          }
+        }
+
+        if (!recovered) {
+          setMessages((prev) => {
+            const last = prev[prev.length - 1];
+            if (
+              last?.role === "assistant" &&
+              last.content === PUBLIC_TECHNICAL_DIFFICULTIES_MESSAGE
+            ) {
+              return prev;
+            }
+            return [
+              ...prev,
+              {
+                role: "assistant",
+                content: PUBLIC_TECHNICAL_DIFFICULTIES_MESSAGE,
+                escalation_reason: "Technical difficulties while processing chat request.",
+              },
+            ];
+          });
+          setCurrentPhase("escalated");
+        }
+      }
     } finally {
       setLoading(false);
       setInputSource("chat");
@@ -629,7 +720,29 @@ export function ChatPageClient({ isHomePage }: ChatPageClientProps) {
         sessionStorage.removeItem(CHAT_USER_PHONE_KEY);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      if (isAuthenticated) {
+        setError(err instanceof Error ? err.message : String(err));
+      } else {
+        setError("");
+        setMessages((prev) => {
+          const last = prev[prev.length - 1];
+          if (
+            last?.role === "assistant" &&
+            last.content === PUBLIC_TECHNICAL_DIFFICULTIES_MESSAGE
+          ) {
+            return prev;
+          }
+          return [
+            ...prev,
+            {
+              role: "assistant",
+              content: PUBLIC_TECHNICAL_DIFFICULTIES_MESSAGE,
+              escalation_reason: "Technical difficulties while processing chat request.",
+            },
+          ];
+        });
+        setCurrentPhase("escalated");
+      }
     }
   };
 
