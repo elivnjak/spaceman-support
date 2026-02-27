@@ -14,16 +14,31 @@ export default function AdminUsersPageClient({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<User | null>(null);
-  const [editForm, setEditForm] = useState({ email: "", password: "", role: "admin" });
+  const [editForm, setEditForm] = useState({ email: "", password: "", role: "editor" });
   const [savingEdit, setSavingEdit] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
 
   const loadList = () => {
+    setError(null);
+    setLoading(true);
     fetch("/api/admin/users")
-      .then((r) => r.json())
+      .then(async (r) => {
+        const data = await r.json().catch(() => null);
+        if (!r.ok) {
+          throw new Error(
+            data && typeof data === "object" && "error" in data
+              ? String(data.error)
+              : "Failed to load users"
+          );
+        }
+        return Array.isArray(data) ? data : [];
+      })
       .then(setList)
-      .catch(() => setList([]))
+      .catch((err: unknown) => {
+        setList([]);
+        setError(err instanceof Error ? err.message : "Failed to load users");
+      })
       .finally(() => setLoading(false));
   };
 
@@ -174,6 +189,7 @@ export default function AdminUsersPageClient({
                   setEditForm((f) => ({ ...f, role: e.target.value }))
                 }
               >
+                <option value="editor">editor</option>
                 <option value="admin">admin</option>
               </select>
               <div className="flex justify-end gap-2">

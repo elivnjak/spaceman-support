@@ -6,6 +6,10 @@ import { sessions, users, type User } from "@/lib/db/schema";
 
 const SESSION_COOKIE_NAME = "session_token";
 const SESSION_DURATION_MS = 1000 * 60 * 60 * 24 * 30; // 30 days
+export const ADMIN_ROLE = "admin";
+export const EDITOR_ROLE = "editor";
+export type AdminUiRole = typeof ADMIN_ROLE | typeof EDITOR_ROLE;
+const ADMIN_UI_ROLES = new Set<AdminUiRole>([ADMIN_ROLE, EDITOR_ROLE]);
 
 function getCookieValue(cookieHeader: string | null, name: string): string | null {
   if (!cookieHeader) return null;
@@ -86,13 +90,39 @@ export async function getSessionFromRequest(
   return { user: session.user, token, expiresAt: session.expiresAt };
 }
 
+export function isAdminRole(role: string | null | undefined): role is typeof ADMIN_ROLE {
+  return role === ADMIN_ROLE;
+}
+
+export function hasAdminUiAccess(role: string | null | undefined): role is AdminUiRole {
+  if (!role) return false;
+  return ADMIN_UI_ROLES.has(role as AdminUiRole);
+}
+
+export function normalizeAdminUiRole(role: unknown): AdminUiRole | null {
+  if (typeof role !== "string") return null;
+  const normalized = role.trim().toLowerCase();
+  return hasAdminUiAccess(normalized) ? normalized : null;
+}
+
+export async function requireAdminUiAuth(request: Request): Promise<NextResponse | null> {
+  const session = await getSessionFromRequest(request);
+  if (!session || !hasAdminUiAccess(session.user.role)) {
+    return NextResponse.json(
+      { error: "Unauthorized" },
+      { status: 401 }
+    );
+  }
+  return null;
+}
+
 /**
  * Validates the admin session cookie from the request.
  * Returns null if valid, or a 401 NextResponse if invalid.
  */
 export async function requireAdminAuth(request: Request): Promise<NextResponse | null> {
   const session = await getSessionFromRequest(request);
-  if (!session || session.user.role !== "admin") {
+  if (!session || !isAdminRole(session.user.role)) {
     return NextResponse.json(
       { error: "Unauthorized" },
       { status: 401 }

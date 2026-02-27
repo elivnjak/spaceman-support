@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { db } from "@/lib/db";
-import { getSessionCookieName, validateSession } from "@/lib/auth";
+import { getSessionCookieName, hasAdminUiAccess, validateSession } from "@/lib/auth";
 import {
   labels,
   referenceImages,
@@ -73,7 +73,7 @@ const DEFAULT_COUNTS = {
   clearanceConfigured: false,
 };
 
-type Props = { searchParams: Promise<{ unauthorized?: string; next?: string }> };
+type Props = { searchParams: Promise<{ unauthorized?: string; forbidden?: string; next?: string }> };
 
 export default async function AdminDashboardPage({ searchParams }: Props) {
   const params = await searchParams;
@@ -84,7 +84,7 @@ export default async function AdminDashboardPage({ searchParams }: Props) {
     const cookieStore = await cookies();
     const sessionToken = cookieStore.get(getSessionCookieName())?.value?.trim() ?? "";
     const session = sessionToken ? await validateSession(sessionToken) : null;
-    isAuthenticated = !!session && session.user.role === "admin";
+    isAuthenticated = !!session && hasAdminUiAccess(session.user.role);
     counts = isAuthenticated ? await getCounts() : DEFAULT_COUNTS;
   } catch {
     // Database unreachable (e.g. ECONNREFUSED): show login form only
@@ -93,10 +93,16 @@ export default async function AdminDashboardPage({ searchParams }: Props) {
   }
 
   const showLogin = !isAuthenticated || params.unauthorized === "1";
+  const showForbidden = isAuthenticated && params.forbidden === "1";
 
   return (
     <div>
-      <h1 className="mb-8 text-2xl font-bold">Admin dashboard</h1>
+      <h1 className="mb-8 text-2xl font-bold">Dashboard</h1>
+      {showForbidden && (
+        <p className="mb-4 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-200">
+          This page is restricted to admin users.
+        </p>
+      )}
       {showLogin && (
         <AdminLoginForm next={params.next} />
       )}

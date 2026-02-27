@@ -37,10 +37,10 @@ export function AdminLoginForm({ next }: { next?: string }) {
       className="mb-8 rounded-lg border border-amber-200 bg-amber-50 p-6 dark:border-amber-800 dark:bg-amber-950/30"
     >
       <h2 className="mb-2 text-lg font-medium text-amber-800 dark:text-amber-200">
-        Admin sign in required
+        Staff sign in required
       </h2>
       <p className="mb-4 text-sm text-amber-700 dark:text-amber-300">
-        Enter your admin credentials to access Documents, Labels, and other admin pages.
+        Enter your admin or editor credentials to access the admin tools.
       </p>
       <div className="flex flex-wrap items-end gap-3">
         <label className="flex-1 min-w-[200px]">
@@ -49,7 +49,7 @@ export function AdminLoginForm({ next }: { next?: string }) {
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="admin@admin.com"
+            placeholder="you@company.com"
             className="w-full rounded border border-gray-300 px-3 py-2 dark:border-gray-600 dark:bg-gray-800"
             autoComplete="username"
           />

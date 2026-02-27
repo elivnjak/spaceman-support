@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { users } from "@/lib/db/schema";
-import { requireAdminAuth } from "@/lib/auth";
-import { hashPassword } from "@/lib/auth";
+import { EDITOR_ROLE, hashPassword, normalizeAdminUiRole, requireAdminAuth } from "@/lib/auth";
 
 export async function GET(request: Request) {
   const authError = await requireAdminAuth(request);
@@ -30,11 +29,17 @@ export async function POST(request: Request) {
 
   const email = (body.email ?? "").trim().toLowerCase();
   const password = body.password ?? "";
-  const role = (body.role ?? "admin").trim() || "admin";
+  const role = body.role === undefined ? EDITOR_ROLE : normalizeAdminUiRole(body.role);
 
   if (!email || !password) {
     return NextResponse.json(
       { error: "email and password are required" },
+      { status: 400 }
+    );
+  }
+  if (!role) {
+    return NextResponse.json(
+      { error: "role must be 'admin' or 'editor'" },
       { status: 400 }
     );
   }

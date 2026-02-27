@@ -3,10 +3,17 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
+import type { AdminUiRole } from "@/lib/auth";
 
-const navItems = [
+type NavItem = {
+  href: string;
+  label: string;
+  adminOnly?: boolean;
+};
+
+const navItems: NavItem[] = [
   { href: "/admin", label: "Dashboard" },
-  { href: "/admin/users", label: "Users" },
+  { href: "/admin/users", label: "Users", adminOnly: true },
   { href: "/admin/labels", label: "Labels" },
   { href: "/admin/images", label: "Reference images" },
   { href: "/admin/models", label: "Supported models" },
@@ -17,13 +24,15 @@ const navItems = [
   { href: "/admin/docs", label: "Documents" },
   { href: "/admin/playbooks", label: "Playbooks" },
   { href: "/admin/intent", label: "Intent manifest" },
-  { href: "/admin/audit-logs", label: "Audit logs" },
-] as const;
+  { href: "/admin/audit-logs", label: "Audit logs", adminOnly: true },
+];
 
-export function AdminNav() {
+export function AdminNav({ role }: { role: AdminUiRole | null }) {
   const [open, setOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const pathname = usePathname();
+  const visibleNavItems = navItems.filter((item) => !item.adminOnly || role === "admin");
+  const roleLabel = role === "editor" ? "Editor" : "Admin";
 
   const handleLogout = async () => {
     if (loggingOut) return;
@@ -69,7 +78,7 @@ export function AdminNav() {
             </svg>
           </button>
           <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-            Admin
+            {roleLabel}
           </span>
           <Link
             href="/"
@@ -131,7 +140,7 @@ export function AdminNav() {
           </button>
         </div>
         <ul className="flex flex-col py-2">
-          {navItems.map(({ href, label }) => (
+          {visibleNavItems.map(({ href, label }) => (
             <li key={href}>
               <Link
                 href={href}

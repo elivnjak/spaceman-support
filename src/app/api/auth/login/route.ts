@@ -5,6 +5,7 @@ import { users, type User } from "@/lib/db/schema";
 import {
   createSession,
   getSessionCookieName,
+  hasAdminUiAccess,
   verifyPassword,
 } from "@/lib/auth";
 
@@ -43,7 +44,7 @@ export async function POST(request: Request) {
     throw err;
   }
   const user = userRows[0];
-  if (!user || user.role !== "admin") {
+  if (!user || !hasAdminUiAccess(user.role)) {
     return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
   }
 

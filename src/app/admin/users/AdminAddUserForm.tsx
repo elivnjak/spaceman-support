@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 
 export default function AdminAddUserForm() {
   const router = useRouter();
-  const [form, setForm] = useState({ email: "", password: "", role: "admin" });
+  const [form, setForm] = useState({ email: "", password: "", role: "editor" });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -83,6 +83,7 @@ export default function AdminAddUserForm() {
             value={form.role}
             onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))}
           >
+            <option value="editor">editor</option>
             <option value="admin">admin</option>
           </select>
         </div>

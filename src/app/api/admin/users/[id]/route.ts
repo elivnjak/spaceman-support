@@ -2,7 +2,13 @@ import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { users } from "@/lib/db/schema";
-import { requireAdminAuth, getSessionFromRequest, hashPassword } from "@/lib/auth";
+import {
+  getSessionFromRequest,
+  hashPassword,
+  isAdminRole,
+  normalizeAdminUiRole,
+  requireAdminAuth,
+} from "@/lib/auth";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -33,7 +39,14 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     updates.passwordHash = await hashPassword(body.password as string);
   }
   if (body.role !== undefined) {
-    updates.role = (body.role as string).trim() || "admin";
+    const role = normalizeAdminUiRole(body.role);
+    if (!role) {
+      return NextResponse.json(
+        { error: "role must be 'admin' or 'editor'" },
+        { status: 400 }
+      );
+    }
+    updates.role = role;
   }
 
   if (Object.keys(updates).length === 0) {
@@ -61,7 +74,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
 
 export async function DELETE(request: Request, { params }: RouteParams) {
   const session = await getSessionFromRequest(request);
-  if (!session || session.user.role !== "admin") {
+  if (!session || !isAdminRole(session.user.role)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
