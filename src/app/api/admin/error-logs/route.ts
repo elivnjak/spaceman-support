@@ -3,6 +3,7 @@ import { requireAdminAuth } from "@/lib/auth";
 import {
   ERROR_LOG_RETENTION_DAYS,
   type ErrorLogLevel,
+  getErrorLogsRoot,
   queryErrorLogs,
   summarizeErrorLogsBySession,
 } from "@/lib/error-logs";
@@ -40,6 +41,7 @@ async function GETHandler(request: Request) {
 
   return NextResponse.json({
     retentionDays: ERROR_LOG_RETENTION_DAYS,
+    logPath: getErrorLogsRoot(),
     entries,
     summary: summarizeErrorLogsBySession(entries),
   });

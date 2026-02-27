@@ -32,6 +32,7 @@ You need:
 5. **Persistent storage for uploads**
    - In the app service → **Settings** → **Volumes** → add a volume and mount it at `/app/storage` (or another path).
    - Add variable: `STORAGE_PATH=/app/storage` (or the path you chose).
+   - Error logs are persisted automatically at `STORAGE_PATH/logs`. Optional override: `ERROR_LOGS_PATH=/app/storage/logs`.
 
 6. **Migrations run automatically on Railway deploy**
    - This repo uses Railway’s **pre-deploy command** in `railway.json`: `npm run db:setup` runs before each deploy (pgvector + migrations + seed). The **start command** is `npm start` so the app starts quickly and is not killed by startup timeouts.

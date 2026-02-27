@@ -43,7 +43,30 @@ export type ErrorLogSessionSummary = {
   lastMessage: string;
 };
 
-const LOGS_ROOT = path.join(process.cwd(), "logs");
+function resolveErrorLogsRoot(): string {
+  const explicit = process.env.ERROR_LOGS_PATH?.trim();
+  if (explicit) {
+    return path.resolve(explicit);
+  }
+
+  const storagePath = process.env.STORAGE_PATH?.trim();
+  if (storagePath) {
+    return path.join(storagePath, "logs");
+  }
+
+  const railwayMount = process.env.RAILWAY_VOLUME_MOUNT_PATH?.trim();
+  if (railwayMount) {
+    const normalized = railwayMount.replace(/\\/g, "/").replace(/\/+$/, "");
+    if (normalized.toLowerCase().endsWith("/logs")) {
+      return railwayMount;
+    }
+    return path.join(railwayMount, "logs");
+  }
+
+  return path.join(process.cwd(), "logs");
+}
+
+const LOGS_ROOT = resolveErrorLogsRoot();
 const LOG_FILE_PREFIX = "errors-";
 const LOG_FILE_SUFFIX = ".log";
 const MAX_LOG_LIMIT = 5000;
@@ -54,6 +77,10 @@ export const ERROR_LOG_RETENTION_DAYS = 30;
 const ERROR_LOG_RETENTION_MS = ERROR_LOG_RETENTION_DAYS * 24 * 60 * 60 * 1000;
 
 let lastCleanupAt = 0;
+
+export function getErrorLogsRoot(): string {
+  return LOGS_ROOT;
+}
 
 function trimOrUndefined(value: string | null | undefined): string | undefined {
   if (!value) return undefined;

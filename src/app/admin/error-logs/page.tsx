@@ -29,6 +29,7 @@ type ErrorLogSessionSummary = {
 
 type ErrorLogsResponse = {
   retentionDays: number;
+  logPath?: string;
   entries: ErrorLogEntry[];
   summary: ErrorLogSessionSummary[];
 };
@@ -66,6 +67,7 @@ function truncate(value: string, max = 22): string {
 
 export default function AdminErrorLogsPage() {
   const [retentionDays, setRetentionDays] = useState(30);
+  const [logPath, setLogPath] = useState<string>("/logs");
   const [entries, setEntries] = useState<ErrorLogEntry[]>([]);
   const [summary, setSummary] = useState<ErrorLogSessionSummary[]>([]);
   const [query, setQuery] = useState("");
@@ -93,6 +95,7 @@ export default function AdminErrorLogsPage() {
         })
         .then((payload) => {
           setRetentionDays(payload.retentionDays ?? 30);
+          setLogPath(payload.logPath?.trim() || "/logs");
           setEntries(Array.isArray(payload.entries) ? payload.entries : []);
           setSummary(Array.isArray(payload.summary) ? payload.summary : []);
         })
@@ -125,7 +128,7 @@ export default function AdminErrorLogsPage() {
       <header className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Error logs</h1>
         <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-          File logs stored in <code>/logs</code>. Entries older than {retentionDays} days are
+          File logs stored in <code>{logPath}</code>. Entries older than {retentionDays} days are
           automatically deleted.
         </p>
       </header>
