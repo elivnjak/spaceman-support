@@ -3,8 +3,9 @@ import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { clearanceGuideImages } from "@/lib/db/schema";
+import { withApiRouteErrorLogging } from "@/lib/error-logs";
 
-export async function GET(
+async function GETHandler(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -30,3 +31,5 @@ export async function GET(
     return NextResponse.json({ error: "File not found" }, { status: 404 });
   }
 }
+
+export const GET = withApiRouteErrorLogging("/api/clearance-guide-image/[id]", GETHandler);

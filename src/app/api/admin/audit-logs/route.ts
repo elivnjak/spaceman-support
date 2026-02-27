@@ -3,6 +3,7 @@ import { desc, inArray } from "drizzle-orm";
 import { requireAdminAuth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { auditLogs, diagnosticSessions } from "@/lib/db/schema";
+import { withApiRouteErrorLogging } from "@/lib/error-logs";
 
 type SessionSummary = {
   sessionId: string;
@@ -17,7 +18,7 @@ type SessionSummary = {
   playbookId: string | null;
 };
 
-export async function GET(request: Request) {
+async function GETHandler(request: Request) {
   const unauth = await requireAdminAuth(request);
   if (unauth) return unauth;
 
@@ -78,3 +79,5 @@ export async function GET(request: Request) {
 
   return NextResponse.json(result);
 }
+
+export const GET = withApiRouteErrorLogging("/api/admin/audit-logs", GETHandler);

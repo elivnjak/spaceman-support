@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { deleteSession, getSessionCookieName } from "@/lib/auth";
+import { withApiRouteErrorLogging } from "@/lib/error-logs";
 
 function getCookieValue(cookieHeader: string | null, name: string): string | null {
   if (!cookieHeader) return null;
@@ -13,7 +14,7 @@ function getCookieValue(cookieHeader: string | null, name: string): string | nul
   return null;
 }
 
-export async function POST(request: Request) {
+async function POSTHandler(request: Request) {
   const cookieName = getSessionCookieName();
   const token = getCookieValue(request.headers.get("cookie"), cookieName);
 
@@ -31,3 +32,5 @@ export async function POST(request: Request) {
   });
   return response;
 }
+
+export const POST = withApiRouteErrorLogging("/api/auth/logout", POSTHandler);

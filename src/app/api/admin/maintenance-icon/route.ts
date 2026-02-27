@@ -8,8 +8,9 @@ import {
   sha256,
   writeStorageFile,
 } from "@/lib/storage";
+import { withApiRouteErrorLogging } from "@/lib/error-logs";
 
-export async function POST(request: Request) {
+async function POSTHandler(request: Request) {
   const formData = await request.formData();
   const file = formData.get("file") as File | null;
   if (!file || !(file instanceof File)) {
@@ -53,7 +54,7 @@ export async function POST(request: Request) {
   return NextResponse.json({ ok: true, iconUrl: "/api/maintenance-icon" });
 }
 
-export async function DELETE() {
+async function DELETEHandler() {
   const [config] = await db.select().from(maintenanceConfig).limit(1);
   if (!config?.iconPath) {
     return NextResponse.json({ ok: true });
@@ -69,3 +70,7 @@ export async function DELETE() {
     .where(eq(maintenanceConfig.id, config.id));
   return NextResponse.json({ ok: true });
 }
+
+export const POST = withApiRouteErrorLogging("/api/admin/maintenance-icon", POSTHandler);
+
+export const DELETE = withApiRouteErrorLogging("/api/admin/maintenance-icon", DELETEHandler);

@@ -7,8 +7,9 @@ import {
   slugFromUrl,
 } from "@/lib/ingestion/document-ingestor";
 import { eq } from "drizzle-orm";
+import { withApiRouteErrorLogging } from "@/lib/error-logs";
 
-export async function POST(request: Request) {
+async function POSTHandler(request: Request) {
   let body: {
     url?: string;
     cssSelector?: string;
@@ -89,3 +90,5 @@ export async function POST(request: Request) {
     chunkCount,
   });
 }
+
+export const POST = withApiRouteErrorLogging("/api/admin/docs/ingest-url", POSTHandler);

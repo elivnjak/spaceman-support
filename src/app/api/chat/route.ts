@@ -49,6 +49,7 @@ import {
 } from "@/lib/pipeline/nameplate-analysis";
 import { AuditLogger } from "@/lib/audit";
 import { verifyTurnstileToken } from "@/lib/turnstile";
+import { logErrorEvent } from "@/lib/error-logs";
 
 const STAGE_MESSAGES: Record<string, string> = {
   requesting_nameplate: "Collecting machine details…",
@@ -67,9 +68,20 @@ const TECHNICAL_DIFFICULTIES_MESSAGE =
   "We're experiencing technical difficulties right now. I'm connecting you with a technician to continue helping you.";
 const TECHNICAL_DIFFICULTIES_ESCALATION_REASON =
   "Technical difficulties while processing chat request.";
+const DUPLICATE_TURN_WINDOW_MS = 5000;
+
+const inFlightTurnKeys = new Set<string>();
+const inFlightTurnTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const IN_FLIGHT_TURN_KEY_TTL_MS = 15000;
 
 type InputSource = "chat" | "structured" | "skip" | "note";
 type DiagnosticSessionRow = typeof diagnosticSessions.$inferSelect;
+type ReplayAssistantMessage = ChatMessage & {
+  requests?: PlannerOutput["requests"];
+  guideImages?: string[];
+  resolution?: PlannerOutput["resolution"];
+  escalation_reason?: string;
+};
 
 function getClientIp(request: Request): string | null {
   const forwardedFor = request.headers.get("x-forwarded-for");
@@ -103,7 +115,6 @@ function isControllerClosedError(err: unknown): boolean {
 
 function send(controller: ReadableStreamDefaultController<Uint8Array>, event: string, data: string) {
   try {
-    throw Error("THIS IS AN ERROR");
     const encoder = new TextEncoder();
     controller.enqueue(encoder.encode(`event: ${event}\ndata: ${data}\n\n`));
   } catch (err) {
@@ -228,6 +239,59 @@ const TRIVIAL_USER_MESSAGE_PATTERNS = [
 
 function normalizeUserMessage(content: string): string {
   return content.trim().toLowerCase();
+}
+
+function buildTurnKey(sessionId: string, content: string, imageCount: number): string {
+  return `${sessionId}::${normalizeUserMessage(content)}::${imageCount}`;
+}
+
+function acquireTurnKey(key: string): boolean {
+  if (inFlightTurnKeys.has(key)) return false;
+  inFlightTurnKeys.add(key);
+  const existing = inFlightTurnTimers.get(key);
+  if (existing) clearTimeout(existing);
+  const timer = setTimeout(() => {
+    inFlightTurnKeys.delete(key);
+    inFlightTurnTimers.delete(key);
+  }, IN_FLIGHT_TURN_KEY_TTL_MS);
+  inFlightTurnTimers.set(key, timer);
+  return true;
+}
+
+function releaseTurnKey(key: string | null): void {
+  if (!key) return;
+  inFlightTurnKeys.delete(key);
+  const timer = inFlightTurnTimers.get(key);
+  if (timer) clearTimeout(timer);
+  inFlightTurnTimers.delete(key);
+}
+
+function findRecentDuplicateAssistantReply(
+  messages: ChatMessage[],
+  incomingUserMessage: string,
+  nowMs: number
+): ReplayAssistantMessage | null {
+  const normalizedIncoming = normalizeUserMessage(incomingUserMessage);
+  if (!normalizedIncoming) return null;
+
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    if (msg.role !== "user") continue;
+    if (normalizeUserMessage(msg.content) !== normalizedIncoming) continue;
+
+    const ts = msg.timestamp ? Date.parse(msg.timestamp) : NaN;
+    if (!Number.isFinite(ts) || nowMs - ts > DUPLICATE_TURN_WINDOW_MS) return null;
+
+    for (let j = i + 1; j < messages.length; j++) {
+      const next = messages[j];
+      if (next.role === "assistant") {
+        return next as ReplayAssistantMessage;
+      }
+    }
+    return null;
+  }
+
+  return null;
 }
 
 function isPlaceholderUserMessage(content: string): boolean {
@@ -621,6 +685,7 @@ export async function POST(request: Request) {
   const stream = new ReadableStream({
     async start(controller) {
       let audit: AuditLogger | null = null;
+      let turnKeyForRelease: string | null = null;
       let sessionForError: DiagnosticSessionRow | null = null;
       let sessionIdForError: string | null = sessionIdRaw;
       let messagesForError: ChatMessage[] = [];
@@ -691,6 +756,35 @@ export async function POST(request: Request) {
         }
         sessionForError = session;
         sessionIdForError = sessionId;
+
+        if (sessionId && message) {
+          const turnKey = buildTurnKey(sessionId, message, imageBuffers.length);
+          turnKeyForRelease = turnKey;
+          if (!acquireTurnKey(turnKey)) {
+            const latestAssistant = [...((session.messages as ChatMessage[]) ?? [])]
+              .reverse()
+              .find((m) => m.role === "assistant") as ReplayAssistantMessage | undefined;
+            if (latestAssistant) {
+              sendEvent(
+                "message",
+                JSON.stringify({
+                  sessionId,
+                  message: latestAssistant.content,
+                  phase: session.phase ?? "collecting_issue",
+                  requests: latestAssistant.requests,
+                  resolution: latestAssistant.resolution,
+                  escalation_reason: latestAssistant.escalation_reason,
+                  guideImages: latestAssistant.guideImages,
+                })
+              );
+            } else {
+              sendEvent("error", JSON.stringify({ error: "A similar request is already being processed." }));
+            }
+            closeController(controller);
+            return;
+          }
+        }
+
         machineModelForError = session.machineModel ?? machineModel;
         playbookIdForError = session.playbookId ?? null;
         turnCountForError = session.turnCount ?? 0;
@@ -724,6 +818,30 @@ export async function POST(request: Request) {
         }
 
         const hasUserInput = Boolean(message) || imagePaths.length > 0;
+        const incomingUserMessage = message || "(sent photos)";
+        if (sessionId && hasUserInput && imagePaths.length === 0) {
+          const duplicateReply = findRecentDuplicateAssistantReply(
+            messages,
+            incomingUserMessage,
+            Date.now()
+          );
+          if (duplicateReply) {
+            sendEvent(
+              "message",
+              JSON.stringify({
+                sessionId,
+                message: duplicateReply.content,
+                phase: session.phase ?? "collecting_issue",
+                requests: duplicateReply.requests,
+                resolution: duplicateReply.resolution,
+                escalation_reason: duplicateReply.escalation_reason,
+                guideImages: duplicateReply.guideImages,
+              })
+            );
+            closeController(controller);
+            return;
+          }
+        }
         audit.logUserInput({
           message: message || "",
           imageCount: imageBuffers.length,
@@ -3050,6 +3168,21 @@ export async function POST(request: Request) {
         closeController(controller);
       } catch (err) {
         console.error("[chat] fatal route error", err);
+        await logErrorEvent({
+          level: "error",
+          route: "/api/chat",
+          sessionId: sessionIdForError,
+          message: "Fatal error while processing chat request.",
+          error: err,
+          context: {
+            inputSource,
+            imageCount: imageBuffers.length,
+            isAuthenticated,
+            userRole: authSession?.user?.role ?? null,
+            phase: sessionForError?.phase ?? null,
+            turnCount: turnCountForError,
+          },
+        }).catch(() => {});
         const rawMsg = err instanceof Error ? err.message : String(err);
         const msg = rawMsg?.trim() ? rawMsg : "Unexpected chat error.";
         audit?.logError(msg);
@@ -3084,6 +3217,18 @@ export async function POST(request: Request) {
           );
         } catch (escalationErr) {
           console.error("[chat] technical-failure escalation failed", escalationErr);
+          await logErrorEvent({
+            level: "error",
+            route: "/api/chat",
+            sessionId: sessionIdForError,
+            message: "Technical-failure escalation fallback was triggered.",
+            error: escalationErr,
+            context: {
+              isAuthenticated,
+              phase: sessionForError?.phase ?? null,
+              turnCount: turnCountForError,
+            },
+          }).catch(() => {});
           sendEvent(
             "message",
             JSON.stringify({
@@ -3097,6 +3242,7 @@ export async function POST(request: Request) {
         }
         closeController(controller);
       } finally {
+        releaseTurnKey(turnKeyForRelease);
         audit?.flush().catch(() => {});
       }
     },

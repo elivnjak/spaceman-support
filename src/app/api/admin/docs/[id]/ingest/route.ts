@@ -7,8 +7,9 @@ import {
   ingestPastedText,
   ingestUrl,
 } from "@/lib/ingestion/document-ingestor";
+import { withApiRouteErrorLogging } from "@/lib/error-logs";
 
-export async function POST(
+async function POSTHandler(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -39,3 +40,5 @@ export async function POST(
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
+
+export const POST = withApiRouteErrorLogging("/api/admin/docs/[id]/ingest", POSTHandler);

@@ -8,8 +8,9 @@ import {
   hasAdminUiAccess,
   verifyPassword,
 } from "@/lib/auth";
+import { withApiRouteErrorLogging } from "@/lib/error-logs";
 
-export async function POST(request: Request) {
+async function POSTHandler(request: Request) {
   let body: { email?: string; password?: string };
   try {
     body = await request.json();
@@ -64,3 +65,5 @@ export async function POST(request: Request) {
   });
   return response;
 }
+
+export const POST = withApiRouteErrorLogging("/api/auth/login", POSTHandler);

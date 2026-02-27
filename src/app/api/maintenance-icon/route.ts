@@ -2,8 +2,9 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { maintenanceConfig } from "@/lib/db/schema";
 import { readStorageFile } from "@/lib/storage";
+import { withApiRouteErrorLogging } from "@/lib/error-logs";
 
-export async function GET() {
+async function GETHandler() {
   const [config] = await db
     .select({ iconPath: maintenanceConfig.iconPath })
     .from(maintenanceConfig)
@@ -32,3 +33,5 @@ export async function GET() {
     return NextResponse.json({ error: "File not found" }, { status: 404 });
   }
 }
+
+export const GET = withApiRouteErrorLogging("/api/maintenance-icon", GETHandler);

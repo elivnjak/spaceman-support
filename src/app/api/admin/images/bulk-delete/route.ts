@@ -2,8 +2,9 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { referenceImages } from "@/lib/db/schema";
 import { inArray } from "drizzle-orm";
+import { withApiRouteErrorLogging } from "@/lib/error-logs";
 
-export async function POST(request: Request) {
+async function POSTHandler(request: Request) {
   const body = await request.json();
   const { ids } = body as { ids: string[] };
   if (!Array.isArray(ids) || ids.length === 0) {
@@ -15,3 +16,5 @@ export async function POST(request: Request) {
   await db.delete(referenceImages).where(inArray(referenceImages.id, ids));
   return NextResponse.json({ ok: true, deleted: ids.length });
 }
+
+export const POST = withApiRouteErrorLogging("/api/admin/images/bulk-delete", POSTHandler);

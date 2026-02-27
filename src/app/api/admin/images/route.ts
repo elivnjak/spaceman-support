@@ -6,8 +6,9 @@ import {
   sha256,
   referenceImagePath,
 } from "@/lib/storage";
+import { withApiRouteErrorLogging } from "@/lib/error-logs";
 
-export async function GET() {
+async function GETHandler() {
   const list = await db
     .select()
     .from(referenceImages)
@@ -15,7 +16,7 @@ export async function GET() {
   return NextResponse.json(list);
 }
 
-export async function POST(request: Request) {
+async function POSTHandler(request: Request) {
   const formData = await request.formData();
   const labelId = formData.get("labelId") as string | null;
   const notes = (formData.get("notes") as string) || null;
@@ -68,3 +69,7 @@ export async function POST(request: Request) {
 
   return NextResponse.json(results);
 }
+
+export const GET = withApiRouteErrorLogging("/api/admin/images", GETHandler);
+
+export const POST = withApiRouteErrorLogging("/api/admin/images", POSTHandler);

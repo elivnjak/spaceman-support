@@ -12,6 +12,7 @@ import {
   type IntentManifestOverride,
   intentManifestOverrideSchema,
 } from "@/lib/intent/types";
+import { withApiRouteErrorLogging } from "@/lib/error-logs";
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -77,7 +78,7 @@ async function getCurrentOverride(): Promise<IntentManifestOverride> {
   return parsed.success ? parsed.data : {};
 }
 
-export async function GET() {
+async function GETHandler() {
   const manifest = await getIntentManifest();
   const meta = getIntentManifestMeta();
   const override = await getCurrentOverride();
@@ -89,7 +90,7 @@ export async function GET() {
   });
 }
 
-export async function PUT(request: Request) {
+async function PUTHandler(request: Request) {
   const body = (await request.json()) as {
     override?: unknown;
     updatedBy?: string;
@@ -151,3 +152,7 @@ export async function PUT(request: Request) {
     overriddenFields: collectOverridePaths(mergedOverride),
   });
 }
+
+export const GET = withApiRouteErrorLogging("/api/admin/intent-manifest", GETHandler);
+
+export const PUT = withApiRouteErrorLogging("/api/admin/intent-manifest", PUTHandler);

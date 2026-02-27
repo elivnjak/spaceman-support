@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { labels } from "@/lib/db/schema";
+import { withApiRouteErrorLogging } from "@/lib/error-logs";
 
-export async function GET() {
+async function GETHandler() {
   const list = await db.select().from(labels);
   return NextResponse.json(list);
 }
 
-export async function POST(request: Request) {
+async function POSTHandler(request: Request) {
   const body = await request.json();
   const { id, displayName, description } = body as {
     id: string;
@@ -34,3 +35,7 @@ export async function POST(request: Request) {
     });
   return NextResponse.json({ id: slug, displayName, description: description ?? null });
 }
+
+export const GET = withApiRouteErrorLogging("/api/admin/labels", GETHandler);
+
+export const POST = withApiRouteErrorLogging("/api/admin/labels", POSTHandler);

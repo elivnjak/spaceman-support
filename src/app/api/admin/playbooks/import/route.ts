@@ -4,6 +4,7 @@ import { randomUUID } from "crypto";
 import { db } from "@/lib/db";
 import { actions, labels, playbooks } from "@/lib/db/schema";
 import { eq, inArray } from "drizzle-orm";
+import { withApiRouteErrorLogging } from "@/lib/error-logs";
 
 const EVIDENCE_TYPES = new Set([
   "photo",
@@ -45,7 +46,7 @@ function readRows(ws: ExcelJS.Worksheet | undefined, startRow = 3) {
   return rows;
 }
 
-export async function POST(request: Request) {
+async function POSTHandler(request: Request) {
   try {
     const formData = await request.formData();
     const file = formData.get("file");
@@ -236,3 +237,5 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
+
+export const POST = withApiRouteErrorLogging("/api/admin/playbooks/import", POSTHandler);

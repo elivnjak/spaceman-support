@@ -4,8 +4,9 @@ import { db } from "@/lib/db";
 import { documents, docChunks } from "@/lib/db/schema";
 import { writeStorageFile, documentPath } from "@/lib/storage";
 import { extractTextPreview } from "@/lib/ingestion/document-ingestor";
+import { withApiRouteErrorLogging } from "@/lib/error-logs";
 
-export async function GET() {
+async function GETHandler() {
   const list = await db
     .select()
     .from(documents)
@@ -28,7 +29,7 @@ export async function GET() {
   return NextResponse.json(listWithCounts);
 }
 
-export async function POST(request: Request) {
+async function POSTHandler(request: Request) {
   const formData = await request.formData();
   const title = formData.get("title") as string | null;
   const file = formData.get("file") as File | null;
@@ -116,3 +117,7 @@ export async function POST(request: Request) {
 
   return NextResponse.json(doc);
 }
+
+export const GET = withApiRouteErrorLogging("/api/admin/docs", GETHandler);
+
+export const POST = withApiRouteErrorLogging("/api/admin/docs", POSTHandler);

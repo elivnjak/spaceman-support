@@ -3,8 +3,9 @@ import { db } from "@/lib/db";
 import { documents } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { deleteStorageFile, getStorageRelativePath } from "@/lib/storage";
+import { withApiRouteErrorLogging } from "@/lib/error-logs";
 
-export async function GET(
+async function GETHandler(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -18,7 +19,7 @@ export async function GET(
   return NextResponse.json(doc);
 }
 
-export async function PATCH(
+async function PATCHHandler(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -91,7 +92,7 @@ export async function PATCH(
   return NextResponse.json(updated);
 }
 
-export async function DELETE(
+async function DELETEHandler(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -117,3 +118,9 @@ export async function DELETE(
   await db.delete(documents).where(eq(documents.id, id));
   return new NextResponse(null, { status: 204 });
 }
+
+export const GET = withApiRouteErrorLogging("/api/admin/docs/[id]", GETHandler);
+
+export const PATCH = withApiRouteErrorLogging("/api/admin/docs/[id]", PATCHHandler);
+
+export const DELETE = withApiRouteErrorLogging("/api/admin/docs/[id]", DELETEHandler);

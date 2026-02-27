@@ -24,6 +24,7 @@ const navItems: NavItem[] = [
   { href: "/admin/docs", label: "Documents" },
   { href: "/admin/playbooks", label: "Playbooks" },
   { href: "/admin/intent", label: "Intent manifest" },
+  { href: "/admin/error-logs", label: "Error logs", adminOnly: true },
   { href: "/admin/audit-logs", label: "Audit logs", adminOnly: true },
 ];
 

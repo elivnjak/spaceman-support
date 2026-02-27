@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { asc, eq, inArray } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { clearanceConfig, clearanceGuideImages } from "@/lib/db/schema";
+import { withApiRouteErrorLogging } from "@/lib/error-logs";
 
 const DEFAULT_INSTRUCTION =
   "Please send photos of the machine clearance from different angles so our technical team can review installation spacing if escalation is needed.";
@@ -23,7 +24,7 @@ function toGuidePayload(images: GuideImage[], selectedIds: string[]) {
   }));
 }
 
-export async function GET() {
+async function GETHandler() {
   const [config] = await db.select().from(clearanceConfig).limit(1);
   const guideImages = await db
     .select({
@@ -46,7 +47,7 @@ export async function GET() {
   });
 }
 
-export async function PUT(request: Request) {
+async function PUTHandler(request: Request) {
   const body = (await request.json()) as {
     instructionText?: string;
     guideImageIds?: string[];
@@ -88,3 +89,7 @@ export async function PUT(request: Request) {
 
   return NextResponse.json({ ok: true });
 }
+
+export const GET = withApiRouteErrorLogging("/api/admin/clearance-config", GETHandler);
+
+export const PUT = withApiRouteErrorLogging("/api/admin/clearance-config", PUTHandler);

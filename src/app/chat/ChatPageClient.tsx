@@ -211,6 +211,9 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
   const turnstileWidgetIdRef = useRef<string | null>(null);
   /** When user clicks skip, store the message to show/send (e.g. "I don't have a photo" for photo requests). */
   const skipDisplayMessageRef = useRef<string>("I don't know");
+  const sendInFlightRef = useRef(false);
+  const pendingSubmitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastSubmissionRef = useRef<{ key: string; atMs: number } | null>(null);
   const SNIPPET_LENGTH = 280;
 
   messagesRef.current = messages;
@@ -288,6 +291,15 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
     return () => clearTimeout(t);
   }, [initialPhase]);
 
+  useEffect(() => {
+    return () => {
+      if (pendingSubmitTimerRef.current) {
+        clearTimeout(pendingSubmitTimerRef.current);
+        pendingSubmitTimerRef.current = null;
+      }
+    };
+  }, []);
+
   const updateRequestInput = (id: string, value: string) => {
     setRequestInputs((prev) => ({ ...prev, [id]: value }));
   };
@@ -333,13 +345,15 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
   };
 
   const submitRequestAnswers = (requests: RequestItem[]) => {
-    if (loading) return;
+    if (loading || sendInFlightRef.current) return;
     const built = buildResponseFromInputs(requests);
     if (!built) return;
     setInputSource("structured");
     setInput(built);
     setRequestInputs({});
-    setTimeout(() => {
+    if (pendingSubmitTimerRef.current) clearTimeout(pendingSubmitTimerRef.current);
+    pendingSubmitTimerRef.current = setTimeout(() => {
+      pendingSubmitTimerRef.current = null;
       const form = formRef.current;
       if (form instanceof HTMLFormElement) {
         form.requestSubmit();
@@ -348,7 +362,7 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
   };
 
   const submitSingleRequestAnswer = (req: RequestItem, value: string) => {
-    if (loading) return;
+    if (loading || sendInFlightRef.current) return;
     setRequestInputs((prev) => ({ ...prev, [req.id]: value }));
     setInputSource(value === SKIP_SIGNAL ? "skip" : "structured");
     setInput(value);
@@ -357,7 +371,9 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
       skipDisplayMessageRef.current =
         getRequestInputKind(req) === "photo" ? "I don't have a photo" : "I don't know";
     }
-    setTimeout(() => {
+    if (pendingSubmitTimerRef.current) clearTimeout(pendingSubmitTimerRef.current);
+    pendingSubmitTimerRef.current = setTimeout(() => {
+      pendingSubmitTimerRef.current = null;
       const form = formRef.current;
       if (form instanceof HTMLFormElement) {
         form.requestSubmit();
@@ -383,6 +399,10 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
   };
 
   const startNewConversation = () => {
+    if (pendingSubmitTimerRef.current) {
+      clearTimeout(pendingSubmitTimerRef.current);
+      pendingSubmitTimerRef.current = null;
+    }
     sessionStorage.removeItem(CHAT_SESSION_STORAGE_KEY);
     sessionStorage.removeItem(CHAT_USER_NAME_KEY);
     sessionStorage.removeItem(CHAT_USER_PHONE_KEY);
@@ -471,6 +491,7 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
 
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading || sendInFlightRef.current) return;
     const text = input.trim();
     if (!text && files.length === 0) return;
     if (!sessionId && TURNSTILE_SITE_KEY && !turnstileToken) {
@@ -493,19 +514,34 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
     const resolvedInputSource: "chat" | "structured" | "skip" | "note" = shouldTreatAsSkip
       ? "skip"
       : inputSource;
+    const userImages = [...files];
+    const messageToSend = shouldTreatAsSkip
+      ? skipDisplayMessageRef.current || resolvedSkipMessage
+      : text || "(sent photos)";
+    const submissionKey = JSON.stringify({
+      sessionId: sessionId ?? "__new__",
+      message: messageToSend,
+      inputSource: resolvedInputSource,
+      imageCount: userImages.length,
+      imageFingerprint: userImages.map((f) => `${f.name}:${f.size}`).join("|"),
+    });
+    const nowMs = Date.now();
+    const lastSubmission = lastSubmissionRef.current;
+    if (lastSubmission && lastSubmission.key === submissionKey && nowMs - lastSubmission.atMs < 2000) {
+      return;
+    }
+    lastSubmissionRef.current = { key: submissionKey, atMs: nowMs };
+    sendInFlightRef.current = true;
+
     setLoading(true);
     setStage("");
     setError("");
     setConnectionInterrupted(false);
     setInput("");
-    const userImages = [...files];
     setFiles([]);
     setRequestInputs({});
 
     const form = new FormData();
-    const messageToSend = shouldTreatAsSkip
-      ? skipDisplayMessageRef.current || resolvedSkipMessage
-      : text || "(sent photos)";
     form.set("message", messageToSend);
     form.set("inputSource", resolvedInputSource);
     if (sessionId) form.set("sessionId", sessionId);
@@ -677,6 +713,7 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
         }
       }
     } finally {
+      sendInFlightRef.current = false;
       setLoading(false);
       setInputSource("chat");
     }

@@ -31,6 +31,8 @@ drizzle
 
 # storage (local uploads)
 storage/
+logs/*
+!logs/.gitkeep
 
 # TypeScript incremental build
 tsconfig.tsbuildinfo

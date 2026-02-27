@@ -3,8 +3,9 @@ import { asc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { supportedModels } from "@/lib/db/schema";
 import { toCanonicalModel } from "@/lib/ingestion/extract-machine-model";
+import { withApiRouteErrorLogging } from "@/lib/error-logs";
 
-export async function GET() {
+async function GETHandler() {
   const rows = await db
     .select()
     .from(supportedModels)
@@ -12,7 +13,7 @@ export async function GET() {
   return NextResponse.json(rows);
 }
 
-export async function POST(request: Request) {
+async function POSTHandler(request: Request) {
   const body = await request.json() as {
     modelNumber?: string;
     displayName?: string;
@@ -44,7 +45,7 @@ export async function POST(request: Request) {
   return NextResponse.json({ inserted });
 }
 
-export async function DELETE(request: Request) {
+async function DELETEHandler(request: Request) {
   const body = await request.json() as { id?: string };
   const id = (body.id ?? "").trim();
   if (!id) {
@@ -60,3 +61,9 @@ export async function DELETE(request: Request) {
   }
   return NextResponse.json({ ok: true });
 }
+
+export const GET = withApiRouteErrorLogging("/api/admin/supported-models", GETHandler);
+
+export const POST = withApiRouteErrorLogging("/api/admin/supported-models", POSTHandler);
+
+export const DELETE = withApiRouteErrorLogging("/api/admin/supported-models", DELETEHandler);

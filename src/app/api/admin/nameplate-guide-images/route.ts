@@ -3,8 +3,9 @@ import { asc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { nameplateGuideImages } from "@/lib/db/schema";
 import { nameplateGuideImagePath, sha256, writeStorageFile } from "@/lib/storage";
+import { withApiRouteErrorLogging } from "@/lib/error-logs";
 
-export async function GET() {
+async function GETHandler() {
   const rows = await db
     .select()
     .from(nameplateGuideImages)
@@ -12,7 +13,7 @@ export async function GET() {
   return NextResponse.json(rows);
 }
 
-export async function POST(request: Request) {
+async function POSTHandler(request: Request) {
   const formData = await request.formData();
   const notes = (formData.get("notes") as string | null)?.trim() || null;
   const files = formData.getAll("files") as File[];
@@ -51,7 +52,7 @@ export async function POST(request: Request) {
   return NextResponse.json(results);
 }
 
-export async function DELETE(request: Request) {
+async function DELETEHandler(request: Request) {
   const body = (await request.json()) as { id?: string };
   const id = (body.id ?? "").trim();
   if (!id) return NextResponse.json({ error: "id is required" }, { status: 400 });
@@ -63,3 +64,9 @@ export async function DELETE(request: Request) {
   if (!deleted) return NextResponse.json({ error: "Not found" }, { status: 404 });
   return NextResponse.json({ ok: true });
 }
+
+export const GET = withApiRouteErrorLogging("/api/admin/nameplate-guide-images", GETHandler);
+
+export const POST = withApiRouteErrorLogging("/api/admin/nameplate-guide-images", POSTHandler);
+
+export const DELETE = withApiRouteErrorLogging("/api/admin/nameplate-guide-images", DELETEHandler);

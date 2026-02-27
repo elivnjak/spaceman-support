@@ -2,8 +2,9 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { diagnosticSessions } from "@/lib/db/schema";
 import { desc } from "drizzle-orm";
+import { withApiRouteErrorLogging } from "@/lib/error-logs";
 
-export async function GET() {
+async function GETHandler() {
   const list = await db
     .select({
       id: diagnosticSessions.id,
@@ -18,3 +19,5 @@ export async function GET() {
     .limit(50);
   return NextResponse.json(list);
 }
+
+export const GET = withApiRouteErrorLogging("/api/chat/sessions", GETHandler);

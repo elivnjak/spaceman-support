@@ -2,8 +2,9 @@ import { NextResponse } from "next/server";
 import { asc, desc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { productTypes } from "@/lib/db/schema";
+import { withApiRouteErrorLogging } from "@/lib/error-logs";
 
-export async function GET() {
+async function GETHandler() {
   const rows = await db
     .select()
     .from(productTypes)
@@ -11,7 +12,7 @@ export async function GET() {
   return NextResponse.json(rows);
 }
 
-export async function POST(request: Request) {
+async function POSTHandler(request: Request) {
   const body = (await request.json()) as {
     name?: string;
     isOther?: boolean;
@@ -42,7 +43,7 @@ export async function POST(request: Request) {
   return NextResponse.json({ created: created ?? null });
 }
 
-export async function PATCH(request: Request) {
+async function PATCHHandler(request: Request) {
   const body = (await request.json()) as { order?: string[] };
   const order = Array.isArray(body.order) ? body.order : [];
   if (order.length === 0) {
@@ -60,7 +61,7 @@ export async function PATCH(request: Request) {
   return NextResponse.json({ ok: true });
 }
 
-export async function DELETE(request: Request) {
+async function DELETEHandler(request: Request) {
   const body = (await request.json()) as { id?: string };
   const id = (body.id ?? "").trim();
   if (!id) {
@@ -77,3 +78,11 @@ export async function DELETE(request: Request) {
   }
   return NextResponse.json({ ok: true });
 }
+
+export const GET = withApiRouteErrorLogging("/api/admin/product-types", GETHandler);
+
+export const POST = withApiRouteErrorLogging("/api/admin/product-types", POSTHandler);
+
+export const PATCH = withApiRouteErrorLogging("/api/admin/product-types", PATCHHandler);
+
+export const DELETE = withApiRouteErrorLogging("/api/admin/product-types", DELETEHandler);

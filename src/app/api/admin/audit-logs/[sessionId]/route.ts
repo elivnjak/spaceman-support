@@ -3,8 +3,9 @@ import { asc, eq } from "drizzle-orm";
 import { requireAdminAuth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { auditLogs, diagnosticSessions } from "@/lib/db/schema";
+import { withApiRouteErrorLogging } from "@/lib/error-logs";
 
-export async function GET(
+async function GETHandler(
   request: Request,
   { params }: { params: Promise<{ sessionId: string }> }
 ) {
@@ -39,3 +40,5 @@ export async function GET(
     })),
   });
 }
+
+export const GET = withApiRouteErrorLogging("/api/admin/audit-logs/[sessionId]", GETHandler);

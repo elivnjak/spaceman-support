@@ -2,8 +2,9 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { referenceImages } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
+import { withApiRouteErrorLogging } from "@/lib/error-logs";
 
-export async function PATCH(
+async function PATCHHandler(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -27,7 +28,7 @@ export async function PATCH(
   return NextResponse.json(updated);
 }
 
-export async function DELETE(
+async function DELETEHandler(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -41,3 +42,7 @@ export async function DELETE(
   }
   return NextResponse.json({ ok: true });
 }
+
+export const PATCH = withApiRouteErrorLogging("/api/admin/images/[id]", PATCHHandler);
+
+export const DELETE = withApiRouteErrorLogging("/api/admin/images/[id]", DELETEHandler);

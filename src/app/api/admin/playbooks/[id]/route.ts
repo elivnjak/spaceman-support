@@ -2,8 +2,9 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { diagnosticSessions, playbooks } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
+import { withApiRouteErrorLogging } from "@/lib/error-logs";
 
-export async function DELETE(
+async function DELETEHandler(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -39,3 +40,5 @@ export async function DELETE(
     );
   }
 }
+
+export const DELETE = withApiRouteErrorLogging("/api/admin/playbooks/[id]", DELETEHandler);

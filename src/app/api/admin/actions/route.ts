@@ -3,13 +3,14 @@ import { db } from "@/lib/db";
 import { actions } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import type { ActionPayload } from "@/lib/types/actions";
+import { withApiRouteErrorLogging } from "@/lib/error-logs";
 
-export async function GET() {
+async function GETHandler() {
   const list = await db.select().from(actions).orderBy(actions.id);
   return NextResponse.json(list);
 }
 
-export async function POST(request: Request) {
+async function POSTHandler(request: Request) {
   const body = await request.json() as ActionPayload;
   const {
     id,
@@ -90,3 +91,7 @@ export async function POST(request: Request) {
   const [row] = await db.select().from(actions).where(eq(actions.id, slug));
   return NextResponse.json(row ?? { id: slug, title, instructions, expectedInput: normalizedExpectedInput, safetyLevel: safety, appliesToModels });
 }
+
+export const GET = withApiRouteErrorLogging("/api/admin/actions", GETHandler);
+
+export const POST = withApiRouteErrorLogging("/api/admin/actions", POSTHandler);

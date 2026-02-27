@@ -2,8 +2,9 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { docChunks } from "@/lib/db/schema";
 import { eq, and, ilike } from "drizzle-orm";
+import { withApiRouteErrorLogging } from "@/lib/error-logs";
 
-export async function GET(
+async function GETHandler(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -23,3 +24,5 @@ export async function GET(
 
   return NextResponse.json(list);
 }
+
+export const GET = withApiRouteErrorLogging("/api/admin/docs/[id]/chunks", GETHandler);

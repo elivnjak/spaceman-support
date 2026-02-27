@@ -9,10 +9,11 @@ import {
   normalizeAdminUiRole,
   requireAdminAuth,
 } from "@/lib/auth";
+import { withApiRouteErrorLogging } from "@/lib/error-logs";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
-export async function PATCH(request: Request, { params }: RouteParams) {
+async function PATCHHandler(request: Request, { params }: RouteParams) {
   const authError = await requireAdminAuth(request);
   if (authError) return authError;
 
@@ -72,7 +73,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
   }
 }
 
-export async function DELETE(request: Request, { params }: RouteParams) {
+async function DELETEHandler(request: Request, { params }: RouteParams) {
   const session = await getSessionFromRequest(request);
   if (!session || !isAdminRole(session.user.role)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -99,3 +100,7 @@ export async function DELETE(request: Request, { params }: RouteParams) {
   }
   return NextResponse.json({ ok: true });
 }
+
+export const PATCH = withApiRouteErrorLogging("/api/admin/users/[id]", PATCHHandler);
+
+export const DELETE = withApiRouteErrorLogging("/api/admin/users/[id]", DELETEHandler);

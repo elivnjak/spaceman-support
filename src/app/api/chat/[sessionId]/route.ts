@@ -2,8 +2,9 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { diagnosticSessions } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
+import { withApiRouteErrorLogging } from "@/lib/error-logs";
 
-export async function GET(
+async function GETHandler(
   _request: Request,
   { params }: { params: Promise<{ sessionId: string }> }
 ) {
@@ -17,3 +18,5 @@ export async function GET(
   }
   return NextResponse.json(session);
 }
+
+export const GET = withApiRouteErrorLogging("/api/chat/[sessionId]", GETHandler);

@@ -4,6 +4,7 @@ import { playbookProductTypes, playbooks } from "@/lib/db/schema";
 import { eq, inArray } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { z } from "zod";
+import { withApiRouteErrorLogging } from "@/lib/error-logs";
 
 type Step = {
   step_id: string;
@@ -25,7 +26,7 @@ function ensureStepIds(steps: Step[]): Step[] {
   }));
 }
 
-export async function GET() {
+async function GETHandler() {
   const list = await db.select().from(playbooks).orderBy(playbooks.updatedAt);
   if (list.length === 0) {
     return NextResponse.json([]);
@@ -152,7 +153,7 @@ const PlaybookSchema = z.object({
     .optional(),
 });
 
-export async function POST(request: Request) {
+async function POSTHandler(request: Request) {
   const body = await request.json();
   const parsed = PlaybookSchema.safeParse(body);
   if (!parsed.success) {
@@ -251,3 +252,7 @@ export async function POST(request: Request) {
   });
   return NextResponse.json(created);
 }
+
+export const GET = withApiRouteErrorLogging("/api/admin/playbooks", GETHandler);
+
+export const POST = withApiRouteErrorLogging("/api/admin/playbooks", POSTHandler);

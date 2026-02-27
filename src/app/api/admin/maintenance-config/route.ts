@@ -2,12 +2,13 @@ import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { maintenanceConfig } from "@/lib/db/schema";
+import { withApiRouteErrorLogging } from "@/lib/error-logs";
 
 const DEFAULT_TITLE = "Chat Unavailable";
 const DEFAULT_DESCRIPTION =
   "Our support chat is currently undergoing maintenance.";
 
-export async function GET() {
+async function GETHandler() {
   const [config] = await db.select().from(maintenanceConfig).limit(1);
   return NextResponse.json({
     enabled: config?.enabled ?? false,
@@ -20,7 +21,7 @@ export async function GET() {
   });
 }
 
-export async function PUT(request: Request) {
+async function PUTHandler(request: Request) {
   const body = (await request.json()) as {
     enabled?: boolean;
     title?: string;
@@ -71,3 +72,7 @@ export async function PUT(request: Request) {
 
   return NextResponse.json({ ok: true });
 }
+
+export const GET = withApiRouteErrorLogging("/api/admin/maintenance-config", GETHandler);
+
+export const PUT = withApiRouteErrorLogging("/api/admin/maintenance-config", PUTHandler);

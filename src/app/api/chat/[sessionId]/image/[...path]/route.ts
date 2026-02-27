@@ -1,6 +1,7 @@
 import path from "path";
 import { NextResponse } from "next/server";
 import { readStorageFile, diagnosticSessionImagePath } from "@/lib/storage";
+import { withApiRouteErrorLogging } from "@/lib/error-logs";
 
 const ALLOWED_EXTENSIONS = new Set(["jpg", "jpeg", "png", "gif", "webp"]);
 
@@ -15,7 +16,7 @@ function getContentType(ext: string): string {
  * Serves stored diagnostic session images so restored chat sessions can display
  * user-uploaded photos. No auth: session ID is the capability (same as GET session).
  */
-export async function GET(
+async function GETHandler(
   _request: Request,
   { params }: { params: Promise<{ sessionId: string; path: string[] }> }
 ) {
@@ -57,3 +58,5 @@ export async function GET(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 }
+
+export const GET = withApiRouteErrorLogging("/api/chat/[sessionId]/image/[...path]", GETHandler);

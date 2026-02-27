@@ -2,8 +2,9 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { users } from "@/lib/db/schema";
 import { EDITOR_ROLE, hashPassword, normalizeAdminUiRole, requireAdminAuth } from "@/lib/auth";
+import { withApiRouteErrorLogging } from "@/lib/error-logs";
 
-export async function GET(request: Request) {
+async function GETHandler(request: Request) {
   const authError = await requireAdminAuth(request);
   if (authError) return authError;
 
@@ -16,7 +17,7 @@ export async function GET(request: Request) {
   return NextResponse.json(list);
 }
 
-export async function POST(request: Request) {
+async function POSTHandler(request: Request) {
   const authError = await requireAdminAuth(request);
   if (authError) return authError;
 
@@ -59,3 +60,7 @@ export async function POST(request: Request) {
     throw err;
   }
 }
+
+export const GET = withApiRouteErrorLogging("/api/admin/users", GETHandler);
+
+export const POST = withApiRouteErrorLogging("/api/admin/users", POSTHandler);

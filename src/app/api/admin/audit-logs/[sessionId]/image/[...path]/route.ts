@@ -2,6 +2,7 @@ import path from "path";
 import { NextResponse } from "next/server";
 import { requireAdminAuth } from "@/lib/auth";
 import { readStorageFile, diagnosticSessionImagePath } from "@/lib/storage";
+import { withApiRouteErrorLogging } from "@/lib/error-logs";
 
 const ALLOWED_EXTENSIONS = new Set(["jpg", "jpeg", "png", "gif", "webp"]);
 
@@ -20,7 +21,7 @@ const PLACEHOLDER_GIF = new Uint8Array([
   0x44, 0x01, 0x00, 0x3b,
 ]);
 
-export async function GET(
+async function GETHandler(
   request: Request,
   { params }: { params: Promise<{ sessionId: string; path: string[] }> }
 ) {
@@ -60,3 +61,5 @@ export async function GET(
     });
   }
 }
+
+export const GET = withApiRouteErrorLogging("/api/admin/audit-logs/[sessionId]/image/[...path]", GETHandler);
