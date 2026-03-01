@@ -3,6 +3,7 @@ import { asc, eq } from "drizzle-orm";
 import { requireAdminAuth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { auditLogs, diagnosticSessions } from "@/lib/db/schema";
+import { deleteDiagnosticSessionStorage } from "@/lib/storage";
 import { withApiRouteErrorLogging } from "@/lib/error-logs";
 
 async function GETHandler(
@@ -41,4 +42,37 @@ async function GETHandler(
   });
 }
 
+async function DELETEHandler(
+  request: Request,
+  { params }: { params: Promise<{ sessionId: string }> }
+) {
+  const unauth = await requireAdminAuth(request);
+  if (unauth) return unauth;
+
+  const { sessionId } = await params;
+  const [existingSession] = await db
+    .select({ id: diagnosticSessions.id })
+    .from(diagnosticSessions)
+    .where(eq(diagnosticSessions.id, sessionId))
+    .limit(1);
+
+  if (!existingSession) {
+    return NextResponse.json({ error: "Session not found." }, { status: 404 });
+  }
+
+  try {
+    await deleteDiagnosticSessionStorage(sessionId);
+  } catch (error) {
+    console.error("Failed to delete diagnostic session files:", sessionId, error);
+    return NextResponse.json(
+      { error: "Failed to delete session files." },
+      { status: 500 }
+    );
+  }
+
+  await db.delete(diagnosticSessions).where(eq(diagnosticSessions.id, sessionId));
+  return new NextResponse(null, { status: 204 });
+}
+
 export const GET = withApiRouteErrorLogging("/api/admin/audit-logs/[sessionId]", GETHandler);
+export const DELETE = withApiRouteErrorLogging("/api/admin/audit-logs/[sessionId]", DELETEHandler);

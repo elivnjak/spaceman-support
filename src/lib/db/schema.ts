@@ -223,6 +223,7 @@ export const supportSessions = pgTable(
 export const diagnosticSessions = pgTable("diagnostic_sessions", {
   id: uuid("id").primaryKey().defaultRandom(),
   status: text("status").notNull().default("active"),
+  ticketStatus: text("ticket_status").notNull().default("open"),
   userName: text("user_name"),
   userPhone: text("user_phone"),
   machineModel: text("machine_model"),
@@ -263,6 +264,18 @@ export const auditLogs = pgTable("audit_logs", {
     .references(() => diagnosticSessions.id, { onDelete: "cascade" }),
   turnNumber: integer("turn_number").notNull(),
   payload: jsonb("payload").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
+
+export const ticketNotes = pgTable("ticket_notes", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  sessionId: uuid("session_id")
+    .notNull()
+    .references(() => diagnosticSessions.id, { onDelete: "cascade" }),
+  authorId: uuid("author_id")
+    .notNull()
+    .references(() => users.id),
+  content: text("content").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });
 
@@ -317,5 +330,7 @@ export type DiagnosticSession = typeof diagnosticSessions.$inferSelect;
 export type NewDiagnosticSession = typeof diagnosticSessions.$inferInsert;
 export type AuditLog = typeof auditLogs.$inferSelect;
 export type NewAuditLog = typeof auditLogs.$inferInsert;
+export type TicketNote = typeof ticketNotes.$inferSelect;
+export type NewTicketNote = typeof ticketNotes.$inferInsert;
 export type MachineSpec = typeof machineSpecs.$inferSelect;
 export type NewMachineSpec = typeof machineSpecs.$inferInsert;

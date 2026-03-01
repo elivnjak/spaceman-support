@@ -24,6 +24,17 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function isMissingIntentManifestTableError(error: unknown): boolean {
+  if (!isPlainObject(error)) return false;
+  const code = error.code;
+  const message = error.message;
+  return (
+    code === "42P01" &&
+    typeof message === "string" &&
+    message.toLowerCase().includes("intent_manifest")
+  );
+}
+
 function deepMerge<T>(base: T, override: unknown): T {
   if (Array.isArray(base)) {
     return (Array.isArray(override) ? override : base) as T;
@@ -49,11 +60,26 @@ function deepMerge<T>(base: T, override: unknown): T {
 }
 
 async function loadOverrideFromDb(): Promise<IntentManifestOverride | null> {
-  const [row] = await db
-    .select({ data: intentManifest.data })
-    .from(intentManifest)
-    .where(eq(intentManifest.id, MANIFEST_ROW_ID))
-    .limit(1);
+  let row:
+    | {
+        data: unknown;
+      }
+    | undefined;
+  try {
+    [row] = await db
+      .select({ data: intentManifest.data })
+      .from(intentManifest)
+      .where(eq(intentManifest.id, MANIFEST_ROW_ID))
+      .limit(1);
+  } catch (error) {
+    if (isMissingIntentManifestTableError(error)) {
+      console.warn(
+        "[intent-manifest] Table intent_manifest does not exist; using defaults. Run DB migrations to enable overrides."
+      );
+      return null;
+    }
+    throw error;
+  }
 
   if (!row) return null;
   const parsed = intentManifestOverrideSchema.safeParse(row.data);

@@ -817,7 +817,7 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
           <div className="min-w-0 flex-1">
             <h1 className="text-lg font-semibold">Kuhlberg Support</h1>
             {sessionId && (
-              <p className="mt-1 truncate text-xs text-gray-500 dark:text-gray-400">
+              <p className="mt-1 truncate text-xs text-gray-500 dark:text-gray-400 hidden">
                 Session: {sessionId}
               </p>
             )}
@@ -902,11 +902,10 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
                   placeholder="Your phone number"
                   aria-invalid={!!phoneError}
                   aria-describedby={phoneError ? "prechat-phone-error" : undefined}
-                  className={`w-full rounded-lg border px-3 py-2 dark:bg-gray-800 dark:text-white ${
-                    phoneError
+                  className={`w-full rounded-lg border px-3 py-2 dark:bg-gray-800 dark:text-white ${phoneError
                       ? "border-red-500 focus:border-red-500 focus:ring-red-500 dark:border-red-500"
                       : "border-gray-300 dark:border-gray-600"
-                  }`}
+                    }`}
                 />
                 {phoneError && (
                   <p id="prechat-phone-error" className="mt-1 text-sm text-red-600 dark:text-red-400" role="alert">
@@ -1117,6 +1116,10 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
                           const kind = getRequestInputKind(primaryRequest);
                           return kind === "text" || kind === "number" || kind === "photo";
                         })();
+                      const manualSubmitLabel =
+                        primaryRequest && getRequestInputKind(primaryRequest) === "photo"
+                          ? "Send photo"
+                          : "Submit answers";
                       const hasAllVisibleAnswers =
                         visibleRequests.length > 0 &&
                         visibleRequests.every((req) => Boolean(requestInputs[req.id]?.trim()));
@@ -1167,6 +1170,15 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
                                         {opt}
                                       </button>
                                     ))}
+                                    {!requestAlreadyHasUnknownOption(req) && (
+                                      <button
+                                        type="button"
+                                        onClick={() => submitSingleRequestAnswer(req, SKIP_SIGNAL)}
+                                        className="rounded-full border border-blue-200 bg-white px-3 py-1 text-xs font-medium text-blue-700 transition-colors hover:bg-blue-100 dark:border-blue-700 dark:bg-gray-800 dark:text-blue-300 dark:hover:bg-blue-900/40"
+                                      >
+                                        I don&apos;t know
+                                      </button>
+                                    )}
                                   </div>
                                 )}
                                 {isLatest && inputKind === "boolean" && (
@@ -1218,15 +1230,16 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
                                         {files.length > 0 ? `${files.length} photo(s) selected` : "Attach photo"}
                                       </button>
                                     )}
-                                    {!(inputKind !== "photo" && requestAlreadyHasUnknownOption(req)) && (
-                                      <button
-                                        type="button"
-                                        onClick={() => submitSingleRequestAnswer(req, SKIP_SIGNAL)}
-                                        className="text-xs font-medium text-blue-400 hover:text-blue-300 dark:text-blue-400 dark:hover:text-blue-300"
-                                      >
-                                        {inputKind === "photo" ? "I don't have a photo" : "I don't know"}
-                                      </button>
-                                    )}
+                                    {inputKind !== "options" &&
+                                      !(inputKind !== "photo" && requestAlreadyHasUnknownOption(req)) && (
+                                        <button
+                                          type="button"
+                                          onClick={() => submitSingleRequestAnswer(req, SKIP_SIGNAL)}
+                                          className="text-xs font-medium text-blue-400 hover:text-blue-300 dark:text-blue-400 dark:hover:text-blue-300"
+                                        >
+                                          {inputKind === "photo" ? "I don't have a photo" : "I don't know"}
+                                        </button>
+                                      )}
                                   </div>
                                 )}
                                 {!isLatest && inputKind === "number" && req.expectedInput && (
@@ -1246,7 +1259,7 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
                               onClick={() => submitRequestAnswers(visibleRequests)}
                               className="w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700 disabled:opacity-50"
                             >
-                              Submit answers
+                              {manualSubmitLabel}
                             </button>
                           )}
                         </div>

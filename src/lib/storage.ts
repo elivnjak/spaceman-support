@@ -1,5 +1,5 @@
 import { createHash } from "crypto";
-import { mkdir, writeFile, readFile, unlink, readdir } from "fs/promises";
+import { mkdir, writeFile, readFile, unlink, readdir, rm } from "fs/promises";
 import path from "path";
 
 const STORAGE_ROOT = process.env.STORAGE_PATH ?? path.join(process.cwd(), "storage");
@@ -30,6 +30,11 @@ export async function readStorageFile(relativePath: string): Promise<Buffer> {
 export async function deleteStorageFile(relativePath: string): Promise<void> {
   const fullPath = path.join(STORAGE_ROOT, relativePath);
   await unlink(fullPath);
+}
+
+export async function deleteStorageDirectory(relativePath: string): Promise<void> {
+  const fullPath = path.join(STORAGE_ROOT, relativePath);
+  await rm(fullPath, { recursive: true, force: true });
 }
 
 export function getStorageRelativePath(fullPath: string): string {
@@ -71,4 +76,8 @@ export const DIAGNOSTIC_SESSIONS_DIR = "diagnostic_sessions";
 
 export function diagnosticSessionImagePath(sessionId: string, filename: string): string {
   return path.join(DIAGNOSTIC_SESSIONS_DIR, sessionId, filename);
+}
+
+export async function deleteDiagnosticSessionStorage(sessionId: string): Promise<void> {
+  await deleteStorageDirectory(path.join(DIAGNOSTIC_SESSIONS_DIR, sessionId));
 }

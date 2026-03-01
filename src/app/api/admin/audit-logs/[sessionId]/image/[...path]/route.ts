@@ -1,6 +1,6 @@
 import path from "path";
 import { NextResponse } from "next/server";
-import { requireAdminAuth } from "@/lib/auth";
+import { requireAdminUiAuth } from "@/lib/auth";
 import { readStorageFile, diagnosticSessionImagePath } from "@/lib/storage";
 import { withApiRouteErrorLogging } from "@/lib/error-logs";
 
@@ -25,7 +25,7 @@ async function GETHandler(
   request: Request,
   { params }: { params: Promise<{ sessionId: string; path: string[] }> }
 ) {
-  const unauth = await requireAdminAuth(request);
+  const unauth = await requireAdminUiAuth(request);
   if (unauth) return unauth;
 
   const { sessionId, path: restPath } = await params;

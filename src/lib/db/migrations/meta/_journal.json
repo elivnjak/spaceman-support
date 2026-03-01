@@ -99,6 +99,13 @@
       "when": 1772151000000,
       "tag": "0013_escalation_context_turn_count",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1772341474266,
+      "tag": "0014_lonely_whiplash",
+      "breakpoints": true
     }
   ]
 }

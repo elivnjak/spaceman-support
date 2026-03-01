@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 type AuditEntry = {
@@ -95,10 +95,13 @@ function toImageUrl(sessionId: string, rawPath: string): string {
 
 export default function AdminAuditDetailPage() {
   const params = useParams();
+  const router = useRouter();
   const sessionId = params?.sessionId as string | undefined;
   const [data, setData] = useState<AuditDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [lightbox, setLightbox] = useState<{ images: string[]; index: number } | null>(null);
 
   useEffect(() => {
@@ -135,20 +138,55 @@ export default function AdminAuditDetailPage() {
 
   const logs = useMemo(() => data?.logs ?? [], [data]);
 
+  async function handleDelete(): Promise<void> {
+    if (!sessionId || deleting) return;
+    if (
+      !confirm(
+        "Delete this audit session and all associated uploaded files? This cannot be undone."
+      )
+    ) {
+      return;
+    }
+
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      const response = await fetch(`/api/admin/audit-logs/${sessionId}`, { method: "DELETE" });
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => ({}))) as { error?: string };
+        throw new Error(payload.error ?? "Failed to delete audit session.");
+      }
+      router.push("/admin/audit-logs");
+      router.refresh();
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : "Failed to delete audit session.");
+      setDeleting(false);
+    }
+  }
+
   if (loading) return <p className="text-sm text-gray-600 dark:text-gray-300">Loading audit details...</p>;
   if (error || !data) return <p className="text-sm text-red-600 dark:text-red-400">{error ?? "Not found."}</p>;
 
   const session = data.session;
   return (
     <div>
-      <div className="mb-6">
+      <div className="mb-6 flex items-center justify-between gap-3">
         <Link
           href="/admin/audit-logs"
           className="text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
         >
           ← Back to audit logs
         </Link>
+        <button
+          type="button"
+          onClick={handleDelete}
+          disabled={deleting}
+          className="rounded-md border border-red-300 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-60 dark:border-red-700 dark:text-red-300 dark:hover:bg-red-900/20"
+        >
+          {deleting ? "Deleting..." : "Delete session"}
+        </button>
       </div>
+      {deleteError && <p className="mb-4 text-sm text-red-600 dark:text-red-400">{deleteError}</p>}
 
       <header className="mb-6 rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Session audit</h1>
