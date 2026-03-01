@@ -5,7 +5,7 @@ You need:
 - **Postgres with pgvector** (for embeddings and vector search)
 - **Node 18+** (Next.js 15)
 - **Persistent storage** for uploaded docs and images (files under `storage/` or `STORAGE_PATH`)
-- **Env vars**: `DATABASE_URL`, `OPENAI_API_KEY`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (and optionally `REPLICATE_API_TOKEN`, `HUGGINGFACE_API_KEY`, `ESCALATION_WEBHOOK_URL`)
+- **Env vars**: `DATABASE_URL`, `OPENAI_API_KEY`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (and optionally `REPLICATE_API_TOKEN`, `HUGGINGFACE_API_KEY`, `ESCALATION_WEBHOOK_URL`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`)
 
 ---
 
@@ -27,7 +27,7 @@ You need:
 4. **Set environment variables** (in the app service → **Variables**):
    - `DATABASE_URL` — from step 2 (or Neon).
    - `OPENAI_API_KEY`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (required).
-   - Optional: `REPLICATE_API_TOKEN`, `HUGGINGFACE_API_KEY`, `ESCALATION_WEBHOOK_URL`.
+   - Optional: `REPLICATE_API_TOKEN`, `HUGGINGFACE_API_KEY`, `ESCALATION_WEBHOOK_URL`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`.
 
 5. **Persistent storage for uploads**
    - In the app service → **Settings** → **Volumes** → add a volume and mount it at `/app/storage` (or another path).

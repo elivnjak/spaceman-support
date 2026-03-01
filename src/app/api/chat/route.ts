@@ -40,7 +40,11 @@ import {
   readStorageFile,
   diagnosticSessionImagePath,
 } from "@/lib/storage";
-import { buildEscalationHandoff, sendEscalationWebhook } from "@/lib/escalation";
+import {
+  buildEscalationHandoff,
+  sendEscalationTelegram,
+  sendEscalationWebhook,
+} from "@/lib/escalation";
 import { runPlaybookTriage, type TriageHistoryItem } from "@/lib/pipeline/playbook-triage";
 import {
   analyzeNameplate,
@@ -574,6 +578,10 @@ async function escalateOnTechnicalFailure(opts: {
     userName: resolvedSession.userName ?? opts.userName,
     userPhone: resolvedSession.userPhone ?? opts.userPhone,
     machineModel: resolvedSession.machineModel ?? opts.machineModel,
+    serialNumber: resolvedSession.serialNumber ?? null,
+    productType: resolvedSession.productType ?? null,
+    manufacturingYear: resolvedSession.manufacturingYear ?? null,
+    clearanceImagePaths: resolvedSession.clearanceImagePaths ?? [],
     escalationReason: TECHNICAL_DIFFICULTIES_ESCALATION_REASON,
     playbookTitle: playbookRow?.title ?? "Technical failure",
     labelId: playbookRow?.labelId ?? "system_error",
@@ -596,6 +604,7 @@ async function escalateOnTechnicalFailure(opts: {
     .where(eq(diagnosticSessions.id, resolvedSession.id));
 
   sendEscalationWebhook(escalationHandoff).catch(() => {});
+  sendEscalationTelegram(escalationHandoff).catch(() => {});
 
   return {
     sessionId: resolvedSession.id,
@@ -887,6 +896,10 @@ export async function POST(request: Request) {
               userName: session.userName ?? null,
               userPhone: session.userPhone ?? null,
               machineModel: session.machineModel ?? null,
+              serialNumber: session.serialNumber ?? null,
+              productType: session.productType ?? null,
+              manufacturingYear: session.manufacturingYear ?? null,
+              clearanceImagePaths: session.clearanceImagePaths ?? [],
               escalationReason,
               playbookTitle: "Pre-diagnosis",
               labelId: "collecting_issue_human_request",
@@ -920,6 +933,7 @@ export async function POST(request: Request) {
               })
             );
             sendEscalationWebhook(escalationHandoff).catch(() => {});
+            sendEscalationTelegram(escalationHandoff).catch(() => {});
             closeController(controller);
             return;
           }
@@ -1131,6 +1145,10 @@ export async function POST(request: Request) {
               userName: activeSession.userName ?? null,
               userPhone: activeSession.userPhone ?? null,
               machineModel: activeSession.machineModel ?? null,
+              serialNumber: activeSession.serialNumber ?? null,
+              productType: activeSession.productType ?? null,
+              manufacturingYear: activeSession.manufacturingYear ?? null,
+              clearanceImagePaths: activeSession.clearanceImagePaths ?? [],
               escalationReason,
               playbookTitle: "Pre-diagnosis",
               labelId,
@@ -1162,6 +1180,7 @@ export async function POST(request: Request) {
               })
             );
             sendEscalationWebhook(escalationHandoff).catch(() => {});
+            sendEscalationTelegram(escalationHandoff).catch(() => {});
             closeController(controller);
           };
 
@@ -3088,6 +3107,10 @@ export async function POST(request: Request) {
             userName: session.userName ?? null,
             userPhone: session.userPhone ?? null,
             machineModel: session.machineModel ?? null,
+            serialNumber: session.serialNumber ?? null,
+            productType: session.productType ?? null,
+            manufacturingYear: session.manufacturingYear ?? null,
+            clearanceImagePaths: session.clearanceImagePaths ?? [],
             escalationReason,
             playbookTitle: playbook.title,
             labelId: playbook.labelId,
@@ -3129,6 +3152,7 @@ export async function POST(request: Request) {
         if (escalationHandoff) {
           // Fire-and-forget: don't block the response
           sendEscalationWebhook(escalationHandoff).catch(() => {});
+          sendEscalationTelegram(escalationHandoff).catch(() => {});
         }
 
         const validChunkIds = isAdmin

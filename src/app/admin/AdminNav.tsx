@@ -47,6 +47,7 @@ const navGroups: NavGroup[] = [
     section: "Users & system",
     items: [
       { href: "/admin/users", label: "Users", adminOnly: true },
+      { href: "/admin/telegram", label: "Telegram notifications" },
       { href: "/admin/maintenance", label: "Maintenance mode" },
     ],
   },
