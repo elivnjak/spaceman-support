@@ -11,29 +11,59 @@ type NavItem = {
   adminOnly?: boolean;
 };
 
-const navItems: NavItem[] = [
-  { href: "/admin", label: "Dashboard" },
-  { href: "/admin/tickets", label: "Tickets" },
-  { href: "/admin/users", label: "Users", adminOnly: true },
-  { href: "/admin/labels", label: "Labels" },
-  { href: "/admin/images", label: "Reference images" },
-  { href: "/admin/models", label: "Supported models" },
-  { href: "/admin/product-types", label: "Product types" },
-  { href: "/admin/nameplate", label: "Nameplate config" },
-  { href: "/admin/clearance", label: "Clearance config" },
-  { href: "/admin/maintenance", label: "Maintenance mode" },
-  { href: "/admin/docs", label: "Documents" },
-  { href: "/admin/playbooks", label: "Playbooks" },
-  { href: "/admin/intent", label: "Intent manifest" },
-  { href: "/admin/error-logs", label: "Error logs", adminOnly: true },
-  { href: "/admin/audit-logs", label: "Audit logs", adminOnly: true },
+type NavGroup = {
+  section: string;
+  items: NavItem[];
+};
+
+const navGroups: NavGroup[] = [
+  {
+    section: "Overview & workflow",
+    items: [
+      { href: "/admin", label: "Dashboard" },
+      { href: "/admin/tickets", label: "Tickets" },
+    ],
+  },
+  {
+    section: "Content & knowledge",
+    items: [
+      { href: "/admin/labels", label: "Labels" },
+      { href: "/admin/images", label: "Reference images" },
+      { href: "/admin/docs", label: "Documents" },
+      { href: "/admin/playbooks", label: "Playbooks" },
+      { href: "/admin/intent", label: "Intent manifest" },
+    ],
+  },
+  {
+    section: "Configuration",
+    items: [
+      { href: "/admin/product-types", label: "Product types" },
+      { href: "/admin/models", label: "Supported models" },
+      { href: "/admin/nameplate", label: "Nameplate config" },
+      { href: "/admin/clearance", label: "Clearance config" },
+    ],
+  },
+  {
+    section: "Users & system",
+    items: [
+      { href: "/admin/users", label: "Users", adminOnly: true },
+      { href: "/admin/maintenance", label: "Maintenance mode" },
+    ],
+  },
+  {
+    section: "Logs",
+    items: [
+      { href: "/admin/error-logs", label: "Error logs", adminOnly: true },
+      { href: "/admin/audit-logs", label: "Audit logs", adminOnly: true },
+    ],
+  },
 ];
 
 export function AdminNav({ role }: { role: AdminUiRole | null }) {
   const [open, setOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const pathname = usePathname();
-  const visibleNavItems = navItems.filter((item) => !item.adminOnly || role === "admin");
+  const canSeeAdminOnly = role === "admin";
   const roleLabel = role === "editor" ? "Editor" : "Admin";
 
   const handleLogout = async () => {
@@ -142,17 +172,34 @@ export function AdminNav({ role }: { role: AdminUiRole | null }) {
           </button>
         </div>
         <ul className="flex flex-col py-2">
-          {visibleNavItems.map(({ href, label }) => (
-            <li key={href}>
-              <Link
-                href={href}
-                onClick={() => setOpen(false)}
-                className={`block px-4 py-3 ${linkClass(href)}`}
-              >
-                {label}
-              </Link>
-            </li>
-          ))}
+          {navGroups.map((group) => {
+            const visibleItems = group.items.filter(
+              (item) => !item.adminOnly || canSeeAdminOnly
+            );
+            if (visibleItems.length === 0) return null;
+            return (
+              <li key={group.section} className="border-b border-gray-200 dark:border-gray-700 last:border-b-0">
+                <div className="px-4 pt-3 pb-1.5">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                    {group.section}
+                  </span>
+                </div>
+                <ul className="pb-2">
+                  {visibleItems.map(({ href, label }) => (
+                    <li key={href}>
+                      <Link
+                        href={href}
+                        onClick={() => setOpen(false)}
+                        className={`block px-4 py-2.5 text-sm ${linkClass(href)}`}
+                      >
+                        {label}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </li>
+            );
+          })}
         </ul>
       </div>
     </>
