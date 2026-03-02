@@ -863,7 +863,7 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
           onLoad={() => setTurnstileScriptLoaded(true)}
         />
       )}
-      <header className="shrink-0 z-10 px-4 py-3" style={{ backgroundColor: '#0B111E' }}>
+      <header className="sticky top-0 z-10 px-4 py-3" style={{ backgroundColor: '#0B111E' }}>
         <div className="mx-auto flex max-w-2xl items-center justify-between gap-2">
           <div className="min-w-0 flex-1">
             <h1 className="text-lg font-semibold text-white">Kuhlberg Support</h1>
