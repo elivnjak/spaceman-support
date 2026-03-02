@@ -430,19 +430,28 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
   const scrollToBottomIfNeeded = () => {
     const el = messagesContainerRef.current;
     if (!el) return;
-    const isOverflowing = el.scrollHeight > el.clientHeight;
-    if (isOverflowing) {
+    if (el.scrollHeight > el.clientHeight) {
       messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }
   };
 
   useEffect(() => {
+    if (messages.length <= 1) {
+      window.scrollTo(0, 0);
+      if (messagesContainerRef.current) {
+        messagesContainerRef.current.scrollTop = 0;
+      }
+      return;
+    }
     scrollToBottomIfNeeded();
   }, [messages]);
 
   useEffect(() => {
     if (!chatStarted) return;
-    scrollToBottomIfNeeded();
+    window.scrollTo(0, 0);
+    if (messagesContainerRef.current) {
+      messagesContainerRef.current.scrollTop = 0;
+    }
   }, [chatStarted, initialPhase]);
 
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
@@ -846,7 +855,7 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
     !hasPendingStructuredRequest;
 
   return (
-    <main className="flex h-dvh flex-col bg-page">
+    <main className="flex h-dvh flex-col overflow-hidden bg-page">
       {TURNSTILE_SITE_KEY && (
         <Script
           src="https://challenges.cloudflare.com/turnstile/v0/api.js"
@@ -1247,14 +1256,21 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
                                   </div>
                                 )}
                                 {isLatest && inputKind === "text" && (
-                                  <input
-                                    type="text"
+                                  <textarea
+                                    rows={1}
                                     placeholder="Type your answer..."
-                                    className="mt-3 w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm shadow-card focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                                    className="mt-3 w-full resize-none rounded-lg border border-border bg-surface px-3 py-2.5 text-sm shadow-card transition-all duration-200 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
                                     value={requestInputs[req.id] ?? ""}
                                     onChange={(e) => updateRequestInput(req.id, e.target.value)}
+                                    onFocus={(e) => { e.currentTarget.rows = 3; }}
+                                    onBlur={(e) => { if (!e.currentTarget.value.trim()) e.currentTarget.rows = 1; }}
+                                    onInput={(e) => {
+                                      const ta = e.currentTarget;
+                                      ta.style.height = "auto";
+                                      ta.style.height = `${ta.scrollHeight}px`;
+                                    }}
                                     onKeyDown={(e) => {
-                                      if (e.key === "Enter") {
+                                      if (e.key === "Enter" && !e.shiftKey) {
                                         e.preventDefault();
                                         submitRequestAnswers(visibleRequests);
                                       }
@@ -1316,13 +1332,13 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
               ))}
               {showFullInput && initialPhase === "done" && (
                 <div className="flex justify-start">
-                  <div className="w-full max-w-[85%] rounded-xl border border-border bg-aqua/30 p-3 shadow-card">
+                  <div className="w-full rounded-xl border border-border bg-aqua/30 p-3 shadow-card">
                     {files.length > 0 && (
                       <p className="mb-2 text-xs text-primary">
                         {files.length} photo{files.length > 1 ? "s" : ""} attached
                       </p>
                     )}
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-end gap-2">
                       <button
                         type="button"
                         onClick={() => fileInputRef.current?.click()}
@@ -1333,14 +1349,21 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
                           <path fillRule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd" />
                         </svg>
                       </button>
-                      <input
-                        type="text"
+                      <textarea
+                        rows={1}
                         placeholder="Describe your issue..."
-                        className="min-w-0 flex-1 rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-ink shadow-card focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                        className="min-w-0 flex-1 resize-none rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-ink shadow-card transition-all duration-200 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
                         value={input}
                         onChange={(e) => setInput(e.target.value)}
+                        onFocus={(e) => { e.currentTarget.rows = 4; }}
+                        onBlur={(e) => { if (!e.currentTarget.value.trim()) e.currentTarget.rows = 1; }}
+                        onInput={(e) => {
+                          const ta = e.currentTarget;
+                          ta.style.height = "auto";
+                          ta.style.height = `${ta.scrollHeight}px`;
+                        }}
                         onKeyDown={(e) => {
-                          if (e.key === "Enter") {
+                          if (e.key === "Enter" && !e.shiftKey) {
                             e.preventDefault();
                             setInputSource("chat");
                             formRef.current?.requestSubmit();
@@ -1380,7 +1403,7 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
             <form
               ref={formRef}
               onSubmit={sendMessage}
-              className={`${showFullInput ? "" : "mt-4"} flex gap-2 safe-bottom`}
+              className={`${showFullInput ? "" : "mt-4"} flex items-end gap-2 safe-bottom`}
             >
               <input
                 type="file"
@@ -1412,19 +1435,32 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
               />
               {showTextOnlyInput && (
                 <>
-                  <input
-                    type="text"
+                  <textarea
+                    rows={1}
                     placeholder="Type your message..."
-                    className="flex-1 rounded-lg border border-border bg-surface px-4 py-2.5 text-ink placeholder:text-muted focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    className="flex-1 resize-none rounded-lg border border-border bg-surface px-4 py-2.5 text-ink placeholder:text-muted transition-all duration-200 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
+                    onFocus={(e) => { e.currentTarget.rows = 4; }}
+                    onBlur={(e) => { if (!e.currentTarget.value.trim()) e.currentTarget.rows = 1; }}
+                    onInput={(e) => {
+                      const ta = e.currentTarget;
+                      ta.style.height = "auto";
+                      ta.style.height = `${ta.scrollHeight}px`;
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        formRef.current?.requestSubmit();
+                      }
+                    }}
                     disabled={loading}
                   />
                   <button
                     type="submit"
                     disabled={loading || !input.trim()}
                     onClick={() => setInputSource("chat")}
-                    className="min-h-[44px] rounded-lg bg-primary px-4 py-2.5 text-white hover:bg-primary-hover disabled:opacity-50"
+                    className="min-h-[44px] self-end rounded-lg bg-primary px-4 py-2.5 text-white hover:bg-primary-hover disabled:opacity-50"
                   >
                     Send
                   </button>
@@ -1441,19 +1477,32 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
               )}
               {allowAddNote && addNoteOpen && (
                 <>
-                  <input
-                    type="text"
+                  <textarea
+                    rows={1}
                     placeholder="Add a note..."
-                    className="flex-1 rounded-lg border border-border bg-surface px-4 py-2.5 text-ink placeholder:text-muted focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    className="flex-1 resize-none rounded-lg border border-border bg-surface px-4 py-2.5 text-ink placeholder:text-muted transition-all duration-200 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
+                    onFocus={(e) => { e.currentTarget.rows = 4; }}
+                    onBlur={(e) => { if (!e.currentTarget.value.trim()) e.currentTarget.rows = 1; }}
+                    onInput={(e) => {
+                      const ta = e.currentTarget;
+                      ta.style.height = "auto";
+                      ta.style.height = `${ta.scrollHeight}px`;
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        formRef.current?.requestSubmit();
+                      }
+                    }}
                     disabled={loading}
                   />
                   <button
                     type="submit"
                     disabled={loading || !input.trim()}
                     onClick={() => setInputSource("note")}
-                    className="min-h-[44px] rounded-lg bg-primary px-4 py-2.5 text-white hover:bg-primary-hover disabled:opacity-50"
+                    className="min-h-[44px] self-end rounded-lg bg-primary px-4 py-2.5 text-white hover:bg-primary-hover disabled:opacity-50"
                   >
                     Send note
                   </button>
