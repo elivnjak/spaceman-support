@@ -844,10 +844,10 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
           onLoad={() => setTurnstileScriptLoaded(true)}
         />
       )}
-      <header className="sticky top-0 z-10 border-b border-border bg-surface px-4 py-3">
+      <header className="sticky top-0 z-10 px-4 py-3" style={{ backgroundColor: '#0B111E' }}>
         <div className="mx-auto flex max-w-2xl items-center justify-between gap-2">
           <div className="min-w-0 flex-1">
-            <h1 className="text-lg font-semibold text-ink">Kuhlberg Support</h1>
+            <h1 className="text-lg font-semibold text-white">Kuhlberg Support</h1>
             {sessionId && (
               <p className="mt-1 hidden truncate text-xs text-muted">
                 Session: {sessionId}
@@ -858,7 +858,8 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
             <button
               type="button"
               onClick={startNewConversation}
-              className="shrink-0 rounded-lg border border-border bg-surface px-3 py-1.5 text-sm font-medium text-ink transition-colors hover:bg-aqua/30 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+              className="shrink-0 rounded-lg px-3 py-1.5 text-sm font-medium text-white transition-colors hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+              style={{ backgroundColor: '#0F73B9' }}
             >
               New conversation
             </button>
