@@ -1338,7 +1338,7 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
                         {files.length} photo{files.length > 1 ? "s" : ""} attached
                       </p>
                     )}
-                    <div className="flex items-end gap-2">
+                    <div className="flex items-start gap-2">
                       <button
                         type="button"
                         onClick={() => fileInputRef.current?.click()}
