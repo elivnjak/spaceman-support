@@ -1,6 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { Card } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { Badge } from "@/components/ui/Badge";
 
 type Label = { id: string; displayName: string };
 type RefImage = {
@@ -115,18 +120,18 @@ export default function AdminImagesPage() {
 
   return (
     <div>
-      <h1 className="mb-6 text-2xl font-bold">Reference images</h1>
+      <PageHeader title="Reference images" />
 
       {/* Upload flow */}
-      <div className="mb-8 rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
+      <Card className="mb-8">
         <h2 className="mb-4 font-medium">Upload images</h2>
         {step === "select" && (
           <>
-            <p className="mb-2 text-sm text-gray-600 dark:text-gray-400">
+            <p className="mb-2 text-sm text-muted">
               What label should these images be?
             </p>
             <select
-              className="mb-4 rounded border border-gray-300 px-3 py-2 dark:border-gray-600 dark:bg-gray-800"
+              className="mb-4 rounded-lg border border-border bg-surface px-3 py-2 text-ink"
               value={selectedLabelId}
               onChange={(e) => setSelectedLabelId(e.target.value)}
             >
@@ -145,56 +150,49 @@ export default function AdminImagesPage() {
                 onChange={handleFileChange}
                 className="text-sm"
               />
-              <button
+              <Button
                 type="button"
                 disabled={!selectedLabelId || files.length === 0}
                 onClick={startUpload}
-                className="rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-50"
               >
                 Next: confirm
-              </button>
+              </Button>
             </div>
           </>
         )}
         {step === "confirm" && (
           <>
-            <p className="mb-2 text-sm text-gray-600 dark:text-gray-400">
+            <p className="mb-2 text-sm text-muted">
               Are these correct? ({files.length} file(s), label:{" "}
               {labels.find((l) => l.id === selectedLabelId)?.displayName})
             </p>
             <div className="mb-4 flex flex-wrap gap-2">
               {files.map((f, i) => (
-                <span
-                  key={i}
-                  className="rounded bg-gray-100 px-2 py-1 text-sm dark:bg-gray-700"
-                >
-                  {f.name}
-                </span>
+                <Badge key={i}>{f.name}</Badge>
               ))}
             </div>
-            <input
+            <Input
               type="text"
               placeholder="Optional notes"
-              className="mb-4 mr-4 rounded border border-gray-300 px-3 py-2 dark:border-gray-600 dark:bg-gray-800"
+              className="mb-4 mr-4 w-auto"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
             />
             <div className="flex gap-2">
-              <button
+              <Button
                 type="button"
                 onClick={confirmUpload}
                 disabled={uploading}
-                className="rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-50"
               >
                 {uploading ? "Uploading…" : "Upload"}
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
+                variant="secondary"
                 onClick={() => setStep("select")}
-                className="rounded border border-gray-300 px-4 py-2 dark:border-gray-600"
               >
                 Back
-              </button>
+              </Button>
             </div>
             {uploadResult && (
               <ul className="mt-4 text-sm">
@@ -207,28 +205,25 @@ export default function AdminImagesPage() {
             )}
           </>
         )}
-      </div>
+      </Card>
 
       {/* Bulk delete */}
       {selectedIds.size > 0 && (
         <div className="mb-4 flex items-center gap-2">
-          <button
+          <Button
+            variant="danger"
             onClick={bulkDelete}
             disabled={bulkDeleting}
-            className="rounded bg-red-600 px-4 py-2 text-white hover:bg-red-700 disabled:opacity-50"
           >
             Delete selected ({selectedIds.size})
-          </button>
+          </Button>
         </div>
       )}
 
       {/* Grid */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
         {images.map((im) => (
-          <div
-            key={im.id}
-            className="rounded-lg border border-gray-200 bg-white p-2 dark:border-gray-700 dark:bg-gray-800"
-          >
+          <Card key={im.id} padding="sm">
             <div className="mb-2 flex items-start justify-between">
               <input
                 type="checkbox"
@@ -244,7 +239,7 @@ export default function AdminImagesPage() {
                 Delete
               </button>
             </div>
-            <div className="relative aspect-square overflow-hidden rounded bg-gray-100 dark:bg-gray-700">
+            <div className="relative aspect-square overflow-hidden rounded bg-page">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={`/api/reference-image/${im.id}`}
@@ -256,7 +251,7 @@ export default function AdminImagesPage() {
               <select
                 value={im.labelId}
                 onChange={(e) => updateLabel(im.id, e.target.value)}
-                className="w-full rounded border border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-800"
+                className="w-full rounded-lg border border-border bg-surface text-sm text-ink"
               >
                 {labels.map((l) => (
                   <option key={l.id} value={l.id}>
@@ -265,7 +260,7 @@ export default function AdminImagesPage() {
                 ))}
               </select>
             </div>
-          </div>
+          </Card>
         ))}
       </div>
     </div>

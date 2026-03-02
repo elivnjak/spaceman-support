@@ -1,6 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { Card } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
+import { Input, Textarea } from "@/components/ui/Input";
 
 type GuideImage = {
   id: string;
@@ -102,24 +106,23 @@ export default function AdminClearanceConfigPage() {
 
   return (
     <div className="space-y-8">
-      <h1 className="text-2xl font-bold">Clearance config</h1>
+      <PageHeader title="Clearance config" />
 
-      <section className="rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
-        <h2 className="mb-3 text-lg font-semibold">Instruction text</h2>
-        <p className="mb-2 text-sm text-gray-500 dark:text-gray-400">
+      <Card>
+        <h2 className="mb-3 text-lg font-semibold text-ink">Instruction text</h2>
+        <p className="mb-2 text-sm text-muted">
           This message asks users to upload machine clearance photos from different angles.
         </p>
-        <textarea
+        <Textarea
           rows={5}
           value={instructionText}
           onChange={(e) => setInstructionText(e.target.value)}
-          className="w-full rounded border border-gray-300 px-3 py-2 dark:border-gray-600 dark:bg-gray-900"
         />
-      </section>
+      </Card>
 
-      <section className="rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
-        <h2 className="mb-2 text-lg font-semibold">Guide images</h2>
-        <p className="text-sm text-gray-500 dark:text-gray-400">
+      <Card>
+        <h2 className="mb-2 text-lg font-semibold text-ink">Guide images</h2>
+        <p className="text-sm text-muted">
           Select example images that show acceptable machine clearance viewpoints.
         </p>
         <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -130,21 +133,20 @@ export default function AdminClearanceConfigPage() {
             onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
             className="text-sm"
           />
-          <input
+          <Input
             type="text"
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             placeholder="Optional notes"
-            className="rounded border border-gray-300 px-2 py-1 text-sm dark:border-gray-600 dark:bg-gray-900"
+            className="w-auto"
           />
-          <button
-            type="button"
+          <Button
+            size="sm"
             onClick={uploadGuideImages}
             disabled={uploading || files.length === 0}
-            className="rounded bg-blue-600 px-3 py-1.5 text-sm text-white hover:bg-blue-700 disabled:opacity-50"
           >
             {uploading ? "Uploading..." : "Upload guide image(s)"}
-          </button>
+          </Button>
         </div>
 
         <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
@@ -153,10 +155,10 @@ export default function AdminClearanceConfigPage() {
             return (
               <div
                 key={img.id}
-                className={`rounded-lg border p-1 ${
+                className={`rounded-card border p-1 ${
                   selected
-                    ? "border-blue-500 ring-2 ring-blue-300 dark:ring-blue-700"
-                    : "border-gray-200 dark:border-gray-700"
+                    ? "border-primary ring-2 ring-primary/30"
+                    : "border-border"
                 }`}
               >
                 <button
@@ -167,14 +169,14 @@ export default function AdminClearanceConfigPage() {
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={img.url} alt="Clearance guide" className="h-28 w-full rounded object-cover" />
-                  <p className="mt-1 truncate px-1 text-xs text-gray-500 dark:text-gray-400">
+                  <p className="mt-1 truncate px-1 text-xs text-muted">
                     {img.notes || img.id}
                   </p>
                 </button>
                 <button
                   type="button"
                   onClick={() => deleteGuideImage(img.id)}
-                  className="mt-1 w-full rounded border border-red-300 px-2 py-1 text-xs text-red-600 hover:bg-red-50 dark:border-red-700 dark:hover:bg-red-900/20"
+                  className="mt-1 w-full rounded border border-red-300 px-2 py-1 text-xs text-red-600 hover:bg-red-50"
                 >
                   Delete
                 </button>
@@ -183,30 +185,28 @@ export default function AdminClearanceConfigPage() {
           })}
         </div>
         {guideImages.length === 0 ? (
-          <p className="mt-3 text-sm text-gray-500 dark:text-gray-400">
+          <p className="mt-3 text-sm text-muted">
             No guide images uploaded yet.
           </p>
         ) : null}
-      </section>
+      </Card>
 
-      <section className="rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
-        <h2 className="mb-3 text-lg font-semibold">Preview</h2>
-        <p className="whitespace-pre-wrap rounded border border-dashed border-gray-300 p-3 text-sm dark:border-gray-600">
+      <Card>
+        <h2 className="mb-3 text-lg font-semibold text-ink">Preview</h2>
+        <p className="whitespace-pre-wrap rounded border border-dashed border-border p-3 text-sm text-ink">
           {instructionText}
         </p>
-        <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+        <p className="mt-2 text-sm text-muted">
           Selected guide images: {selectedCount}
         </p>
-      </section>
+      </Card>
 
-      <button
-        type="button"
+      <Button
         onClick={save}
         disabled={saving || !instructionText.trim()}
-        className="rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-50"
       >
         {saving ? "Saving..." : "Save clearance config"}
-      </button>
+      </Button>
     </div>
   );
 }

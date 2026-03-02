@@ -2,6 +2,10 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { Card } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
 
 type Label = { id: string; displayName: string; description: string | null };
 
@@ -53,54 +57,51 @@ export default function AdminLabelsPage() {
 
   return (
     <div>
-      <h1 className="mb-6 text-2xl font-bold">Labels</h1>
+      <PageHeader title="Labels" />
       <form onSubmit={handleSubmit} className="mb-8 flex flex-wrap gap-4">
-        <input
+        <Input
           type="text"
           placeholder="ID (slug)"
-          className="rounded border border-gray-300 px-3 py-2 dark:border-gray-600 dark:bg-gray-800"
           value={form.id}
           onChange={(e) => setForm((f) => ({ ...f, id: e.target.value }))}
+          className="w-auto"
         />
-        <input
+        <Input
           type="text"
           placeholder="Display name"
-          className="rounded border border-gray-300 px-3 py-2 dark:border-gray-600 dark:bg-gray-800"
           value={form.displayName}
           onChange={(e) => setForm((f) => ({ ...f, displayName: e.target.value }))}
           required
+          className="w-auto"
         />
-        <input
+        <Input
           type="text"
           placeholder="Description"
-          className="rounded border border-gray-300 px-3 py-2 dark:border-gray-600 dark:bg-gray-800"
           value={form.description}
           onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+          className="w-auto"
         />
-        <button
-          type="submit"
-          disabled={saving}
-          className="rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-50"
-        >
+        <Button type="submit" disabled={saving}>
           {saving ? "Saving…" : "Save"}
-        </button>
+        </Button>
       </form>
       <ul className="space-y-2">
         {list.map((l) => (
-          <li
+          <Card
             key={l.id}
-            className="flex items-center justify-between rounded border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-800"
+            padding="sm"
+            className="flex items-center justify-between"
           >
             <div>
               <span className="font-medium">{l.displayName}</span>
-              <span className="ml-2 text-sm text-gray-500">({l.id})</span>
+              <span className="ml-2 text-sm text-muted">({l.id})</span>
               {l.description && (
-                <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                <p className="mt-1 text-sm text-muted">
                   {l.description}
                 </p>
               )}
             </div>
-          </li>
+          </Card>
         ))}
       </ul>
     </div>

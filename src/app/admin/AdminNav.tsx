@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import type { AdminUiRole } from "@/lib/auth";
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
 
 type NavItem = {
   href: string;
@@ -60,11 +61,61 @@ const navGroups: NavGroup[] = [
   },
 ];
 
+function NavLinks({
+  role,
+  onNavigate,
+}: {
+  role: AdminUiRole | null;
+  onNavigate?: () => void;
+}) {
+  const pathname = usePathname();
+  const canSeeAdminOnly = role === "admin";
+
+  const linkClass = (href: string) => {
+    const isActive =
+      href === "/admin" ? pathname === "/admin" : pathname.startsWith(href);
+    return isActive
+      ? "bg-aqua/40 font-medium text-primary"
+      : "text-muted hover:bg-aqua/20 hover:text-ink";
+  };
+
+  return (
+    <ul className="flex flex-col gap-1 py-2">
+      {navGroups.map((group) => {
+        const visibleItems = group.items.filter(
+          (item) => !item.adminOnly || canSeeAdminOnly
+        );
+        if (visibleItems.length === 0) return null;
+        return (
+          <li key={group.section}>
+            <div className="px-4 pb-1 pt-4 first:pt-2">
+              <span className="text-xs font-semibold uppercase tracking-wider text-muted">
+                {group.section}
+              </span>
+            </div>
+            <ul>
+              {visibleItems.map(({ href, label }) => (
+                <li key={href}>
+                  <Link
+                    href={href}
+                    onClick={onNavigate}
+                    className={`mx-2 block rounded-lg px-3 py-2.5 text-sm transition-colors duration-150 ${linkClass(href)}`}
+                  >
+                    {label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 export function AdminNav({ role }: { role: AdminUiRole | null }) {
   const [open, setOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
-  const pathname = usePathname();
-  const canSeeAdminOnly = role === "admin";
   const roleLabel = role === "editor" ? "Editor" : "Admin";
 
   const handleLogout = async () => {
@@ -77,131 +128,119 @@ export function AdminNav({ role }: { role: AdminUiRole | null }) {
     }
   };
 
-  const linkClass = (href: string) => {
-    const isActive =
-      href === "/admin" ? pathname === "/admin" : pathname.startsWith(href);
-    return isActive
-      ? "font-medium text-gray-900 dark:text-white"
-      : "text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white";
-  };
+  const sidebarContent = (
+    <>
+      <div className="flex items-center gap-3 border-b border-border px-4 py-4">
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-sm font-bold text-white">
+          R
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-ink">RAG Support</p>
+          <p className="text-xs text-muted">{roleLabel}</p>
+        </div>
+        <ThemeToggle />
+      </div>
+
+      <nav className="flex-1 overflow-y-auto">
+        <NavLinks role={role} onNavigate={() => setOpen(false)} />
+      </nav>
+
+      <div className="border-t border-border p-4 space-y-2">
+        <Link
+          href="/"
+          className="flex min-h-[44px] items-center justify-center rounded-lg border border-border px-3 py-2 text-sm font-medium text-muted transition-colors hover:bg-aqua/20 hover:text-ink"
+        >
+          Back to app
+        </Link>
+        <button
+          type="button"
+          onClick={handleLogout}
+          disabled={loggingOut}
+          className="flex min-h-[44px] w-full items-center justify-center rounded-lg px-3 py-2 text-sm font-medium text-muted transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-60 dark:hover:bg-red-900/20 dark:hover:text-red-400"
+        >
+          {loggingOut ? "Signing out..." : "Sign out"}
+        </button>
+      </div>
+    </>
+  );
 
   return (
     <>
-      <nav className="border-b border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
-        <div className="mx-auto flex max-w-6xl items-center gap-4 px-4 py-3">
+      {/* Desktop persistent sidebar */}
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r border-border bg-surface lg:flex">
+        {sidebarContent}
+      </aside>
+
+      {/* Mobile top bar */}
+      <nav className="sticky top-0 z-20 border-b border-border bg-surface lg:hidden">
+        <div className="flex items-center gap-3 px-4 py-3">
           <button
             type="button"
             onClick={() => setOpen(true)}
-            className="flex shrink-0 items-center justify-center rounded-md p-2 text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-white"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:bg-aqua/30 hover:text-ink"
             aria-label="Open menu"
           >
-            <svg
-              className="h-6 w-6"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-              aria-hidden
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M4 6h16M4 12h16M4 18h16"
-              />
+            <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
             </svg>
           </button>
-          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-            {roleLabel}
-          </span>
-          <Link
-            href="/"
-            className="ml-auto shrink-0 text-sm text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
-          >
-            Back to app
-          </Link>
-          <button
-            type="button"
-            onClick={handleLogout}
-            disabled={loggingOut}
-            className="shrink-0 text-sm text-gray-600 hover:text-gray-900 disabled:opacity-60 dark:text-gray-400 dark:hover:text-white"
-          >
-            {loggingOut ? "Signing out..." : "Sign out"}
-          </button>
+          <span className="text-sm font-semibold text-ink">RAG Support</span>
+          <span className="text-xs text-muted">({roleLabel})</span>
+          <div className="ml-auto flex items-center gap-1">
+            <ThemeToggle />
+            <Link
+              href="/"
+              className="flex h-10 items-center rounded-lg px-2 text-sm text-muted transition-colors hover:text-ink"
+            >
+              Back to app
+            </Link>
+          </div>
         </div>
       </nav>
 
-      {/* Overlay */}
+      {/* Mobile overlay */}
       {open && (
         <button
           type="button"
           onClick={() => setOpen(false)}
-          className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
+          className="fixed inset-0 z-40 bg-ink/40 backdrop-blur-sm lg:hidden"
           aria-label="Close menu"
         />
       )}
 
-      {/* Slide-out panel */}
+      {/* Mobile slide-out drawer */}
       <div
-        className={`fixed left-0 top-0 z-50 h-full w-72 max-w-[85vw] transform border-r border-gray-200 bg-white shadow-xl transition-transform duration-200 ease-out dark:border-gray-700 dark:bg-gray-800 ${
+        className={`fixed inset-y-0 left-0 z-50 flex w-72 max-w-[85vw] transform flex-col border-r border-border bg-surface shadow-xl transition-transform duration-200 ease-out lg:hidden ${
           open ? "translate-x-0" : "-translate-x-full"
         }`}
         aria-hidden={!open}
       >
-        <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3 dark:border-gray-700">
-          <span className="font-semibold text-gray-900 dark:text-white">
-            Menu
-          </span>
+        <div className="flex items-center justify-between border-b border-border px-4 py-3">
+          <span className="font-semibold text-ink">Menu</span>
           <button
             type="button"
             onClick={() => setOpen(false)}
-            className="rounded-md p-2 text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-white"
+            className="flex h-10 w-10 items-center justify-center rounded-lg text-muted transition-colors hover:bg-aqua/30 hover:text-ink"
             aria-label="Close menu"
           >
-            <svg
-              className="h-5 w-5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M6 18L18 6M6 6l12 12"
-              />
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
         </div>
-        <ul className="flex flex-col py-2">
-          {navGroups.map((group) => {
-            const visibleItems = group.items.filter(
-              (item) => !item.adminOnly || canSeeAdminOnly
-            );
-            if (visibleItems.length === 0) return null;
-            return (
-              <li key={group.section} className="border-b border-gray-200 dark:border-gray-700 last:border-b-0">
-                <div className="px-4 pt-3 pb-1.5">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                    {group.section}
-                  </span>
-                </div>
-                <ul className="pb-2">
-                  {visibleItems.map(({ href, label }) => (
-                    <li key={href}>
-                      <Link
-                        href={href}
-                        onClick={() => setOpen(false)}
-                        className={`block px-4 py-2.5 text-sm ${linkClass(href)}`}
-                      >
-                        {label}
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              </li>
-            );
-          })}
-        </ul>
+        <nav className="flex-1 overflow-y-auto">
+          <NavLinks role={role} onNavigate={() => setOpen(false)} />
+        </nav>
+        <div className="border-t border-border p-4">
+          <button
+            type="button"
+            onClick={handleLogout}
+            disabled={loggingOut}
+            className="flex min-h-[44px] w-full items-center justify-center rounded-lg px-3 py-2 text-sm font-medium text-muted transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-60 dark:hover:bg-red-900/20 dark:hover:text-red-400"
+          >
+            {loggingOut ? "Signing out..." : "Sign out"}
+          </button>
+        </div>
       </div>
     </>
   );

@@ -3,6 +3,11 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { ExpectedInput, ExpectedInputType, ActionSafetyLevel } from "@/lib/types/actions";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { Card } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
+import { Input, Textarea } from "@/components/ui/Input";
+import { Badge } from "@/components/ui/Badge";
 
 type ActionRow = {
   id: string;
@@ -159,204 +164,204 @@ export default function AdminActionsPage() {
 
   return (
     <div>
-      <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Action Catalog</h1>
-        <Link href="/admin" className="text-blue-600 hover:underline">
-          ← Dashboard
-        </Link>
-      </div>
+      <PageHeader
+        title="Action Catalog"
+        actions={
+          <Link href="/admin" className="text-primary hover:underline">
+            ← Dashboard
+          </Link>
+        }
+      />
 
       {deleteError && (
-        <div className="mb-4 rounded border border-red-200 bg-red-50 p-2 text-sm text-red-800 dark:border-red-800 dark:bg-red-900/20 dark:text-red-200">
+        <div className="mb-4 rounded border border-red-200 bg-red-50 p-2 text-sm text-red-800">
           {deleteError}
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="mb-8 space-y-4 rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
-        <h2 className="text-lg font-medium">Add or update action</h2>
-        {formError && (
-          <div className="rounded border border-red-200 bg-red-50 p-2 text-sm text-red-800 dark:border-red-800 dark:bg-red-900/20 dark:text-red-200">
-            {formError}
-          </div>
-        )}
-        <div className="grid gap-4 sm:grid-cols-2">
-          <input
-            type="text"
-            placeholder="ID (slug, e.g. photo_dispense_front)"
-            className="rounded border border-gray-300 px-3 py-2 dark:border-gray-600 dark:bg-gray-800"
-            value={form.id}
-            onChange={(e) => setForm((f) => ({ ...f, id: e.target.value }))}
-          />
-          <input
-            type="text"
-            placeholder="Title"
-            className="rounded border border-gray-300 px-3 py-2 dark:border-gray-600 dark:bg-gray-800"
-            value={form.title}
-            onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-            required
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium">Instructions (step-by-step)</label>
-          <textarea
-            rows={3}
-            className="mt-1 w-full rounded border border-gray-300 px-3 py-2 dark:border-gray-600 dark:bg-gray-800"
-            placeholder="What the user should do..."
-            value={form.instructions}
-            onChange={(e) => setForm((f) => ({ ...f, instructions: e.target.value }))}
-            required
-          />
-        </div>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div>
-            <label className="block text-sm font-medium">Expected input type</label>
-            <select
-              className="mt-1 w-full rounded border border-gray-300 px-3 py-2 dark:border-gray-600 dark:bg-gray-800"
-              value={form.expectedType}
-              onChange={(e) => setForm((f) => ({ ...f, expectedType: e.target.value as ExpectedInputType }))}
-            >
-              {EXPECTED_INPUT_TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </select>
-          </div>
-          {form.expectedType === "number" && (
-            <>
-              <div>
-                <label className="block text-sm font-medium">Unit (e.g. C, servings)</label>
-                <input
-                  type="text"
-                  className="mt-1 w-full rounded border border-gray-300 px-3 py-2 dark:border-gray-600 dark:bg-gray-800"
-                  value={form.expectedUnit}
-                  onChange={(e) => setForm((f) => ({ ...f, expectedUnit: e.target.value }))}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium">Range min</label>
-                <input
-                  type="number"
-                  className="mt-1 w-full rounded border border-gray-300 px-3 py-2 dark:border-gray-600 dark:bg-gray-800"
-                  value={form.expectedMin}
-                  onChange={(e) => setForm((f) => ({ ...f, expectedMin: e.target.value }))}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium">Range max</label>
-                <input
-                  type="number"
-                  className="mt-1 w-full rounded border border-gray-300 px-3 py-2 dark:border-gray-600 dark:bg-gray-800"
-                  value={form.expectedMax}
-                  onChange={(e) => setForm((f) => ({ ...f, expectedMax: e.target.value }))}
-                />
-              </div>
-            </>
-          )}
-          {form.expectedType === "enum" && (
-            <div>
-              <label className="block text-sm font-medium">Options (comma-separated)</label>
-              <input
-                type="text"
-                className="mt-1 w-full rounded border border-gray-300 px-3 py-2 dark:border-gray-600 dark:bg-gray-800"
-                placeholder="Option 1, Option 2, Option 3"
-                value={form.expectedOptions}
-                onChange={(e) => setForm((f) => ({ ...f, expectedOptions: e.target.value }))}
-              />
+      <Card className="mb-8">
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <h2 className="text-lg font-medium">Add or update action</h2>
+          {formError && (
+            <div className="rounded border border-red-200 bg-red-50 p-2 text-sm text-red-800">
+              {formError}
             </div>
           )}
-        </div>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div>
-            <label className="block text-sm font-medium">Safety level</label>
-            <select
-              className="mt-1 w-full rounded border border-gray-300 px-3 py-2 dark:border-gray-600 dark:bg-gray-800"
-              value={form.safetyLevel}
-              onChange={(e) => setForm((f) => ({ ...f, safetyLevel: e.target.value as ActionSafetyLevel }))}
-            >
-              {SAFETY_LEVELS.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium">Applies to models (comma-separated, empty = all)</label>
-            <input
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Input
               type="text"
-              className="mt-1 w-full rounded border border-gray-300 px-3 py-2 dark:border-gray-600 dark:bg-gray-800"
-              placeholder="Spaceman 500, Spaceman 600"
-              value={form.appliesToModels}
-              onChange={(e) => setForm((f) => ({ ...f, appliesToModels: e.target.value }))}
+              placeholder="ID (slug, e.g. photo_dispense_front)"
+              value={form.id}
+              onChange={(e) => setForm((f) => ({ ...f, id: e.target.value }))}
+            />
+            <Input
+              type="text"
+              placeholder="Title"
+              value={form.title}
+              onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
+              required
             />
           </div>
-        </div>
-        <button
-          type="submit"
-          disabled={saving}
-          className="rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-50"
-        >
-          {saving ? "Saving…" : "Save"}
-        </button>
-      </form>
+          <div>
+            <label className="block text-sm font-medium">Instructions (step-by-step)</label>
+            <Textarea
+              rows={3}
+              className="mt-1"
+              placeholder="What the user should do..."
+              value={form.instructions}
+              onChange={(e) => setForm((f) => ({ ...f, instructions: e.target.value }))}
+              required
+            />
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label className="block text-sm font-medium">Expected input type</label>
+              <select
+                className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-ink"
+                value={form.expectedType}
+                onChange={(e) => setForm((f) => ({ ...f, expectedType: e.target.value as ExpectedInputType }))}
+              >
+                {EXPECTED_INPUT_TYPES.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {form.expectedType === "number" && (
+              <>
+                <div>
+                  <label className="block text-sm font-medium">Unit (e.g. C, servings)</label>
+                  <Input
+                    type="text"
+                    className="mt-1"
+                    value={form.expectedUnit}
+                    onChange={(e) => setForm((f) => ({ ...f, expectedUnit: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium">Range min</label>
+                  <Input
+                    type="number"
+                    className="mt-1"
+                    value={form.expectedMin}
+                    onChange={(e) => setForm((f) => ({ ...f, expectedMin: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium">Range max</label>
+                  <Input
+                    type="number"
+                    className="mt-1"
+                    value={form.expectedMax}
+                    onChange={(e) => setForm((f) => ({ ...f, expectedMax: e.target.value }))}
+                  />
+                </div>
+              </>
+            )}
+            {form.expectedType === "enum" && (
+              <div>
+                <label className="block text-sm font-medium">Options (comma-separated)</label>
+                <Input
+                  type="text"
+                  className="mt-1"
+                  placeholder="Option 1, Option 2, Option 3"
+                  value={form.expectedOptions}
+                  onChange={(e) => setForm((f) => ({ ...f, expectedOptions: e.target.value }))}
+                />
+              </div>
+            )}
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label className="block text-sm font-medium">Safety level</label>
+              <select
+                className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-ink"
+                value={form.safetyLevel}
+                onChange={(e) => setForm((f) => ({ ...f, safetyLevel: e.target.value as ActionSafetyLevel }))}
+              >
+                {SAFETY_LEVELS.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium">Applies to models (comma-separated, empty = all)</label>
+              <Input
+                type="text"
+                className="mt-1"
+                placeholder="Spaceman 500, Spaceman 600"
+                value={form.appliesToModels}
+                onChange={(e) => setForm((f) => ({ ...f, appliesToModels: e.target.value }))}
+              />
+            </div>
+          </div>
+          <Button type="submit" disabled={saving}>
+            {saving ? "Saving…" : "Save"}
+          </Button>
+        </form>
+      </Card>
 
       <ul className="space-y-2">
         {list.map((a) => (
-          <li
+          <Card
             key={a.id}
-            className="flex items-center justify-between rounded border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-800"
+            padding="sm"
+            className="flex items-center justify-between"
           >
             <div className="min-w-0 flex-1">
               <span className="font-medium">{a.title}</span>
-              <span className="ml-2 text-sm text-gray-500">({a.id})</span>
-              <span className="ml-2 rounded bg-gray-100 px-1.5 py-0.5 text-xs dark:bg-gray-700">
-                {a.safetyLevel}
-              </span>
+              <span className="ml-2 text-sm text-muted">({a.id})</span>
+              <Badge className="ml-2">{a.safetyLevel}</Badge>
               {a.expectedInput && (
-                <span className="ml-2 text-xs text-gray-500">
+                <span className="ml-2 text-xs text-muted">
                   → {a.expectedInput.type}
                   {a.expectedInput.unit ? ` ${a.expectedInput.unit}` : ""}
                 </span>
               )}
-              <p className="mt-1 truncate text-sm text-gray-600 dark:text-gray-400">{a.instructions}</p>
+              <p className="mt-1 truncate text-sm text-muted">{a.instructions}</p>
             </div>
             <div className="ml-4 flex gap-2">
-              <button
+              <Button
                 type="button"
+                variant="secondary"
+                size="sm"
                 onClick={() => fillForm(a)}
-                className="rounded border border-gray-300 px-2 py-1 text-sm hover:bg-gray-100 dark:border-gray-600 dark:hover:bg-gray-700"
               >
                 Edit
-              </button>
+              </Button>
               {deleteId === a.id ? (
                 <>
-                  <button
+                  <Button
                     type="button"
+                    variant="danger"
+                    size="sm"
                     onClick={() => handleDelete(a.id)}
-                    className="rounded bg-red-600 px-2 py-1 text-sm text-white hover:bg-red-700"
                   >
                     Confirm delete
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     type="button"
+                    variant="secondary"
+                    size="sm"
                     onClick={() => setDeleteId(null)}
-                    className="rounded border px-2 py-1 text-sm"
                   >
                     Cancel
-                  </button>
+                  </Button>
                 </>
               ) : (
                 <button
                   type="button"
                   onClick={() => setDeleteId(a.id)}
-                  className="rounded border border-red-300 px-2 py-1 text-sm text-red-600 hover:bg-red-50 dark:border-red-700 dark:hover:bg-red-900/20"
+                  className="rounded-lg border border-red-300 px-2 py-1 text-sm text-red-600 hover:bg-red-50"
                 >
                   Delete
                 </button>
               )}
             </div>
-          </li>
+          </Card>
         ))}
       </ul>
     </div>

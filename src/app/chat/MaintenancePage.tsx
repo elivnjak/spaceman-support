@@ -16,15 +16,15 @@ export function MaintenancePage({
   email,
 }: MaintenancePageProps) {
   return (
-    <main className="flex min-h-screen flex-col bg-gray-50 dark:bg-gray-900">
-      <header className="border-b border-gray-200 bg-white px-4 py-3 dark:border-gray-700 dark:bg-gray-800">
+    <main className="flex min-h-screen flex-col bg-page">
+      <header className="border-b border-border bg-surface px-4 py-3">
         <div className="mx-auto flex max-w-2xl items-center justify-center">
-          <h1 className="text-lg font-semibold">Kuhlberg Support</h1>
+          <h1 className="text-lg font-semibold text-ink">Kuhlberg Support</h1>
         </div>
       </header>
 
       <div className="flex flex-1 flex-col items-center justify-center px-4 py-12">
-        <div className="w-full max-w-sm rounded-2xl border border-gray-200 bg-white p-8 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+        <div className="w-full max-w-sm rounded-card border border-border bg-surface p-8 shadow-card">
           <div className="flex flex-col items-center gap-5 text-center">
             {iconUrl ? (
               /* eslint-disable-next-line @next/next/no-img-element */
@@ -34,9 +34,9 @@ export function MaintenancePage({
                 className="h-16 w-auto object-contain"
               />
             ) : (
-              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-700">
+              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-aqua">
                 <svg
-                  className="h-7 w-7 text-gray-400 dark:text-gray-500"
+                  className="h-7 w-7 text-primary"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -58,29 +58,29 @@ export function MaintenancePage({
             )}
 
             <div className="space-y-2">
-              <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+              <h2 className="text-xl font-semibold text-ink">
                 {title}
               </h2>
-              <p className="whitespace-pre-wrap text-sm leading-relaxed text-gray-500 dark:text-gray-400">
+              <p className="whitespace-pre-wrap text-sm leading-relaxed text-muted">
                 {description}
               </p>
             </div>
 
             {(phone || email) && (
               <>
-                <div className="w-full border-t border-gray-100 dark:border-gray-700" />
+                <div className="w-full border-t border-border" />
                 <div className="w-full space-y-3">
-                  <p className="text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted">
                     Need help? Contact us
                   </p>
                   <div className="flex flex-col gap-2">
                     {phone && (
                       <a
                         href={`tel:${phone}`}
-                        className="flex items-center gap-3 rounded-lg border border-gray-100 px-4 py-3 text-sm text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-700/50"
+                        className="flex min-h-[44px] items-center gap-3 rounded-lg border border-border px-4 py-3 text-sm text-ink transition-colors hover:bg-aqua/30"
                       >
                         <svg
-                          className="h-4 w-4 shrink-0 text-gray-400 dark:text-gray-500"
+                          className="h-4 w-4 shrink-0 text-primary"
                           fill="none"
                           stroke="currentColor"
                           viewBox="0 0 24 24"
@@ -98,10 +98,10 @@ export function MaintenancePage({
                     {email && (
                       <a
                         href={`mailto:${email}`}
-                        className="flex items-center gap-3 rounded-lg border border-gray-100 px-4 py-3 text-sm text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-700/50"
+                        className="flex min-h-[44px] items-center gap-3 rounded-lg border border-border px-4 py-3 text-sm text-ink transition-colors hover:bg-aqua/30"
                       >
                         <svg
-                          className="h-4 w-4 shrink-0 text-gray-400 dark:text-gray-500"
+                          className="h-4 w-4 shrink-0 text-primary"
                           fill="none"
                           stroke="currentColor"
                           viewBox="0 0 24 24"

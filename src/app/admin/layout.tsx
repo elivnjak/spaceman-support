@@ -23,9 +23,13 @@ export default async function AdminLayout({
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen bg-page">
       <AdminNav role={role} />
-      <main className="mx-auto max-w-6xl px-4 py-8">{children}</main>
+      <main id="main-content" className="lg:pl-64">
+        <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6 sm:py-8">
+          {children}
+        </div>
+      </main>
     </div>
   );
 }

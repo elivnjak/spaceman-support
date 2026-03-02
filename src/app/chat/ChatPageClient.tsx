@@ -435,6 +435,8 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatStarted, initialPhase]);
 
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+
   useEffect(() => {
     if (!lightbox) return;
     const onKey = (e: KeyboardEvent) => {
@@ -452,8 +454,38 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
         );
       }
     };
+    const onTouchStart = (e: TouchEvent) => {
+      const t = e.touches[0];
+      if (t) touchStartRef.current = { x: t.clientX, y: t.clientY };
+    };
+    const onTouchEnd = (e: TouchEvent) => {
+      const start = touchStartRef.current;
+      const t = e.changedTouches[0];
+      if (!start || !t) return;
+      const dx = t.clientX - start.x;
+      const dy = t.clientY - start.y;
+      touchStartRef.current = null;
+      if (Math.abs(dx) < 50 || Math.abs(dy) > Math.abs(dx)) return;
+      if (dx < 0) {
+        setLightbox((prev) =>
+          prev && prev.index < prev.images.length - 1
+            ? { ...prev, index: prev.index + 1 }
+            : prev
+        );
+      } else {
+        setLightbox((prev) =>
+          prev && prev.index > 0 ? { ...prev, index: prev.index - 1 } : prev
+        );
+      }
+    };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("touchstart", onTouchStart, { passive: true });
+    window.addEventListener("touchend", onTouchEnd, { passive: true });
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("touchstart", onTouchStart);
+      window.removeEventListener("touchend", onTouchEnd);
+    };
   }, [lightbox]);
 
   // Revoke object URLs for user message images on unmount to avoid memory leaks
@@ -804,7 +836,7 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
     !hasPendingStructuredRequest;
 
   return (
-    <main className="flex min-h-screen flex-col bg-gray-50 dark:bg-gray-900">
+    <main className="flex min-h-screen flex-col bg-page">
       {TURNSTILE_SITE_KEY && (
         <Script
           src="https://challenges.cloudflare.com/turnstile/v0/api.js"
@@ -812,12 +844,12 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
           onLoad={() => setTurnstileScriptLoaded(true)}
         />
       )}
-      <header className="border-b border-gray-200 bg-white px-4 py-3 dark:border-gray-700 dark:bg-gray-800">
+      <header className="sticky top-0 z-10 border-b border-border bg-surface px-4 py-3">
         <div className="mx-auto flex max-w-2xl items-center justify-between gap-2">
           <div className="min-w-0 flex-1">
-            <h1 className="text-lg font-semibold">Kuhlberg Support</h1>
+            <h1 className="text-lg font-semibold text-ink">Kuhlberg Support</h1>
             {sessionId && (
-              <p className="mt-1 truncate text-xs text-gray-500 dark:text-gray-400 hidden">
+              <p className="mt-1 hidden truncate text-xs text-muted">
                 Session: {sessionId}
               </p>
             )}
@@ -826,7 +858,7 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
             <button
               type="button"
               onClick={startNewConversation}
-              className="shrink-0 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600 dark:focus:ring-offset-gray-800"
+              className="shrink-0 rounded-lg border border-border bg-surface px-3 py-1.5 text-sm font-medium text-ink transition-colors hover:bg-aqua/30 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
             >
               New conversation
             </button>
@@ -836,18 +868,18 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
 
       <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col overflow-hidden p-4">
         {error && (
-          <div className="mb-4 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-800 dark:border-red-800 dark:bg-red-900/20 dark:text-red-200">
+          <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">
             {error}
           </div>
         )}
 
         {connectionInterrupted && sessionId && (
-          <div className="mb-4 flex flex-wrap items-center gap-2 rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-200">
+          <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-accent/10 p-3 text-sm text-ink dark:border-amber-700 dark:bg-accent/20">
             <span>The connection was interrupted before the reply could be shown.</span>
             <button
               type="button"
               onClick={loadLatestReply}
-              className="shrink-0 rounded bg-amber-600 px-3 py-1.5 font-medium text-white hover:bg-amber-700 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 dark:bg-amber-500 dark:hover:bg-amber-600 dark:focus:ring-offset-gray-800"
+              className="shrink-0 rounded-lg bg-accent px-3 py-1.5 font-medium text-ink hover:bg-accent-hover focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2"
             >
               Load latest reply
             </button>
@@ -856,7 +888,7 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
 
         {!chatStarted ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-6">
-            <p className="text-center text-gray-600 dark:text-gray-400">
+            <p className="text-center text-muted">
               Welcome to Kuhlberg support chat. Please enter your details to get started.
             </p>
             <form
@@ -872,7 +904,7 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
               }}
             >
               <div>
-                <label htmlFor="prechat-name" className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                <label htmlFor="prechat-name" className="mb-1 block text-sm font-medium text-ink">
                   Name
                 </label>
                 <input
@@ -882,11 +914,11 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
                   value={userName}
                   onChange={(e) => setUserName(e.target.value)}
                   placeholder="Your name"
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
+                  className="w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-ink placeholder:text-muted focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
                 />
               </div>
               <div>
-                <label htmlFor="prechat-phone" className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                <label htmlFor="prechat-phone" className="mb-1 block text-sm font-medium text-ink">
                   Phone number
                 </label>
                 <input
@@ -902,13 +934,13 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
                   placeholder="Your phone number"
                   aria-invalid={!!phoneError}
                   aria-describedby={phoneError ? "prechat-phone-error" : undefined}
-                  className={`w-full rounded-lg border px-3 py-2 dark:bg-gray-800 dark:text-white ${phoneError
-                      ? "border-red-500 focus:border-red-500 focus:ring-red-500 dark:border-red-500"
-                      : "border-gray-300 dark:border-gray-600"
+                  className={`w-full rounded-lg border bg-surface px-3 py-2.5 text-ink placeholder:text-muted focus:outline-none focus:ring-2 ${phoneError
+                      ? "border-red-500 focus:border-red-500 focus:ring-red-500/20"
+                      : "border-border focus:border-primary focus:ring-primary/20"
                     }`}
                 />
                 {phoneError && (
-                  <p id="prechat-phone-error" className="mt-1 text-sm text-red-600 dark:text-red-400" role="alert">
+                  <p id="prechat-phone-error" className="mt-1 text-sm text-red-600" role="alert">
                     {phoneError}
                   </p>
                 )}
@@ -922,7 +954,7 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
               <button
                 type="submit"
                 disabled={!userName.trim() || !userPhone.trim() || !!getAustralianPhoneError(userPhone)}
-                className="rounded-xl bg-blue-600 px-8 py-3 text-lg font-medium text-white shadow-lg transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:focus:ring-offset-gray-900"
+                className="rounded-xl bg-primary px-8 py-3 text-lg font-medium text-white shadow-lg transition-colors hover:bg-primary-hover focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Start
               </button>
@@ -933,11 +965,11 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
             <div className="flex-1 space-y-4 overflow-y-auto">
               {initialPhase === "typing" && (
                 <div className="flex justify-start">
-                  <div className="rounded-[1.25rem] bg-[#2C323B] px-4 py-3 shadow">
+                  <div className="rounded-[1.25rem] bg-aqua px-4 py-3 shadow-card">
                     <div className="flex gap-2">
-                      <span className="h-2 w-2 animate-bounce rounded-full bg-[#6B7480] [animation-delay:0ms]" />
-                      <span className="h-2 w-2 animate-bounce rounded-full bg-[#6B7480] [animation-delay:150ms]" />
-                      <span className="h-2 w-2 animate-bounce rounded-full bg-[#6B7480] [animation-delay:300ms]" />
+                      <span className="h-2 w-2 animate-bounce rounded-full bg-primary [animation-delay:0ms]" />
+                      <span className="h-2 w-2 animate-bounce rounded-full bg-primary [animation-delay:150ms]" />
+                      <span className="h-2 w-2 animate-bounce rounded-full bg-primary [animation-delay:300ms]" />
                     </div>
                   </div>
                 </div>
@@ -949,9 +981,9 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
                 >
                   <div className={`flex max-w-[85%] flex-col ${m.role === "assistant" ? "gap-3" : ""}`}>
                     <div
-                      className={`rounded-2xl px-4 py-2 ${m.role === "user"
-                        ? "bg-blue-600 text-white"
-                        : "bg-white text-gray-900 shadow dark:bg-gray-800 dark:text-gray-100"
+                      className={`rounded-2xl px-4 py-2.5 ${m.role === "user"
+                        ? "bg-primary text-white"
+                        : "bg-surface text-ink shadow-card border border-border"
                         }`}
                     >
                       {m.role === "assistant" && m.citations && m.citations.length > 0 ? (
@@ -964,7 +996,7 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
                                 key={k}
                                 type="button"
                                 onClick={() => openCitationModal(i, seg.chunkId)}
-                                className="mx-0.5 inline-flex align-baseline rounded border border-blue-400/60 bg-blue-500/20 px-1.5 py-0.5 font-mono text-xs text-blue-700 hover:bg-blue-500/30 dark:border-blue-400/50 dark:bg-blue-500/30 dark:text-blue-300 dark:hover:bg-blue-500/40"
+                                className="mx-0.5 inline-flex align-baseline rounded border border-primary/40 bg-primary/10 px-1.5 py-0.5 font-mono text-xs text-primary hover:bg-primary/20"
                                 title="View referenced content"
                               >
                                 [doc]
@@ -983,8 +1015,8 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
                             : "grid grid-cols-3 gap-1.5";
                         const imgClass =
                           count === 1
-                            ? "max-h-48 w-full rounded-md border border-gray-200 object-contain bg-gray-100 dark:border-gray-600 dark:bg-gray-700"
-                            : "h-28 w-full rounded-md border border-gray-200 object-cover bg-gray-100 dark:border-gray-600 dark:bg-gray-700";
+                            ? "max-h-48 w-full rounded-lg border border-border object-contain bg-page"
+                            : "h-28 w-full rounded-lg border border-border object-cover bg-page";
                         return (
                           <div className={`mt-2 ${gridClass}`}>
                             {m.guideImages.map((src, idx) => (
@@ -1023,8 +1055,8 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
                         );
                       })()}
                       {m.role === "assistant" && Boolean(m.resolution?.diagnosis) && (
-                        <div className="mt-3 space-y-2 border-t border-green-200 pt-2 dark:border-green-800">
-                          <p className="font-medium text-green-800 dark:text-green-300">
+                        <div className="mt-3 space-y-2 rounded-lg border border-accent/30 bg-[#FFF8E1] p-3 dark:bg-[#3D2E00]">
+                          <p className="font-medium text-amber-800 dark:text-amber-200">
                             Diagnosis: {m.resolution?.diagnosis}
                           </p>
                           {(m.resolution?.steps?.length ?? 0) > 0 && (
@@ -1035,22 +1067,22 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
                             </ol>
                           )}
                           {m.resolution?.why && (
-                            <p className="text-xs text-gray-600 dark:text-gray-400">
+                            <p className="text-xs text-amber-700/70 dark:text-amber-300/70">
                               Why: {m.resolution?.why}
                             </p>
                           )}
                         </div>
                       )}
                       {m.role === "assistant" && m.escalation_reason && (
-                        <div className="mt-3 border-t border-amber-200 pt-2">
-                          <p className="text-xs font-medium text-amber-800 dark:text-amber-300">
+                        <div className="mt-3 border-t border-accent/30 pt-2">
+                          <p className="text-xs font-medium text-amber-700 dark:text-amber-300">
                             Connecting to support: {m.escalation_reason}
                           </p>
                         </div>
                       )}
                       {m.role === "assistant" && m.citations && m.citations.length > 0 && (
-                        <div className="mt-3 space-y-2 border-t border-gray-200 pt-2 dark:border-gray-600">
-                          <p className="text-xs font-medium text-gray-500 dark:text-gray-400">
+                        <div className="mt-3 space-y-2 border-t border-border pt-2">
+                          <p className="text-xs font-medium text-muted">
                             Referenced content
                           </p>
                           {m.citations.map((cit, j) => {
@@ -1064,29 +1096,29 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
                               <div
                                 key={j}
                                 id={`citation-msg-${i}-cit-${j}`}
-                                className="rounded-lg border border-gray-200 bg-gray-50 p-2 text-sm dark:border-gray-600 dark:bg-gray-700/50"
+                                className="rounded-lg border border-border bg-page p-2 text-sm"
                               >
-                                <p className="whitespace-pre-wrap text-gray-700 dark:text-gray-300">
+                                <p className="whitespace-pre-wrap text-ink/80">
                                   {snippet}
                                 </p>
                                 {cit.reason && (
-                                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                                  <p className="mt-1 text-xs text-muted">
                                     {cit.reason}
                                   </p>
                                 )}
-                                <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-gray-100 pt-2 dark:border-gray-600">
+                                <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-border pt-2">
                                   {cit.documentId ? (
                                     <Link
                                       href={`/admin/docs/${cit.documentId}`}
                                       target="_blank"
                                       rel="noopener noreferrer"
-                                      className="truncate font-mono text-xs text-blue-600 hover:underline dark:text-blue-400"
+                                      className="truncate font-mono text-xs text-primary hover:underline"
                                       title="View document"
                                     >
                                       {cit.chunkId}
                                     </Link>
                                   ) : (
-                                    <p className="truncate font-mono text-xs text-gray-400 dark:text-gray-500" title={cit.chunkId}>
+                                    <p className="truncate font-mono text-xs text-muted" title={cit.chunkId}>
                                       {cit.chunkId}
                                     </p>
                                   )}
@@ -1094,7 +1126,7 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
                                     <button
                                       type="button"
                                       onClick={() => toggleCitation(key)}
-                                      className="ml-3 text-xs text-blue-600 hover:underline dark:text-blue-400"
+                                      className="ml-3 text-xs text-primary hover:underline"
                                     >
                                       {expanded ? "Show less" : "Show more"}
                                     </button>
@@ -1124,12 +1156,12 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
                         visibleRequests.length > 0 &&
                         visibleRequests.every((req) => Boolean(requestInputs[req.id]?.trim()));
                       return (
-                        <div className="space-y-3 rounded-xl border-l-4 border-blue-500 bg-blue-50 p-4 shadow-sm dark:border-blue-400 dark:bg-blue-950/40">
+                        <div className="space-y-3 rounded-xl border border-primary/25 bg-[#E8F4FC] p-4 shadow-card dark:bg-[#0F2A3D]">
                           {visibleRequests.map((req, j) => {
                             const inputKind = getRequestInputKind(req);
                             return (
                               <div key={j}>
-                                <p className="text-sm font-semibold text-blue-900 dark:text-blue-200">
+                                <p className="text-sm font-semibold text-ink">
                                   {req.prompt}
                                 </p>
                                 {isLatest && inputKind === "number" && (
@@ -1140,7 +1172,7 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
                                       min={req.expectedInput?.range?.min}
                                       max={req.expectedInput?.range?.max}
                                       step="any"
-                                      className="w-32 rounded-lg border border-blue-200 bg-white px-3 py-1.5 text-sm shadow-sm dark:border-blue-700 dark:bg-gray-800"
+                                      className="w-32 rounded-lg border border-border bg-surface px-3 py-2 text-sm shadow-card focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
                                       value={requestInputs[req.id] ?? ""}
                                       onChange={(e) => updateRequestInput(req.id, e.target.value)}
                                       onKeyDown={(e) => {
@@ -1151,7 +1183,7 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
                                       }}
                                     />
                                     {req.expectedInput?.unit && (
-                                      <span className="text-xs text-blue-600 dark:text-blue-400">{req.expectedInput.unit}</span>
+                                      <span className="text-xs text-muted">{req.expectedInput.unit}</span>
                                     )}
                                   </div>
                                 )}
@@ -1162,9 +1194,9 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
                                         key={opt}
                                         type="button"
                                         onClick={() => submitSingleRequestAnswer(req, opt)}
-                                        className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${requestInputs[req.id] === opt
-                                          ? "border-blue-500 bg-blue-600 text-white"
-                                          : "border-blue-200 bg-white text-blue-800 hover:bg-blue-100 dark:border-blue-700 dark:bg-gray-800 dark:text-blue-300 dark:hover:bg-blue-900/40"
+                                        className={`min-h-[44px] rounded-full px-4 py-2 text-sm font-medium transition-colors ${requestInputs[req.id] === opt
+                                          ? "chat-option-pill-blue-selected"
+                                          : "chat-option-pill-blue"
                                           }`}
                                       >
                                         {opt}
@@ -1174,7 +1206,7 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
                                       <button
                                         type="button"
                                         onClick={() => submitSingleRequestAnswer(req, SKIP_SIGNAL)}
-                                        className="rounded-full border border-blue-200 bg-white px-3 py-1 text-xs font-medium text-blue-700 transition-colors hover:bg-blue-100 dark:border-blue-700 dark:bg-gray-800 dark:text-blue-300 dark:hover:bg-blue-900/40"
+                                        className="min-h-[44px] rounded-full px-4 py-2 text-sm font-medium transition-colors chat-option-pill-blue"
                                       >
                                         I don&apos;t know
                                       </button>
@@ -1188,11 +1220,9 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
                                         key={opt}
                                         type="button"
                                         onClick={() => submitSingleRequestAnswer(req, opt)}
-                                        className={`rounded-lg border px-4 py-1.5 text-xs font-medium transition-colors ${requestInputs[req.id] === opt
-                                          ? opt === "Yes"
-                                            ? "border-green-500 bg-green-500 text-white"
-                                            : "border-red-500 bg-red-500 text-white"
-                                          : "border-blue-200 bg-white text-blue-800 hover:bg-blue-100 dark:border-blue-700 dark:bg-gray-800 dark:text-blue-300 dark:hover:bg-blue-900/40"
+                                        className={`min-h-[44px] rounded-full px-5 py-2 text-sm font-medium transition-colors ${requestInputs[req.id] === opt
+                                          ? "chat-option-pill-blue-selected"
+                                          : "chat-option-pill-blue"
                                           }`}
                                       >
                                         {opt}
@@ -1204,7 +1234,7 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
                                   <input
                                     type="text"
                                     placeholder="Type your answer..."
-                                    className="mt-3 w-full rounded-lg border border-blue-200 bg-white px-3 py-1.5 text-sm shadow-sm dark:border-blue-700 dark:bg-gray-800"
+                                    className="mt-3 w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm shadow-card focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
                                     value={requestInputs[req.id] ?? ""}
                                     onChange={(e) => updateRequestInput(req.id, e.target.value)}
                                     onKeyDown={(e) => {
@@ -1224,7 +1254,7 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
                                           setActivePhotoRequestId(req.id);
                                           requestFileInputRef.current?.click();
                                         }}
-                                        className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-white px-3 py-1.5 text-xs font-medium text-blue-700 shadow-sm hover:bg-blue-100 dark:border-blue-700 dark:bg-gray-800 dark:text-blue-300 dark:hover:bg-blue-900/40"
+                                        className="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-sm font-medium text-primary shadow-card hover:bg-aqua/30"
                                       >
                                         <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd" /></svg>
                                         {files.length > 0 ? `${files.length} photo(s) selected` : "Attach photo"}
@@ -1235,7 +1265,7 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
                                         <button
                                           type="button"
                                           onClick={() => submitSingleRequestAnswer(req, SKIP_SIGNAL)}
-                                          className="text-xs font-medium text-blue-400 hover:text-blue-300 dark:text-blue-400 dark:hover:text-blue-300"
+                                          className="text-sm font-medium text-[#1174B9] hover:text-[#0E5F99]"
                                         >
                                           {inputKind === "photo" ? "I don't have a photo" : "I don't know"}
                                         </button>
@@ -1243,7 +1273,7 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
                                   </div>
                                 )}
                                 {!isLatest && inputKind === "number" && req.expectedInput && (
-                                  <p className="mt-1 text-xs text-blue-600 dark:text-blue-400">
+                                  <p className="mt-1 text-xs text-muted">
                                     {req.expectedInput.unit && `Unit: ${req.expectedInput.unit}`}
                                     {req.expectedInput.range &&
                                       ` Range: ${req.expectedInput.range.min}–${req.expectedInput.range.max}`}
@@ -1257,7 +1287,7 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
                               type="button"
                               disabled={loading || !hasAllVisibleAnswers}
                               onClick={() => submitRequestAnswers(visibleRequests)}
-                              className="w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700 disabled:opacity-50"
+                              className="w-full min-h-[44px] rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white shadow-card transition-colors hover:bg-primary-hover disabled:opacity-50"
                             >
                               {manualSubmitLabel}
                             </button>
@@ -1270,9 +1300,9 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
               ))}
               {showFullInput && initialPhase === "done" && (
                 <div className="flex justify-start">
-                  <div className="w-full max-w-[85%] rounded-xl border-l-4 border-blue-500 bg-blue-50 p-3 shadow-sm dark:border-blue-400 dark:bg-blue-950/40">
+                  <div className="w-full max-w-[85%] rounded-xl border border-border bg-aqua/30 p-3 shadow-card">
                     {files.length > 0 && (
-                      <p className="mb-2 text-xs text-blue-700 dark:text-blue-300">
+                      <p className="mb-2 text-xs text-primary">
                         {files.length} photo{files.length > 1 ? "s" : ""} attached
                       </p>
                     )}
@@ -1280,7 +1310,7 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
                       <button
                         type="button"
                         onClick={() => fileInputRef.current?.click()}
-                        className="shrink-0 rounded-lg border border-blue-300 bg-white p-2 text-blue-600 shadow-sm transition-colors hover:bg-blue-50 dark:border-blue-600 dark:bg-gray-700 dark:text-blue-400 dark:hover:bg-gray-600"
+                        className="shrink-0 rounded-lg border border-border bg-surface p-2.5 text-primary shadow-card transition-colors hover:bg-aqua/30"
                         title="Attach photo"
                       >
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
@@ -1290,7 +1320,7 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
                       <input
                         type="text"
                         placeholder="Describe your issue..."
-                        className="min-w-0 flex-1 rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm shadow-sm dark:border-blue-700 dark:bg-gray-800 dark:text-gray-100"
+                        className="min-w-0 flex-1 rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-ink shadow-card focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
                         value={input}
                         onChange={(e) => setInput(e.target.value)}
                         onKeyDown={(e) => {
@@ -1309,7 +1339,7 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
                           setInputSource("chat");
                           formRef.current?.requestSubmit();
                         }}
-                        className="shrink-0 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                        className="shrink-0 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-primary-hover disabled:opacity-50"
                       >
                         Send
                       </button>
@@ -1319,11 +1349,11 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
               )}
               {loading && (
                 <div className="flex justify-start">
-                  <div className="rounded-[1.25rem] bg-[#2C323B] px-4 py-3 shadow">
+                  <div className="rounded-[1.25rem] bg-aqua px-4 py-3 shadow-card">
                     <div className="flex gap-2">
-                      <span className="h-2 w-2 animate-bounce rounded-full bg-[#6B7480] [animation-delay:0ms]" />
-                      <span className="h-2 w-2 animate-bounce rounded-full bg-[#6B7480] [animation-delay:150ms]" />
-                      <span className="h-2 w-2 animate-bounce rounded-full bg-[#6B7480] [animation-delay:300ms]" />
+                      <span className="h-2 w-2 animate-bounce rounded-full bg-primary [animation-delay:0ms]" />
+                      <span className="h-2 w-2 animate-bounce rounded-full bg-primary [animation-delay:150ms]" />
+                      <span className="h-2 w-2 animate-bounce rounded-full bg-primary [animation-delay:300ms]" />
                     </div>
                   </div>
                 </div>
@@ -1334,7 +1364,7 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
             <form
               ref={formRef}
               onSubmit={sendMessage}
-              className={`${showFullInput ? "" : "mt-4"} flex gap-2`}
+              className={`${showFullInput ? "" : "mt-4"} flex gap-2 safe-bottom`}
             >
               <input
                 type="file"
@@ -1369,7 +1399,7 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
                   <input
                     type="text"
                     placeholder="Type your message..."
-                    className="flex-1 rounded-lg border border-gray-300 px-4 py-2 dark:border-gray-600 dark:bg-gray-800"
+                    className="flex-1 rounded-lg border border-border bg-surface px-4 py-2.5 text-ink placeholder:text-muted focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
                     disabled={loading}
@@ -1378,7 +1408,7 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
                     type="submit"
                     disabled={loading || !input.trim()}
                     onClick={() => setInputSource("chat")}
-                    className="rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-50"
+                    className="min-h-[44px] rounded-lg bg-primary px-4 py-2.5 text-white hover:bg-primary-hover disabled:opacity-50"
                   >
                     Send
                   </button>
@@ -1388,7 +1418,7 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
                 <button
                   type="button"
                   onClick={() => setAddNoteOpen(true)}
-                  className="text-sm text-blue-700 underline underline-offset-2 hover:text-blue-900 dark:text-blue-300 dark:hover:text-blue-200"
+                  className="text-sm text-primary underline underline-offset-2 hover:text-primary-hover"
                 >
                   Have something to add?
                 </button>
@@ -1398,7 +1428,7 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
                   <input
                     type="text"
                     placeholder="Add a note..."
-                    className="flex-1 rounded-lg border border-gray-300 px-4 py-2 dark:border-gray-600 dark:bg-gray-800"
+                    className="flex-1 rounded-lg border border-border bg-surface px-4 py-2.5 text-ink placeholder:text-muted focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
                     disabled={loading}
@@ -1407,7 +1437,7 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
                     type="submit"
                     disabled={loading || !input.trim()}
                     onClick={() => setInputSource("note")}
-                    className="rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-50"
+                    className="min-h-[44px] rounded-lg bg-primary px-4 py-2.5 text-white hover:bg-primary-hover disabled:opacity-50"
                   >
                     Send note
                   </button>
@@ -1420,16 +1450,16 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
 
       {lightbox && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-ink/80 p-4"
           onClick={() => setLightbox(null)}
         >
           <div className="relative flex max-h-[90vh] max-w-[90vw] items-center" onClick={(e) => e.stopPropagation()}>
             <button
               type="button"
               onClick={() => setLightbox(null)}
-              className="absolute -right-3 -top-3 z-10 rounded-full bg-white p-1.5 shadow-lg hover:bg-gray-100 dark:bg-gray-700 dark:hover:bg-gray-600"
+              className="absolute -right-3 -top-3 z-10 rounded-full bg-surface p-1.5 shadow-lg hover:bg-page"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-700 dark:text-gray-200" viewBox="0 0 20 20" fill="currentColor">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-ink" viewBox="0 0 20 20" fill="currentColor">
                 <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
               </svg>
             </button>
@@ -1439,9 +1469,9 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
                 type="button"
                 disabled={lightbox.index === 0}
                 onClick={() => setLightbox((prev) => prev && prev.index > 0 ? { ...prev, index: prev.index - 1 } : prev)}
-                className="mr-3 shrink-0 rounded-full bg-white/90 p-2 shadow-lg transition-opacity hover:bg-white disabled:opacity-30 dark:bg-gray-700/90 dark:hover:bg-gray-600"
+                className="mr-3 shrink-0 rounded-full bg-surface/90 p-2.5 shadow-lg transition-opacity hover:bg-surface disabled:opacity-30"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-800 dark:text-gray-200" viewBox="0 0 20 20" fill="currentColor">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-ink" viewBox="0 0 20 20" fill="currentColor">
                   <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
                 </svg>
               </button>
@@ -1455,7 +1485,7 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
                 className="max-h-[80vh] max-w-[80vw] rounded-xl object-contain shadow-2xl"
               />
               {lightbox.images.length > 1 && (
-                <span className="mt-3 rounded-full bg-black/50 px-3 py-1 text-xs font-medium text-white">
+                <span className="mt-3 rounded-full bg-ink/60 px-3 py-1 text-xs font-medium text-white">
                   {lightbox.index + 1} / {lightbox.images.length}
                 </span>
               )}
@@ -1466,9 +1496,9 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
                 type="button"
                 disabled={lightbox.index === lightbox.images.length - 1}
                 onClick={() => setLightbox((prev) => prev && prev.index < prev.images.length - 1 ? { ...prev, index: prev.index + 1 } : prev)}
-                className="ml-3 shrink-0 rounded-full bg-white/90 p-2 shadow-lg transition-opacity hover:bg-white disabled:opacity-30 dark:bg-gray-700/90 dark:hover:bg-gray-600"
+                className="ml-3 shrink-0 rounded-full bg-surface/90 p-2.5 shadow-lg transition-opacity hover:bg-surface disabled:opacity-30"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-800 dark:text-gray-200" viewBox="0 0 20 20" fill="currentColor">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-ink" viewBox="0 0 20 20" fill="currentColor">
                   <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
                 </svg>
               </button>
@@ -1479,28 +1509,28 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
 
       {openCitation && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 backdrop-blur-sm p-4"
           onClick={() => setOpenCitation(null)}
         >
           <div
-            className="relative max-h-[80vh] w-full max-w-xl overflow-y-auto rounded-xl bg-white p-6 shadow-2xl dark:bg-gray-800"
+            className="relative max-h-[80vh] w-full max-w-xl overflow-y-auto rounded-card bg-surface p-6 shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-3 flex items-start justify-between gap-4">
-              <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+              <h3 className="text-sm font-semibold text-ink">
                 Referenced content
               </h3>
               <button
                 type="button"
                 onClick={() => setOpenCitation(null)}
-                className="shrink-0 rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-700 dark:hover:text-gray-300"
+                className="shrink-0 rounded-lg p-1.5 text-muted hover:bg-aqua/30 hover:text-ink"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                   <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
                 </svg>
               </button>
             </div>
-            <div className="whitespace-pre-wrap rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700 dark:border-gray-600 dark:bg-gray-700/50 dark:text-gray-300">
+            <div className="whitespace-pre-wrap rounded-lg border border-border bg-aqua/20 p-4 text-sm text-ink/80">
               {openCitation.content}
             </div>
             <div className="mt-3 flex items-center gap-2">
@@ -1509,13 +1539,13 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
                   href={`/admin/docs/${openCitation.documentId}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="truncate font-mono text-xs text-blue-600 hover:underline dark:text-blue-400"
+                  className="truncate font-mono text-xs text-primary hover:underline"
                   title={`View document (chunk ${openCitation.chunkId})`}
                 >
                   {openCitation.chunkId}
                 </Link>
               ) : (
-                <p className="truncate font-mono text-xs text-gray-400 dark:text-gray-500" title={openCitation.chunkId}>
+                <p className="truncate font-mono text-xs text-muted" title={openCitation.chunkId}>
                   {openCitation.chunkId}
                 </p>
               )}

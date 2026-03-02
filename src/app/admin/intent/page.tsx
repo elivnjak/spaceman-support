@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { FieldMeta, IntentManifest, IntentManifestMeta } from "@/lib/intent/types";
+import { PageHeader } from "@/components/ui/PageHeader";
 
 type IntentManifestApiResponse = {
   manifest: IntentManifest;
@@ -138,8 +139,8 @@ export default function AdminIntentManifestPage() {
   if (!manifest || !metadata) {
     return (
       <div className="space-y-3">
-        <h1 className="text-2xl font-bold">Intent Manifest</h1>
-        <p className="rounded border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-200">
+        <h1 className="text-2xl font-bold text-ink">Intent Manifest</h1>
+        <p className="rounded border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {error ?? "Failed to load manifest."}
         </p>
       </div>
@@ -148,14 +149,11 @@ export default function AdminIntentManifestPage() {
 
   return (
     <div className="space-y-6">
-      <div className="space-y-2">
-        <h1 className="text-2xl font-bold">Intent Manifest</h1>
-        <p className="text-sm text-gray-600 dark:text-gray-300">
-          Tune organizational intent values used by the diagnostic chatbot.
-          Every field includes an explanation of what it controls and the impact
-          of changing it.
-        </p>
-      </div>
+      <PageHeader
+        title="Intent Manifest"
+        description="Tune organizational intent values used by the diagnostic chatbot. Every field includes an explanation of what it controls and the impact of changing it."
+        className="mb-0"
+      />
 
       {domainKeys.map((domainKey) => {
         const domainMeta = metadata[domainKey];
@@ -165,12 +163,12 @@ export default function AdminIntentManifestPage() {
           <details
             key={String(domainKey)}
             open
-            className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800"
+            className="rounded-lg border border-border bg-surface p-4"
           >
             <summary className="cursor-pointer text-lg font-semibold">
               {domainMeta._domain.label}
             </summary>
-            <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
+            <p className="mt-2 text-sm text-muted">
               {domainMeta._domain.description}
             </p>
 
@@ -190,8 +188,8 @@ export default function AdminIntentManifestPage() {
                     key={path}
                     className={`rounded border p-3 ${
                       isOverridden
-                        ? "border-blue-300 bg-blue-50/40 dark:border-blue-700 dark:bg-blue-950/20"
-                        : "border-gray-200 dark:border-gray-700"
+                        ? "border-primary/30 bg-primary-light"
+                        : "border-border"
                     }`}
                   >
                     <div className="mb-2 flex items-center justify-between gap-2">
@@ -203,19 +201,19 @@ export default function AdminIntentManifestPage() {
                         onClick={() =>
                           resetField(domainKey as keyof IntentManifest, fieldKey)
                         }
-                        className="rounded border border-gray-300 px-2 py-1 text-xs hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-700"
+                        className="rounded border border-border px-2 py-1 text-xs hover:bg-aqua/30"
                       >
                         Reset to default
                       </button>
                     </div>
 
-                    <p className="text-xs text-gray-600 dark:text-gray-300">
+                    <p className="text-xs text-muted">
                       {fieldMeta.description}
                     </p>
-                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    <p className="mt-1 text-xs text-muted">
                       <span className="font-medium">Impact:</span> {fieldMeta.impact}
                     </p>
-                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    <p className="mt-1 text-xs text-muted">
                       <span className="font-medium">Default:</span>{" "}
                       <code>{safeJsonStringify(fieldMeta.default)}</code>
                     </p>
@@ -251,10 +249,10 @@ export default function AdminIntentManifestPage() {
                                 Number(e.target.value)
                               )
                             }
-                            className="w-44 rounded border border-gray-300 px-2 py-1 text-sm dark:border-gray-600 dark:bg-gray-900"
+                            className="w-44 rounded border border-border px-2 py-1 text-sm"
                           />
                           {fieldMeta.range ? (
-                            <span className="text-xs text-gray-500 dark:text-gray-400">
+                            <span className="text-xs text-muted">
                               Range: {fieldMeta.range.min} - {fieldMeta.range.max}
                             </span>
                           ) : null}
@@ -271,7 +269,7 @@ export default function AdminIntentManifestPage() {
                               e.target.value
                             )
                           }
-                          className="w-full max-w-md rounded border border-gray-300 px-2 py-1 text-sm dark:border-gray-600 dark:bg-gray-900"
+                          className="w-full max-w-md rounded border border-border px-2 py-1 text-sm"
                         >
                           {fieldMeta.options.map((opt) => (
                             <option key={opt} value={opt}>
@@ -295,7 +293,7 @@ export default function AdminIntentManifestPage() {
                               // keep editing experience permissive; parse validation happens on save
                             }
                           }}
-                          className="w-full rounded border border-gray-300 px-2 py-1 font-mono text-xs dark:border-gray-600 dark:bg-gray-900"
+                          className="w-full rounded border border-border px-2 py-1 font-mono text-xs"
                         />
                       ) : (
                         <input
@@ -308,7 +306,7 @@ export default function AdminIntentManifestPage() {
                               e.target.value
                             )
                           }
-                          className="w-full max-w-2xl rounded border border-gray-300 px-2 py-1 text-sm dark:border-gray-600 dark:bg-gray-900"
+                          className="w-full max-w-2xl rounded border border-border px-2 py-1 text-sm"
                         />
                       )}
                     </div>
@@ -321,17 +319,17 @@ export default function AdminIntentManifestPage() {
       })}
 
       {error ? (
-        <p className="rounded border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800 dark:border-red-800 dark:bg-red-900/20 dark:text-red-200">
+        <p className="rounded border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800">
           {error}
         </p>
       ) : null}
       {saveMessage === "success" ? (
-        <p className="rounded border border-green-200 bg-green-50 px-4 py-2 text-sm text-green-700 dark:border-green-800 dark:bg-green-900/20 dark:text-green-200">
+        <p className="rounded border border-green-200 bg-green-50 px-4 py-2 text-sm text-green-700">
           Intent manifest saved.
         </p>
       ) : null}
       {saveMessage === "error" ? (
-        <p className="rounded border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-200">
+        <p className="rounded border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
           Failed to save intent manifest.
         </p>
       ) : null}
@@ -340,7 +338,7 @@ export default function AdminIntentManifestPage() {
         type="button"
         onClick={save}
         disabled={saving}
-        className="rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-50"
+        className="rounded bg-primary px-4 py-2 text-white hover:bg-primary-hover disabled:opacity-50"
       >
         {saving ? "Saving..." : "Save intent manifest"}
       </button>

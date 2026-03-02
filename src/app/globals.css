@@ -3,18 +3,87 @@
 @tailwind utilities;
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --color-primary: #1174B9;
+  --color-primary-hover: #0E5F99;
+  --color-primary-light: #E8F4FC;
+  --color-ink: #0B111E;
+  --color-surface: #FFFFFF;
+  --color-aqua: #D5F0F4;
+  --color-aqua-dark: #A8DFE8;
+  --color-accent: #FCBB26;
+  --color-accent-hover: #E5A71E;
+  --color-bg: #F8FAFB;
+  --color-border: #E2E8F0;
+  --color-muted: #64748B;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+.dark {
+  --color-primary: #3B9FE3;
+  --color-primary-hover: #5BB3EA;
+  --color-primary-light: #0F2A3D;
+  --color-ink: #F1F5F9;
+  --color-surface: #0F172A;
+  --color-aqua: #164E63;
+  --color-aqua-dark: #0E3A4A;
+  --color-accent: #FCBB26;
+  --color-accent-hover: #FDD462;
+  --color-bg: #0B111E;
+  --color-border: #1E293B;
+  --color-muted: #94A3B8;
+}
+
+*,
+*::before,
+*::after {
+  -webkit-tap-highlight-color: transparent;
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 body {
-  color: var(--foreground);
-  background: var(--background);
+  color: var(--color-ink);
+  background: var(--color-bg);
+}
+
+input,
+button,
+textarea,
+select {
+  font: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+@layer utilities {
+  .min-touch {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
+.chat-option-pill-blue {
+  background-color: #1174B9;
+  border: 1px solid #1174B9;
+  color: #fff;
+}
+.chat-option-pill-blue:hover {
+  background-color: #0E5F99;
+  border-color: #0E5F99;
+}
+.chat-option-pill-blue-selected {
+  background-color: #0E5F99;
+  border: 1px solid #0E5F99;
+  color: #fff;
+  box-shadow: 0 0 0 2px #fff, 0 0 0 4px #1174B9;
 }

@@ -1,6 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { Card } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
+import { Input, Textarea } from "@/components/ui/Input";
+import { Toggle } from "@/components/ui/Toggle";
 
 type MaintenanceConfigPayload = {
   enabled: boolean;
@@ -93,41 +98,27 @@ export default function AdminMaintenancePage() {
 
   return (
     <div className="space-y-8">
-      <h1 className="text-2xl font-bold">Maintenance mode</h1>
+      <PageHeader title="Maintenance mode" />
 
-      <section className="rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
-        <h2 className="mb-3 text-lg font-semibold">Status</h2>
-        <p className="mb-3 text-sm text-gray-500 dark:text-gray-400">
+      <Card>
+        <h2 className="mb-3 text-lg font-semibold text-ink">Status</h2>
+        <p className="mb-3 text-sm text-muted">
           When enabled, the chat is offline for public users. Logged-in admins can
           still use the chat.
         </p>
         <div className="flex items-center gap-3">
-          <button
-            type="button"
-            role="switch"
-            aria-checked={enabled}
-            onClick={() => setEnabled(!enabled)}
-            className={`relative inline-flex h-8 w-14 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
-              enabled ? "bg-green-600" : "bg-gray-200 dark:bg-gray-600"
-            }`}
-          >
-            <span
-              className={`pointer-events-none inline-block h-7 w-7 transform rounded-full bg-white shadow ring-0 transition ${
-                enabled ? "translate-x-6" : "translate-x-1"
-              }`}
-            />
-          </button>
+          <Toggle enabled={enabled} onChange={setEnabled} />
           <span
-            className={`font-medium ${enabled ? "text-green-700 dark:text-green-400" : "text-gray-600 dark:text-gray-400"}`}
+            className={`font-medium ${enabled ? "text-emerald-700" : "text-muted"}`}
           >
             {enabled ? "Maintenance on (chat offline for public)" : "Maintenance off"}
           </span>
         </div>
-      </section>
+      </Card>
 
-      <section className="rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
-        <h2 className="mb-2 text-lg font-semibold">Icon</h2>
-        <p className="mb-3 text-sm text-gray-500 dark:text-gray-400">
+      <Card>
+        <h2 className="mb-2 text-lg font-semibold text-ink">Icon</h2>
+        <p className="mb-3 text-sm text-muted">
           Optional image shown on the maintenance page (e.g. logo or wrench).
         </p>
         <div className="flex flex-wrap items-center gap-2">
@@ -137,19 +128,18 @@ export default function AdminMaintenancePage() {
             onChange={(e) => setIconFile(e.target.files?.[0] ?? null)}
             className="text-sm"
           />
-          <button
-            type="button"
+          <Button
+            size="sm"
             onClick={uploadIcon}
             disabled={uploading || !iconFile}
-            className="rounded bg-blue-600 px-3 py-1.5 text-sm text-white hover:bg-blue-700 disabled:opacity-50"
           >
             {uploading ? "Uploading..." : "Upload icon"}
-          </button>
+          </Button>
           {iconUrl && (
             <button
               type="button"
               onClick={deleteIcon}
-              className="rounded border border-red-300 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 dark:border-red-700 dark:hover:bg-red-900/20"
+              className="rounded border border-red-300 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50"
             >
               Remove icon
             </button>
@@ -165,64 +155,60 @@ export default function AdminMaintenancePage() {
             />
           </div>
         )}
-      </section>
+      </Card>
 
-      <section className="rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
-        <h2 className="mb-3 text-lg font-semibold">Content</h2>
-        <p className="mb-3 text-sm text-gray-500 dark:text-gray-400">
+      <Card>
+        <h2 className="mb-3 text-lg font-semibold text-ink">Content</h2>
+        <p className="mb-3 text-sm text-muted">
           Text and contact details shown on the maintenance page.
         </p>
         <div className="space-y-3">
           <div>
-            <label className="mb-1 block text-sm font-medium">Title</label>
-            <input
+            <label className="mb-1 block text-sm font-medium text-ink">Title</label>
+            <Input
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="w-full rounded border border-gray-300 px-3 py-2 dark:border-gray-600 dark:bg-gray-900"
               placeholder="Chat Unavailable"
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium">Description</label>
-            <textarea
+            <label className="mb-1 block text-sm font-medium text-ink">Description</label>
+            <Textarea
               rows={3}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              className="w-full rounded border border-gray-300 px-3 py-2 dark:border-gray-600 dark:bg-gray-900"
               placeholder="Our support chat is currently undergoing maintenance."
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium">Phone</label>
-            <input
+            <label className="mb-1 block text-sm font-medium text-ink">Phone</label>
+            <Input
               type="text"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
-              className="w-full rounded border border-gray-300 px-3 py-2 dark:border-gray-600 dark:bg-gray-900"
               placeholder="+1 234 567 8900"
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium">Email</label>
-            <input
+            <label className="mb-1 block text-sm font-medium text-ink">Email</label>
+            <Input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded border border-gray-300 px-3 py-2 dark:border-gray-600 dark:bg-gray-900"
               placeholder="support@example.com"
             />
           </div>
         </div>
-      </section>
+      </Card>
 
-      <section className="rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
-        <h2 className="mb-3 text-lg font-semibold">Preview</h2>
-        <p className="mb-3 text-sm text-gray-500 dark:text-gray-400">
+      <Card>
+        <h2 className="mb-3 text-lg font-semibold text-ink">Preview</h2>
+        <p className="mb-3 text-sm text-muted">
           How the maintenance page will look to public users.
         </p>
-        <div className="flex justify-center rounded border border-dashed border-gray-300 bg-gray-100 p-8 dark:border-gray-600 dark:bg-gray-950">
-          <div className="w-full max-w-xs rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+        <div className="flex justify-center rounded border border-dashed border-border bg-page p-8">
+          <div className="w-full max-w-xs rounded-2xl border border-border bg-surface p-6 shadow-card">
             <div className="flex flex-col items-center gap-4 text-center">
               {iconUrl ? (
                 /* eslint-disable-next-line @next/next/no-img-element */
@@ -232,9 +218,9 @@ export default function AdminMaintenancePage() {
                   className="h-12 w-auto object-contain"
                 />
               ) : (
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-700">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-page">
                   <svg
-                    className="h-5 w-5 text-gray-400 dark:text-gray-500"
+                    className="h-5 w-5 text-muted"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -255,27 +241,27 @@ export default function AdminMaintenancePage() {
                 </div>
               )}
               <div className="space-y-1">
-                <h3 className="text-base font-semibold text-gray-900 dark:text-white">
+                <h3 className="text-base font-semibold text-ink">
                   {title || "Chat Unavailable"}
                 </h3>
-                <p className="whitespace-pre-wrap text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                <p className="whitespace-pre-wrap text-xs leading-relaxed text-muted">
                   {description || "Our support chat is currently undergoing maintenance."}
                 </p>
               </div>
               {(phone || email) && (
                 <>
-                  <div className="w-full border-t border-gray-100 dark:border-gray-700" />
+                  <div className="w-full border-t border-border" />
                   <div className="w-full space-y-2">
-                    <p className="text-[10px] font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
+                    <p className="text-[10px] font-medium uppercase tracking-wide text-muted">
                       Need help? Contact us
                     </p>
                     {phone && (
-                      <div className="rounded-md border border-gray-100 px-3 py-2 text-xs text-gray-700 dark:border-gray-700 dark:text-gray-300">
+                      <div className="rounded-md border border-border px-3 py-2 text-xs text-ink">
                         {phone}
                       </div>
                     )}
                     {email && (
-                      <div className="rounded-md border border-gray-100 px-3 py-2 text-xs text-gray-700 dark:border-gray-700 dark:text-gray-300">
+                      <div className="rounded-md border border-border px-3 py-2 text-xs text-ink">
                         {email}
                       </div>
                     )}
@@ -285,27 +271,25 @@ export default function AdminMaintenancePage() {
             </div>
           </div>
         </div>
-      </section>
+      </Card>
 
       {saveMessage === "success" && (
-        <p className="rounded border border-green-200 bg-green-50 px-4 py-2 text-sm text-green-800 dark:border-green-800 dark:bg-green-900/20 dark:text-green-200">
+        <p className="rounded border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-700">
           Config saved.
         </p>
       )}
       {saveMessage === "error" && (
-        <p className="rounded border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800 dark:border-red-800 dark:bg-red-900/20 dark:text-red-200">
+        <p className="rounded border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-600">
           Failed to save. Please try again.
         </p>
       )}
 
-      <button
-        type="button"
+      <Button
         onClick={save}
         disabled={saving}
-        className="rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-50"
       >
         {saving ? "Saving..." : "Save maintenance config"}
-      </button>
+      </Button>
     </div>
   );
 }

@@ -2,6 +2,10 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { Input } from "@/components/ui/Input";
+import { Button } from "@/components/ui/Button";
+import { Badge } from "@/components/ui/Badge";
 
 type TicketStatus = "open" | "in_progress" | "waiting" | "closed";
 type SessionStatus = "active" | "resolved" | "escalated";
@@ -64,17 +68,11 @@ function ticketStatusLabel(status: string | null): string {
   return "Open";
 }
 
-function ticketStatusBadgeClass(status: string | null): string {
-  if (status === "in_progress") {
-    return "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-300";
-  }
-  if (status === "waiting") {
-    return "border-orange-200 bg-orange-50 text-orange-800 dark:border-orange-800 dark:bg-orange-900/30 dark:text-orange-300";
-  }
-  if (status === "closed") {
-    return "border-green-200 bg-green-50 text-green-800 dark:border-green-800 dark:bg-green-900/30 dark:text-green-300";
-  }
-  return "border-blue-200 bg-blue-50 text-blue-800 dark:border-blue-800 dark:bg-blue-900/30 dark:text-blue-300";
+function ticketStatusBadgeVariant(status: string | null): "warning" | "danger" | "success" | "info" {
+  if (status === "in_progress") return "warning";
+  if (status === "waiting") return "danger";
+  if (status === "closed") return "success";
+  return "info";
 }
 
 export default function AdminTicketsPage() {
@@ -194,15 +192,13 @@ export default function AdminTicketsPage() {
 
   return (
     <div>
-      <header className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Tickets</h1>
-        <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-          Browse diagnostic sessions as support tickets.
-        </p>
-      </header>
+      <PageHeader
+        title="Tickets"
+        description="Browse diagnostic sessions as support tickets."
+      />
 
       <section className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-        <input
+        <Input
           type="text"
           value={query}
           onChange={(e) => {
@@ -210,7 +206,6 @@ export default function AdminTicketsPage() {
             setPage(1);
           }}
           placeholder="Search customer, model, serial, phone..."
-          className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-900"
         />
         <select
           value={ticketStatus}
@@ -218,7 +213,7 @@ export default function AdminTicketsPage() {
             setTicketStatus(e.target.value as "all" | TicketStatus);
             setPage(1);
           }}
-          className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-900"
+          className="rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-ink min-h-[44px]"
         >
           {TICKET_STATUS_OPTIONS.map((option) => (
             <option key={option.value} value={option.value}>
@@ -232,7 +227,7 @@ export default function AdminTicketsPage() {
             setSessionStatus(e.target.value as "all" | SessionStatus);
             setPage(1);
           }}
-          className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-900"
+          className="rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-ink min-h-[44px]"
         >
           {SESSION_STATUS_OPTIONS.map((option) => (
             <option key={option.value} value={option.value}>
@@ -242,42 +237,42 @@ export default function AdminTicketsPage() {
         </select>
       </section>
 
-      <div className="mb-4 text-sm text-gray-600 dark:text-gray-300">
+      <div className="mb-4 text-sm text-muted">
         {loading ? "Loading..." : `${data.total} ticket${data.total === 1 ? "" : "s"}`}
       </div>
       {selectedCount > 0 && (
         <div className="mb-4 flex items-center gap-3">
-          <button
-            type="button"
+          <Button
+            variant="danger"
+            size="sm"
             onClick={handleBulkDelete}
             disabled={bulkDeleting}
-            className="rounded-md border border-red-300 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-60 dark:border-red-700 dark:text-red-300 dark:hover:bg-red-900/20"
           >
             {bulkDeleting ? "Deleting..." : `Delete selected (${selectedCount})`}
-          </button>
+          </Button>
           <button
             type="button"
             onClick={() => setSelectedSessionIds(new Set())}
             disabled={bulkDeleting}
-            className="text-sm text-gray-600 hover:underline disabled:opacity-60 dark:text-gray-300"
+            className="text-sm text-muted hover:underline disabled:opacity-60"
           >
             Clear selection
           </button>
         </div>
       )}
-      {deleteError && <p className="mb-4 text-sm text-red-600 dark:text-red-400">{deleteError}</p>}
+      {deleteError && <p className="mb-4 text-sm text-red-600">{deleteError}</p>}
 
-      <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
+      <div className="overflow-x-auto rounded-card border border-border bg-surface shadow-card">
         {loading ? (
-          <p className="p-6 text-sm text-gray-600 dark:text-gray-300">Loading tickets...</p>
+          <p className="p-6 text-sm text-muted">Loading tickets...</p>
         ) : error ? (
-          <p className="p-6 text-sm text-red-600 dark:text-red-400">{error}</p>
+          <p className="p-6 text-sm text-red-600">{error}</p>
         ) : data.items.length === 0 ? (
-          <p className="p-6 text-sm text-gray-600 dark:text-gray-300">No tickets found.</p>
+          <p className="p-6 text-sm text-muted">No tickets found.</p>
         ) : (
-          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-            <thead className="bg-gray-50 dark:bg-gray-900">
-              <tr className="text-left text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
+          <table className="min-w-full divide-y divide-border">
+            <thead className="bg-page">
+              <tr className="text-left text-xs uppercase tracking-wide text-muted">
                 <th className="px-4 py-3">
                   <input
                     type="checkbox"
@@ -296,7 +291,7 @@ export default function AdminTicketsPage() {
                 <th className="px-4 py-3">Last Activity</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+            <tbody className="divide-y divide-border">
               {data.items.map((row) => (
                 <tr key={row.id} className="text-sm">
                   <td className="px-4 py-3">
@@ -312,33 +307,29 @@ export default function AdminTicketsPage() {
                     <Link
                       href={`/admin/tickets/${row.id}`}
                       title={row.id}
-                      className="font-medium text-blue-600 hover:underline dark:text-blue-400"
+                      className="font-medium text-primary hover:underline"
                     >
                       {truncate(row.id, 18)}
                     </Link>
                   </td>
                   <td className="px-4 py-3">
-                    <div className="text-gray-900 dark:text-gray-100">{row.userName ?? "-"}</div>
-                    <div className="text-xs text-gray-500 dark:text-gray-400">{row.userPhone ?? "-"}</div>
+                    <div className="text-ink">{row.userName ?? "-"}</div>
+                    <div className="text-xs text-muted">{row.userPhone ?? "-"}</div>
                   </td>
                   <td className="px-4 py-3">
-                    <div className="text-gray-900 dark:text-gray-100">{row.machineModel ?? "-"}</div>
-                    <div className="text-xs text-gray-500 dark:text-gray-400">{row.serialNumber ?? "-"}</div>
+                    <div className="text-ink">{row.machineModel ?? "-"}</div>
+                    <div className="text-xs text-muted">{row.serialNumber ?? "-"}</div>
                   </td>
-                  <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{row.status ?? "-"}</td>
+                  <td className="px-4 py-3 text-muted">{row.status ?? "-"}</td>
                   <td className="px-4 py-3">
-                    <span
-                      className={`inline-flex rounded-full border px-2 py-1 text-xs font-medium ${ticketStatusBadgeClass(
-                        row.ticketStatus
-                      )}`}
-                    >
+                    <Badge variant={ticketStatusBadgeVariant(row.ticketStatus)}>
                       {ticketStatusLabel(row.ticketStatus)}
-                    </span>
+                    </Badge>
                   </td>
-                  <td className="px-4 py-3 text-gray-700 dark:text-gray-300">
+                  <td className="px-4 py-3 text-muted">
                     {formatDate(row.createdAt)}
                   </td>
-                  <td className="px-4 py-3 text-gray-700 dark:text-gray-300">
+                  <td className="px-4 py-3 text-muted">
                     {formatDate(row.updatedAt)}
                   </td>
                 </tr>
@@ -350,25 +341,25 @@ export default function AdminTicketsPage() {
 
       {!loading && data.totalPages > 1 && (
         <div className="mt-4 flex items-center justify-between">
-          <button
-            type="button"
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={() => setPage((prev) => Math.max(1, prev - 1))}
             disabled={!canGoPrev}
-            className="rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
           >
             Previous
-          </button>
-          <p className="text-sm text-gray-600 dark:text-gray-300">
+          </Button>
+          <p className="text-sm text-muted">
             Page {data.page} of {data.totalPages}
           </p>
-          <button
-            type="button"
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={() => setPage((prev) => prev + 1)}
             disabled={!canGoNext}
-            className="rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
           >
             Next
-          </button>
+          </Button>
         </div>
       )}
     </div>

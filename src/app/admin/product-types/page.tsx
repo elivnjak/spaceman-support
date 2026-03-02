@@ -1,6 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { Card } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { Toggle } from "@/components/ui/Toggle";
 
 type ProductType = {
   id: string;
@@ -108,41 +113,34 @@ export default function AdminProductTypesPage() {
 
   return (
     <div className="space-y-8">
-      <h1 className="text-2xl font-bold">Product types</h1>
+      <PageHeader title="Product types" />
 
-      <section className="rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
-        <h2 className="mb-4 text-lg font-semibold">Add product type</h2>
+      <Card>
+        <h2 className="mb-4 text-lg font-semibold text-ink">Add product type</h2>
         <div className="grid gap-3 sm:grid-cols-3">
-          <input
+          <Input
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="e.g. Yogurt"
-            className="rounded border border-gray-300 px-3 py-2 dark:border-gray-600 dark:bg-gray-900"
           />
-          <label className="flex items-center gap-2 rounded border border-gray-300 px-3 py-2 dark:border-gray-600">
-            <input
-              type="checkbox"
-              checked={isOther}
-              onChange={(e) => setIsOther(e.target.checked)}
-            />
-            <span className="text-sm">Is “Other” option</span>
-          </label>
-          <button
-            type="button"
+          <div className="flex items-center gap-2 rounded-lg border border-border px-3 py-2">
+            <Toggle enabled={isOther} onChange={setIsOther} />
+            <span className="text-sm text-ink">Is &quot;Other&quot; option</span>
+          </div>
+          <Button
             onClick={addProductType}
             disabled={submitting || !name.trim()}
-            className="rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-50"
           >
             Add product type
-          </button>
+          </Button>
         </div>
-      </section>
+      </Card>
 
-      <section className="rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
+      <Card>
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Current product types</h2>
-          <p className="text-sm text-gray-500 dark:text-gray-400">
+          <h2 className="text-lg font-semibold text-ink">Current product types</h2>
+          <p className="text-sm text-muted">
             {productTypes.length} total • Drag to reorder
           </p>
         </div>
@@ -156,25 +154,22 @@ export default function AdminProductTypesPage() {
               onDragLeave={handleDragLeave}
               onDragEnd={handleDragEnd}
               onDrop={(e) => handleDrop(e, index)}
-              className={`flex cursor-grab items-center justify-between rounded border px-3 py-2 active:cursor-grabbing dark:border-gray-700 ${
+              className={`flex cursor-grab items-center justify-between rounded-lg border px-3 py-2 active:cursor-grabbing ${
                 draggedIndex === index
-                  ? "border-blue-500 opacity-50"
+                  ? "border-primary opacity-50"
                   : dragOverIndex === index
-                    ? "border-blue-400 border-dashed bg-blue-50 dark:bg-blue-900/20"
-                    : "border-gray-200 dark:border-gray-700"
+                    ? "border-primary border-dashed bg-aqua/30"
+                    : "border-border"
               }`}
             >
               <div className="flex items-center gap-3">
-                <span
-                  className="text-gray-400 dark:text-gray-500"
-                  aria-hidden
-                >
+                <span className="text-muted" aria-hidden>
                   ⋮⋮
                 </span>
                 <div>
-                  <p className="text-sm font-medium">{productType.name}</p>
+                  <p className="text-sm font-medium text-ink">{productType.name}</p>
                   {productType.isOther ? (
-                    <p className="text-xs text-gray-500 dark:text-gray-400">Other option</p>
+                    <p className="text-xs text-muted">Other option</p>
                   ) : null}
                 </div>
               </div>
@@ -188,13 +183,13 @@ export default function AdminProductTypesPage() {
             </div>
           ))}
           {productTypes.length === 0 ? (
-            <p className="text-sm text-gray-500 dark:text-gray-400">No product types configured yet.</p>
+            <p className="text-sm text-muted">No product types configured yet.</p>
           ) : null}
         </div>
         {savingOrder ? (
-          <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">Saving order…</p>
+          <p className="mt-2 text-xs text-muted">Saving order…</p>
         ) : null}
-      </section>
+      </Card>
     </div>
   );
 }

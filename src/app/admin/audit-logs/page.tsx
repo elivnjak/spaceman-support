@@ -2,6 +2,9 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { Input } from "@/components/ui/Input";
+import { Button } from "@/components/ui/Button";
 
 type AuditSessionSummary = {
   sessionId: string;
@@ -151,55 +154,52 @@ export default function AdminAuditLogsPage() {
 
   return (
     <div>
-      <header className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Audit logs</h1>
-        <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-          Browse sessions with stored diagnostic audit data.
-        </p>
-      </header>
+      <PageHeader
+        title="Audit logs"
+        description="Browse sessions with stored diagnostic audit data."
+      />
 
       <div className="mb-4">
-        <input
+        <Input
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Filter by session ID, model, serial, status..."
-          className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-900"
         />
       </div>
       {selectedCount > 0 && (
         <div className="mb-4 flex items-center gap-3">
-          <button
-            type="button"
+          <Button
+            variant="danger"
+            size="sm"
             onClick={handleBulkDelete}
             disabled={bulkDeleting || Boolean(deletingSessionId)}
-            className="rounded-md border border-red-300 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-60 dark:border-red-700 dark:text-red-300 dark:hover:bg-red-900/20"
           >
             {bulkDeleting ? "Deleting..." : `Delete selected (${selectedCount})`}
-          </button>
+          </Button>
           <button
             type="button"
             onClick={() => setSelectedSessionIds(new Set())}
             disabled={bulkDeleting}
-            className="text-sm text-gray-600 hover:underline disabled:opacity-60 dark:text-gray-300"
+            className="text-sm text-muted hover:underline disabled:opacity-60"
           >
             Clear selection
           </button>
         </div>
       )}
-      {deleteError && <p className="mb-4 text-sm text-red-600 dark:text-red-400">{deleteError}</p>}
+      {deleteError && <p className="mb-4 text-sm text-red-600">{deleteError}</p>}
 
-      <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
+      <div className="overflow-x-auto rounded-card border border-border bg-surface shadow-card">
         {loading ? (
-          <p className="p-6 text-sm text-gray-600 dark:text-gray-300">Loading audit logs...</p>
+          <p className="p-6 text-sm text-muted">Loading audit logs...</p>
         ) : error ? (
-          <p className="p-6 text-sm text-red-600 dark:text-red-400">{error}</p>
+          <p className="p-6 text-sm text-red-600">{error}</p>
         ) : filtered.length === 0 ? (
-          <p className="p-6 text-sm text-gray-600 dark:text-gray-300">No audit logs found.</p>
+          <p className="p-6 text-sm text-muted">No audit logs found.</p>
         ) : (
-          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-            <thead className="bg-gray-50 dark:bg-gray-900">
-              <tr className="text-left text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
+          <table className="min-w-full divide-y divide-border">
+            <thead className="bg-page">
+              <tr className="text-left text-xs uppercase tracking-wide text-muted">
                 <th className="px-4 py-3">
                   <input
                     type="checkbox"
@@ -219,7 +219,7 @@ export default function AdminAuditLogsPage() {
                 <th className="px-4 py-3 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+            <tbody className="divide-y divide-border">
               {filtered.map((row) => (
                 <tr key={row.sessionId} className="text-sm">
                   <td className="px-4 py-3">
@@ -234,24 +234,24 @@ export default function AdminAuditLogsPage() {
                   <td className="px-4 py-3">
                     <Link
                       href={`/admin/audit-logs/${row.sessionId}`}
-                      className="font-medium text-blue-600 hover:underline dark:text-blue-400"
+                      className="font-medium text-primary hover:underline"
                       title={row.sessionId}
                     >
                       {truncate(row.sessionId, 18)}
                     </Link>
                   </td>
-                  <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{row.machineModel ?? "-"}</td>
-                  <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{row.status ?? "-"}</td>
-                  <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{row.phase ?? "-"}</td>
-                  <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{row.turnCount ?? "-"}</td>
-                  <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{row.logCount}</td>
-                  <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{formatDate(row.lastLogAt)}</td>
+                  <td className="px-4 py-3 text-muted">{row.machineModel ?? "-"}</td>
+                  <td className="px-4 py-3 text-muted">{row.status ?? "-"}</td>
+                  <td className="px-4 py-3 text-muted">{row.phase ?? "-"}</td>
+                  <td className="px-4 py-3 text-muted">{row.turnCount ?? "-"}</td>
+                  <td className="px-4 py-3 text-muted">{row.logCount}</td>
+                  <td className="px-4 py-3 text-muted">{formatDate(row.lastLogAt)}</td>
                   <td className="px-4 py-3 text-right">
                     <button
                       type="button"
                       onClick={() => handleDelete(row.sessionId)}
                       disabled={bulkDeleting || deletingSessionId === row.sessionId}
-                      className="text-sm font-medium text-red-600 hover:underline disabled:opacity-60 dark:text-red-400"
+                      className="text-sm font-medium text-red-600 hover:underline disabled:opacity-60"
                     >
                       {deletingSessionId === row.sessionId ? "Deleting..." : "Delete"}
                     </button>

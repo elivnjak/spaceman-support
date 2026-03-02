@@ -4,6 +4,8 @@ import Link from "next/link";
 import Image from "next/image";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+import { Card } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
 
 type AuditEntry = {
   id: string;
@@ -164,8 +166,8 @@ export default function AdminAuditDetailPage() {
     }
   }
 
-  if (loading) return <p className="text-sm text-gray-600 dark:text-gray-300">Loading audit details...</p>;
-  if (error || !data) return <p className="text-sm text-red-600 dark:text-red-400">{error ?? "Not found."}</p>;
+  if (loading) return <p className="text-sm text-muted">Loading audit details...</p>;
+  if (error || !data) return <p className="text-sm text-red-600">{error ?? "Not found."}</p>;
 
   const session = data.session;
   return (
@@ -173,57 +175,57 @@ export default function AdminAuditDetailPage() {
       <div className="mb-6 flex items-center justify-between gap-3">
         <Link
           href="/admin/audit-logs"
-          className="text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+          className="text-sm text-muted hover:text-ink"
         >
           ← Back to audit logs
         </Link>
-        <button
-          type="button"
+        <Button
+          variant="danger"
+          size="sm"
           onClick={handleDelete}
           disabled={deleting}
-          className="rounded-md border border-red-300 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-60 dark:border-red-700 dark:text-red-300 dark:hover:bg-red-900/20"
         >
           {deleting ? "Deleting..." : "Delete session"}
-        </button>
+        </Button>
       </div>
-      {deleteError && <p className="mb-4 text-sm text-red-600 dark:text-red-400">{deleteError}</p>}
+      {deleteError && <p className="mb-4 text-sm text-red-600">{deleteError}</p>}
 
-      <header className="mb-6 rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Session audit</h1>
-        <div className="mt-3 grid grid-cols-1 gap-2 text-sm text-gray-700 dark:text-gray-300 md:grid-cols-2">
-          <div><strong>Session ID:</strong> {session.id}</div>
-          <div><strong>Status:</strong> {session.status ?? "-"}</div>
-          <div><strong>Phase:</strong> {session.phase ?? "-"}</div>
-          <div><strong>Turn count:</strong> {session.turnCount ?? "-"}</div>
-          <div><strong>Machine model:</strong> {session.machineModel ?? "-"}</div>
-          <div><strong>Serial number:</strong> {session.serialNumber ?? "-"}</div>
-          <div><strong>Product type:</strong> {session.productType ?? "-"}</div>
-          <div><strong>Playbook ID:</strong> {session.playbookId ?? "-"}</div>
-          <div><strong>Created:</strong> {formatDate(session.createdAt)}</div>
-          <div><strong>Updated:</strong> {formatDate(session.updatedAt)}</div>
+      <Card className="mb-6">
+        <h1 className="text-2xl font-bold text-ink">Session audit</h1>
+        <div className="mt-3 grid grid-cols-1 gap-2 text-sm text-muted md:grid-cols-2">
+          <div><strong className="text-ink">Session ID:</strong> {session.id}</div>
+          <div><strong className="text-ink">Status:</strong> {session.status ?? "-"}</div>
+          <div><strong className="text-ink">Phase:</strong> {session.phase ?? "-"}</div>
+          <div><strong className="text-ink">Turn count:</strong> {session.turnCount ?? "-"}</div>
+          <div><strong className="text-ink">Machine model:</strong> {session.machineModel ?? "-"}</div>
+          <div><strong className="text-ink">Serial number:</strong> {session.serialNumber ?? "-"}</div>
+          <div><strong className="text-ink">Product type:</strong> {session.productType ?? "-"}</div>
+          <div><strong className="text-ink">Playbook ID:</strong> {session.playbookId ?? "-"}</div>
+          <div><strong className="text-ink">Created:</strong> {formatDate(session.createdAt)}</div>
+          <div><strong className="text-ink">Updated:</strong> {formatDate(session.updatedAt)}</div>
         </div>
-      </header>
+      </Card>
 
       <section className="space-y-4">
         {logs.length === 0 ? (
-          <p className="rounded-lg border border-gray-200 bg-white p-4 text-sm text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300">
-            No audit entries for this session.
-          </p>
+          <Card>
+            <p className="text-sm text-muted">No audit entries for this session.</p>
+          </Card>
         ) : (
           logs.map((entry) => (
             <details
               key={entry.id}
               open={entry.turnNumber === logs[logs.length - 1]?.turnNumber}
-              className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800"
+              className="rounded-card border border-border bg-surface p-4 shadow-card"
             >
-              <summary className="cursor-pointer font-medium text-gray-900 dark:text-white">
+              <summary className="cursor-pointer font-medium text-ink">
                 Turn {entry.turnNumber} • {formatDate(entry.createdAt)}
               </summary>
 
               <div className="mt-4 space-y-4 text-sm">
                 <div>
-                  <h3 className="font-semibold text-gray-900 dark:text-white">User input</h3>
-                  <p className="mt-1 whitespace-pre-wrap text-gray-700 dark:text-gray-300">
+                  <h3 className="font-semibold text-ink">User input</h3>
+                  <p className="mt-1 whitespace-pre-wrap text-muted">
                     {entry.payload.userInput?.message || "(empty)"}
                   </p>
                   {(entry.payload.userInput?.imagePaths ?? []).length > 0 && (() => {
@@ -236,7 +238,7 @@ export default function AdminAuditDetailPage() {
                             key={url}
                             type="button"
                             onClick={() => setLightbox({ images: imageUrls, index: idx })}
-                            className="block cursor-pointer rounded border border-gray-300 transition-opacity hover:opacity-90 dark:border-gray-600"
+                            className="block cursor-pointer rounded border border-border transition-opacity hover:opacity-90"
                           >
                             <Image
                               src={url}
@@ -253,52 +255,52 @@ export default function AdminAuditDetailPage() {
                   })()}
                 </div>
 
-                <div className="grid grid-cols-1 gap-2 text-gray-700 dark:text-gray-300 md:grid-cols-2">
-                  <div><strong>Phase path:</strong> {(entry.payload.phasePath ?? []).join(" -> ") || "-"}</div>
-                  <div><strong>Phase transition:</strong> {entry.payload.phaseTransition ?? "-"}</div>
-                  <div><strong>Duration:</strong> {entry.payload.durationMs ?? "-"} ms</div>
-                  <div><strong>Sanitization errors:</strong> {(entry.payload.sanitizationErrors ?? []).length}</div>
+                <div className="grid grid-cols-1 gap-2 text-muted md:grid-cols-2">
+                  <div><strong className="text-ink">Phase path:</strong> {(entry.payload.phasePath ?? []).join(" -> ") || "-"}</div>
+                  <div><strong className="text-ink">Phase transition:</strong> {entry.payload.phaseTransition ?? "-"}</div>
+                  <div><strong className="text-ink">Duration:</strong> {entry.payload.durationMs ?? "-"} ms</div>
+                  <div><strong className="text-ink">Sanitization errors:</strong> {(entry.payload.sanitizationErrors ?? []).length}</div>
                 </div>
 
-                <details className="rounded border border-gray-200 p-3 dark:border-gray-700">
-                  <summary className="cursor-pointer font-semibold text-gray-900 dark:text-white">
+                <details className="rounded border border-border p-3">
+                  <summary className="cursor-pointer font-semibold text-ink">
                     LLM calls ({entry.payload.llmCalls?.length ?? 0})
                   </summary>
-                  <pre className="mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-gray-700 dark:text-gray-300">
+                  <pre className="mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-muted">
                     {prettyJson(entry.payload.llmCalls ?? [])}
                   </pre>
                 </details>
 
-                <details className="rounded border border-gray-200 p-3 dark:border-gray-700">
-                  <summary className="cursor-pointer font-semibold text-gray-900 dark:text-white">RAG retrieval</summary>
-                  <pre className="mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-gray-700 dark:text-gray-300">
+                <details className="rounded border border-border p-3">
+                  <summary className="cursor-pointer font-semibold text-ink">RAG retrieval</summary>
+                  <pre className="mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-muted">
                     {prettyJson(entry.payload.ragRetrieval ?? [])}
                   </pre>
                 </details>
 
-                <details className="rounded border border-gray-200 p-3 dark:border-gray-700">
-                  <summary className="cursor-pointer font-semibold text-gray-900 dark:text-white">Planner output</summary>
-                  <pre className="mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-gray-700 dark:text-gray-300">
+                <details className="rounded border border-border p-3">
+                  <summary className="cursor-pointer font-semibold text-ink">Planner output</summary>
+                  <pre className="mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-muted">
                     {prettyJson(entry.payload.plannerOutput)}
                   </pre>
                 </details>
 
-                <details className="rounded border border-gray-200 p-3 dark:border-gray-700">
-                  <summary className="cursor-pointer font-semibold text-gray-900 dark:text-white">Sanitized output</summary>
-                  <pre className="mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-gray-700 dark:text-gray-300">
+                <details className="rounded border border-border p-3">
+                  <summary className="cursor-pointer font-semibold text-ink">Sanitized output</summary>
+                  <pre className="mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-muted">
                     {prettyJson(entry.payload.sanitizedOutput)}
                   </pre>
                 </details>
 
-                <details className="rounded border border-gray-200 p-3 dark:border-gray-700">
-                  <summary className="cursor-pointer font-semibold text-gray-900 dark:text-white">API response payload</summary>
-                  <pre className="mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-gray-700 dark:text-gray-300">
+                <details className="rounded border border-border p-3">
+                  <summary className="cursor-pointer font-semibold text-ink">API response payload</summary>
+                  <pre className="mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-muted">
                     {prettyJson(entry.payload.apiResponse)}
                   </pre>
                 </details>
 
                 {(entry.payload.errors ?? []).length > 0 && (
-                  <div className="rounded border border-red-300 bg-red-50 p-3 text-red-700 dark:border-red-700 dark:bg-red-900/30 dark:text-red-300">
+                  <div className="rounded border border-red-300 bg-red-50 p-3 text-red-700">
                     <strong>Errors:</strong>
                     <pre className="mt-2 overflow-x-auto whitespace-pre-wrap text-xs">
                       {prettyJson(entry.payload.errors)}
@@ -323,12 +325,12 @@ export default function AdminAuditDetailPage() {
             <button
               type="button"
               onClick={() => setLightbox(null)}
-              className="absolute -right-3 -top-3 z-10 rounded-full bg-white p-1.5 shadow-lg hover:bg-gray-100 dark:bg-gray-700 dark:hover:bg-gray-600"
+              className="absolute -right-3 -top-3 z-10 rounded-full bg-surface p-1.5 shadow-lg hover:bg-aqua/30"
               aria-label="Close"
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
-                className="h-5 w-5 text-gray-700 dark:text-gray-200"
+                className="h-5 w-5 text-ink"
                 viewBox="0 0 20 20"
                 fill="currentColor"
               >
@@ -349,12 +351,12 @@ export default function AdminAuditDetailPage() {
                     prev && prev.index > 0 ? { ...prev, index: prev.index - 1 } : prev
                   )
                 }
-                className="mr-3 shrink-0 rounded-full bg-white/90 p-2 shadow-lg transition-opacity hover:bg-white disabled:opacity-30 dark:bg-gray-700/90 dark:hover:bg-gray-600"
+                className="mr-3 shrink-0 rounded-full bg-surface/90 p-2 shadow-lg transition-opacity hover:bg-surface disabled:opacity-30"
                 aria-label="Previous image"
               >
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
-                  className="h-5 w-5 text-gray-800 dark:text-gray-200"
+                  className="h-5 w-5 text-ink"
                   viewBox="0 0 20 20"
                   fill="currentColor"
                 >
@@ -392,12 +394,12 @@ export default function AdminAuditDetailPage() {
                       : prev
                   )
                 }
-                className="ml-3 shrink-0 rounded-full bg-white/90 p-2 shadow-lg transition-opacity hover:bg-white disabled:opacity-30 dark:bg-gray-700/90 dark:hover:bg-gray-600"
+                className="ml-3 shrink-0 rounded-full bg-surface/90 p-2 shadow-lg transition-opacity hover:bg-surface disabled:opacity-30"
                 aria-label="Next image"
               >
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
-                  className="h-5 w-5 text-gray-800 dark:text-gray-200"
+                  className="h-5 w-5 text-ink"
                   viewBox="0 0 20 20"
                   fill="currentColor"
                 >

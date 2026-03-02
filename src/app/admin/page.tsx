@@ -13,6 +13,8 @@ import {
   clearanceConfig,
 } from "@/lib/db/schema";
 import { AdminLoginForm } from "./AdminLoginForm";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { Card } from "@/components/ui/Card";
 
 async function getCounts() {
   try {
@@ -87,7 +89,6 @@ export default async function AdminDashboardPage({ searchParams }: Props) {
     isAuthenticated = !!session && hasAdminUiAccess(session.user.role);
     counts = isAuthenticated ? await getCounts() : DEFAULT_COUNTS;
   } catch {
-    // Database unreachable (e.g. ECONNREFUSED): show login form only
     isAuthenticated = false;
     counts = DEFAULT_COUNTS;
   }
@@ -95,121 +96,46 @@ export default async function AdminDashboardPage({ searchParams }: Props) {
   const showLogin = !isAuthenticated || params.unauthorized === "1";
   const showForbidden = isAuthenticated && params.forbidden === "1";
 
+  const statCards = [
+    { label: "Reference images", value: counts.images, href: "/admin/images" },
+    { label: "Documents", value: `${counts.docs} (${counts.docsReady} ready)`, href: "/admin/docs" },
+    { label: "Labels", value: counts.labels, href: "/admin/labels" },
+    { label: "Playbooks", value: counts.playbooks, href: "/admin/playbooks" },
+    { label: "Action Catalog", value: counts.actions, href: "/admin/actions" },
+    { label: "Supported Models", value: counts.supportedModels, href: "/admin/models" },
+    { label: "Nameplate Config", value: counts.nameplateConfigured ? "Configured" : "Not configured", href: "/admin/nameplate" },
+    { label: "Clearance Config", value: counts.clearanceConfigured ? "Configured" : "Not configured", href: "/admin/clearance" },
+  ];
+
   return (
     <div>
-      <h1 className="mb-8 text-2xl font-bold">Dashboard</h1>
+      <PageHeader title="Dashboard" />
       {showForbidden && (
-        <p className="mb-4 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-200">
+        <div className="mb-4 rounded-lg border border-accent/30 bg-accent/10 px-4 py-3 text-sm text-ink">
           This page is restricted to admin users.
-        </p>
+        </div>
       )}
       {showLogin && (
         <AdminLoginForm next={params.next} />
       )}
       {isAuthenticated && (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="rounded-lg border border-gray-200 bg-white p-6 shadow dark:border-gray-700 dark:bg-gray-800">
-          <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400">
-            Reference images
-          </h2>
-          <p className="mt-2 text-3xl font-bold">{counts.images}</p>
-          <Link
-            href="/admin/images"
-            className="mt-2 inline-block text-sm text-blue-600 hover:underline"
-          >
-            Manage
-          </Link>
-        </div>
-        <div className="rounded-lg border border-gray-200 bg-white p-6 shadow dark:border-gray-700 dark:bg-gray-800">
-          <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400">
-            Documents
-          </h2>
-          <p className="mt-2 text-3xl font-bold">
-            {counts.docs} ({counts.docsReady} ready)
-          </p>
-          <Link
-            href="/admin/docs"
-            className="mt-2 inline-block text-sm text-blue-600 hover:underline"
-          >
-            Manage
-          </Link>
-        </div>
-        <div className="rounded-lg border border-gray-200 bg-white p-6 shadow dark:border-gray-700 dark:bg-gray-800">
-          <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400">
-            Labels
-          </h2>
-          <p className="mt-2 text-3xl font-bold">{counts.labels}</p>
-          <Link
-            href="/admin/labels"
-            className="mt-2 inline-block text-sm text-blue-600 hover:underline"
-          >
-            Manage
-          </Link>
-        </div>
-        <div className="rounded-lg border border-gray-200 bg-white p-6 shadow dark:border-gray-700 dark:bg-gray-800">
-          <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400">
-            Playbooks
-          </h2>
-          <p className="mt-2 text-3xl font-bold">{counts.playbooks}</p>
-          <Link
-            href="/admin/playbooks"
-            className="mt-2 inline-block text-sm text-blue-600 hover:underline"
-          >
-            Manage
-          </Link>
-        </div>
-        <div className="rounded-lg border border-gray-200 bg-white p-6 shadow dark:border-gray-700 dark:bg-gray-800">
-          <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400">
-            Action Catalog
-          </h2>
-          <p className="mt-2 text-3xl font-bold">{counts.actions}</p>
-          <Link
-            href="/admin/actions"
-            className="mt-2 inline-block text-sm text-blue-600 hover:underline"
-          >
-            Manage
-          </Link>
-        </div>
-        <div className="rounded-lg border border-gray-200 bg-white p-6 shadow dark:border-gray-700 dark:bg-gray-800">
-          <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400">
-            Supported Models
-          </h2>
-          <p className="mt-2 text-3xl font-bold">{counts.supportedModels}</p>
-          <Link
-            href="/admin/models"
-            className="mt-2 inline-block text-sm text-blue-600 hover:underline"
-          >
-            Manage
-          </Link>
-        </div>
-        <div className="rounded-lg border border-gray-200 bg-white p-6 shadow dark:border-gray-700 dark:bg-gray-800">
-          <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400">
-            Nameplate Config
-          </h2>
-          <p className="mt-2 text-lg font-bold">
-            {counts.nameplateConfigured ? "Configured" : "Not configured"}
-          </p>
-          <Link
-            href="/admin/nameplate"
-            className="mt-2 inline-block text-sm text-blue-600 hover:underline"
-          >
-            Manage
-          </Link>
-        </div>
-        <div className="rounded-lg border border-gray-200 bg-white p-6 shadow dark:border-gray-700 dark:bg-gray-800">
-          <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400">
-            Clearance Config
-          </h2>
-          <p className="mt-2 text-lg font-bold">
-            {counts.clearanceConfigured ? "Configured" : "Not configured"}
-          </p>
-          <Link
-            href="/admin/clearance"
-            className="mt-2 inline-block text-sm text-blue-600 hover:underline"
-          >
-            Manage
-          </Link>
-        </div>
+          {statCards.map((card) => (
+            <Card key={card.href} className="group transition-shadow hover:shadow-card-hover">
+              <h2 className="text-sm font-medium text-muted">
+                {card.label}
+              </h2>
+              <p className="mt-2 text-3xl font-bold text-ink">
+                {card.value}
+              </p>
+              <Link
+                href={card.href}
+                className="mt-2 inline-block text-sm font-medium text-primary hover:underline"
+              >
+                Manage
+              </Link>
+            </Card>
+          ))}
         </div>
       )}
     </div>

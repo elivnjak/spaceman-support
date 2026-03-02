@@ -1,6 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { Card } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { Toggle } from "@/components/ui/Toggle";
 
 type TelegramConfigPayload = {
   enabled: boolean;
@@ -231,70 +236,54 @@ export default function AdminTelegramPage() {
 
   return (
     <div className="space-y-8">
-      <h1 className="text-2xl font-bold">Telegram escalation notifications</h1>
+      <PageHeader title="Telegram escalation notifications" />
 
-      <section className="rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
-        <h2 className="mb-3 text-lg font-semibold">Status</h2>
-        <p className="mb-3 text-sm text-gray-500 dark:text-gray-400">
+      <Card>
+        <h2 className="mb-3 text-lg font-semibold text-ink">Status</h2>
+        <p className="mb-3 text-sm text-muted">
           Enable or disable Telegram alerts when a chat session is escalated.
         </p>
         <div className="flex items-center gap-3">
-          <button
-            type="button"
-            role="switch"
-            aria-checked={enabled}
-            onClick={() => setEnabled(!enabled)}
-            className={`relative inline-flex h-8 w-14 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
-              enabled ? "bg-green-600" : "bg-gray-200 dark:bg-gray-600"
-            }`}
-          >
-            <span
-              className={`pointer-events-none inline-block h-7 w-7 transform rounded-full bg-white shadow ring-0 transition ${
-                enabled ? "translate-x-6" : "translate-x-1"
-              }`}
-            />
-          </button>
+          <Toggle enabled={enabled} onChange={setEnabled} />
           <span
-            className={`font-medium ${enabled ? "text-green-700 dark:text-green-400" : "text-gray-600 dark:text-gray-400"}`}
+            className={`font-medium ${enabled ? "text-emerald-700" : "text-muted"}`}
           >
             {enabled ? "Telegram alerts enabled" : "Telegram alerts disabled"}
           </span>
         </div>
-      </section>
+      </Card>
 
-      <section className="rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
-        <h2 className="mb-3 text-lg font-semibold">Bot token</h2>
-        <p className="mb-3 text-sm text-gray-500 dark:text-gray-400">
+      <Card>
+        <h2 className="mb-3 text-lg font-semibold text-ink">Bot token</h2>
+        <p className="mb-3 text-sm text-muted">
           Create a bot with @BotFather and paste the token here.
         </p>
         <div>
-          <label className="mb-1 block text-sm font-medium">Bot token</label>
-          <input
+          <label className="mb-1 block text-sm font-medium text-ink">Bot token</label>
+          <Input
             type="password"
             value={botToken}
             onChange={(e) => setBotToken(e.target.value)}
-            className="w-full rounded border border-gray-300 px-3 py-2 dark:border-gray-600 dark:bg-gray-900"
             placeholder="123456789:AA..."
           />
         </div>
-      </section>
+      </Card>
 
-      <section className="rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
-        <h2 className="mb-3 text-lg font-semibold">Get your Chat ID</h2>
-        <p className="mb-3 text-sm text-gray-500 dark:text-gray-400">
+      <Card>
+        <h2 className="mb-3 text-lg font-semibold text-ink">Get your Chat ID</h2>
+        <p className="mb-3 text-sm text-muted">
           Save your bot token above, then open your bot in Telegram and send <strong>/start</strong>.
           Click the button below to discover chats that have messaged your bot, then add the ones that should receive escalation alerts.
         </p>
-        <button
-          type="button"
+        <Button
+          variant="secondary"
           onClick={fetchChatIds}
           disabled={fetching || !botToken.trim()}
-          className="rounded bg-gray-700 px-4 py-2 text-white hover:bg-gray-600 disabled:opacity-50 dark:bg-gray-600 dark:hover:bg-gray-500"
         >
           {fetching ? "Fetching..." : "Fetch Chat IDs"}
-        </button>
+        </Button>
         {fetchError && (
-          <p className="mt-2 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-200">
+          <p className="mt-2 rounded border border-accent/30 bg-accent/10 px-3 py-2 text-sm text-ink">
             {fetchError}
           </p>
         )}
@@ -303,14 +292,14 @@ export default function AdminTelegramPage() {
             {fetchedChats.map((chat) => (
               <li
                 key={chat.id}
-                className="flex flex-wrap items-center justify-between gap-2 rounded border border-gray-200 bg-gray-50 py-2 pl-3 pr-2 dark:border-gray-600 dark:bg-gray-800"
+                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-page py-2 pl-3 pr-2"
               >
                 <span className="text-sm">
-                  <code className="rounded bg-gray-200 px-1.5 py-0.5 dark:bg-gray-700">{chat.id}</code>
-                  <span className="ml-2 text-gray-600 dark:text-gray-400">{chatLabel(chat)}</span>
+                  <code className="rounded bg-surface px-1.5 py-0.5 text-ink">{chat.id}</code>
+                  <span className="ml-2 text-muted">{chatLabel(chat)}</span>
                 </span>
-                <button
-                  type="button"
+                <Button
+                  size="sm"
                   onClick={() => addChatId(chat.id)}
                   disabled={
                     chatIds.includes(chat.id) ||
@@ -318,40 +307,39 @@ export default function AdminTelegramPage() {
                     removingChatId !== null ||
                     saving
                   }
-                  className="rounded bg-blue-600 px-2 py-1 text-xs text-white hover:bg-blue-700 disabled:opacity-50"
                 >
                   {chatIds.includes(chat.id)
                     ? "Added"
                     : addingChatId === chat.id
                       ? "Adding..."
                       : "Add"}
-                </button>
+                </Button>
               </li>
             ))}
           </ul>
         )}
-      </section>
+      </Card>
 
-      <section className="rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
-        <h2 className="mb-3 text-lg font-semibold">Recipients (Chat IDs)</h2>
-        <p className="mb-3 text-sm text-gray-500 dark:text-gray-400">
+      <Card>
+        <h2 className="mb-3 text-lg font-semibold text-ink">Recipients (Chat IDs)</h2>
+        <p className="mb-3 text-sm text-muted">
           Escalation alerts will be sent to every chat listed here (e.g. your phone and a colleague&apos;s). Add and Remove both save instantly.
         </p>
         {chatIds.length === 0 ? (
-          <p className="text-sm text-gray-500 dark:text-gray-400">No recipients yet. Use &quot;Fetch Chat IDs&quot; above and add at least one.</p>
+          <p className="text-sm text-muted">No recipients yet. Use &quot;Fetch Chat IDs&quot; above and add at least one.</p>
         ) : (
           <ul className="space-y-2">
             {chatIds.map((id) => (
               <li
                 key={id}
-                className="flex items-center justify-between gap-2 rounded border border-gray-200 bg-gray-50 py-2 pl-3 pr-2 dark:border-gray-600 dark:bg-gray-800"
+                className="flex items-center justify-between gap-2 rounded-lg border border-border bg-page py-2 pl-3 pr-2"
               >
-                <code className="text-sm">{id}</code>
+                <code className="text-sm text-ink">{id}</code>
                 <button
                   type="button"
                   onClick={() => removeChatId(id)}
                   disabled={removingChatId === id || addingChatId !== null || saving}
-                  className="rounded border border-red-300 px-2 py-1 text-xs text-red-600 hover:bg-red-50 dark:border-red-700 dark:hover:bg-red-900/20"
+                  className="rounded border border-red-300 px-2 py-1 text-xs text-red-600 hover:bg-red-50 disabled:opacity-50"
                 >
                   {removingChatId === id ? "Removing..." : "Remove"}
                 </button>
@@ -359,52 +347,49 @@ export default function AdminTelegramPage() {
             ))}
           </ul>
         )}
-      </section>
+      </Card>
 
-      <section className="rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
-        <h2 className="mb-3 text-lg font-semibold">Debug</h2>
-        <p className="mb-3 text-sm text-gray-500 dark:text-gray-400">
+      <Card>
+        <h2 className="mb-3 text-lg font-semibold text-ink">Debug</h2>
+        <p className="mb-3 text-sm text-muted">
           Send a live test message to every configured chat ID to verify notifications are working.
         </p>
-        <button
-          type="button"
+        <Button
+          variant="secondary"
           onClick={sendTestNotification}
           disabled={testing || saving}
-          className="rounded bg-gray-800 px-4 py-2 text-white hover:bg-gray-700 disabled:opacity-50 dark:bg-gray-600 dark:hover:bg-gray-500"
         >
           {testing ? "Sending test..." : "Send test notification"}
-        </button>
+        </Button>
         {testMessage === "success" && testDetail && (
-          <p className="mt-3 rounded border border-green-200 bg-green-50 px-4 py-2 text-sm text-green-800 dark:border-green-800 dark:bg-green-900/20 dark:text-green-200">
+          <p className="mt-3 rounded border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-700">
             {testDetail}
           </p>
         )}
         {testMessage === "error" && testDetail && (
-          <p className="mt-3 rounded border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800 dark:border-red-800 dark:bg-red-900/20 dark:text-red-200">
+          <p className="mt-3 rounded border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-600">
             {testDetail}
           </p>
         )}
-      </section>
+      </Card>
 
       {saveMessage === "success" && (
-        <p className="rounded border border-green-200 bg-green-50 px-4 py-2 text-sm text-green-800 dark:border-green-800 dark:bg-green-900/20 dark:text-green-200">
+        <p className="rounded border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-700">
           {saveDetail ?? "Telegram config saved."}
         </p>
       )}
       {saveMessage === "error" && (
-        <p className="rounded border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800 dark:border-red-800 dark:bg-red-900/20 dark:text-red-200">
+        <p className="rounded border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-600">
           {saveDetail ?? "Failed to save. Please try again."}
         </p>
       )}
 
-      <button
-        type="button"
+      <Button
         onClick={save}
         disabled={saving}
-        className="rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-50"
       >
         {saving ? "Saving..." : "Save Telegram config"}
-      </button>
+      </Button>
     </div>
   );
 }

@@ -3,6 +3,10 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { Card } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
+import { Badge } from "@/components/ui/Badge";
+import { Textarea } from "@/components/ui/Input";
 
 type TicketStatus = "open" | "in_progress" | "waiting" | "closed";
 
@@ -129,17 +133,11 @@ function formatDate(value: string | null | undefined): string {
     : d.toLocaleString(undefined, { hour12: true });
 }
 
-function ticketStatusBadgeClass(status: string | null): string {
-  if (status === "in_progress") {
-    return "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-300";
-  }
-  if (status === "waiting") {
-    return "border-orange-200 bg-orange-50 text-orange-800 dark:border-orange-800 dark:bg-orange-900/30 dark:text-orange-300";
-  }
-  if (status === "closed") {
-    return "border-green-200 bg-green-50 text-green-800 dark:border-green-800 dark:bg-green-900/30 dark:text-green-300";
-  }
-  return "border-blue-200 bg-blue-50 text-blue-800 dark:border-blue-800 dark:bg-blue-900/30 dark:text-blue-300";
+function ticketStatusBadgeVariant(status: string | null): "warning" | "danger" | "success" | "info" {
+  if (status === "in_progress") return "warning";
+  if (status === "waiting") return "danger";
+  if (status === "closed") return "success";
+  return "info";
 }
 
 function ticketStatusLabel(status: string | null): string {
@@ -404,10 +402,10 @@ export default function AdminTicketDetailPage() {
   }
 
   if (loading) {
-    return <p className="text-sm text-gray-600 dark:text-gray-300">Loading ticket details...</p>;
+    return <p className="text-sm text-muted">Loading ticket details...</p>;
   }
   if (error || !data) {
-    return <p className="text-sm text-red-600 dark:text-red-400">{error ?? "Ticket not found."}</p>;
+    return <p className="text-sm text-red-600">{error ?? "Ticket not found."}</p>;
   }
 
   const activeTicketStatus = TICKET_STATUS_OPTIONS.some(
@@ -421,34 +419,30 @@ export default function AdminTicketDetailPage() {
       <div className="flex items-center justify-between gap-3">
         <Link
           href="/admin/tickets"
-          className="text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+          className="text-sm text-muted hover:text-ink"
         >
           ← Back to tickets
         </Link>
-        <span
-          className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-medium ${ticketStatusBadgeClass(
-            data.session.ticketStatus
-          )}`}
-        >
+        <Badge variant={ticketStatusBadgeVariant(data.session.ticketStatus)}>
           {ticketStatusLabel(data.session.ticketStatus)}
-        </span>
+        </Badge>
       </div>
 
-      <header className="rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+      <Card>
+        <h1 className="text-2xl font-bold text-ink">
           Ticket {data.session.id}
         </h1>
-        <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+        <p className="mt-2 text-sm text-muted">
           Manage session details, transcript, and internal notes.
         </p>
-      </header>
+      </Card>
 
       <section className="grid grid-cols-1 gap-6 xl:grid-cols-[340px_1fr]">
-        <aside className="space-y-4 rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
+        <Card padding="sm" className="space-y-4">
           <div>
             <label
               htmlFor="ticket-status"
-              className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400"
+              className="mb-1 block text-xs font-semibold uppercase tracking-wide text-muted"
             >
               Ticket status
             </label>
@@ -457,7 +451,7 @@ export default function AdminTicketDetailPage() {
               value={activeTicketStatus}
               onChange={(e) => handleTicketStatusChange(e.target.value as TicketStatus)}
               disabled={statusSaving}
-              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-900"
+              className="w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-ink min-h-[44px]"
             >
               {TICKET_STATUS_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -466,41 +460,41 @@ export default function AdminTicketDetailPage() {
               ))}
             </select>
             {statusError && (
-              <p className="mt-2 text-xs text-red-600 dark:text-red-400">{statusError}</p>
+              <p className="mt-2 text-xs text-red-600">{statusError}</p>
             )}
           </div>
 
-          <div className="space-y-2 text-sm text-gray-700 dark:text-gray-300">
-            <p><strong>Customer:</strong> {data.session.userName ?? "-"}</p>
-            <p><strong>Phone:</strong> {data.session.userPhone ?? "-"}</p>
-            <p><strong>Model:</strong> {data.session.machineModel ?? "-"}</p>
-            <p><strong>Serial:</strong> {data.session.serialNumber ?? "-"}</p>
-            <p><strong>Product type:</strong> {data.session.productType ?? "-"}</p>
-            <p><strong>Year:</strong> {data.session.manufacturingYear ?? "-"}</p>
-            <p><strong>Session status:</strong> {data.session.status ?? "-"}</p>
-            <p><strong>Phase:</strong> {data.session.phase ?? "-"}</p>
-            <p><strong>Turn count:</strong> {data.session.turnCount ?? "-"}</p>
-            <p><strong>Playbook:</strong> {data.session.playbookId ?? "-"}</p>
-            <p><strong>Resolution outcome:</strong> {data.session.resolutionOutcome ?? "-"}</p>
-            <p><strong>Escalation reason:</strong> {data.session.escalationReason ?? "-"}</p>
-            <p><strong>Created:</strong> {formatDate(data.session.createdAt)}</p>
-            <p><strong>Updated:</strong> {formatDate(data.session.updatedAt)}</p>
+          <div className="space-y-2 text-sm text-muted">
+            <p><strong className="text-ink">Customer:</strong> {data.session.userName ?? "-"}</p>
+            <p><strong className="text-ink">Phone:</strong> {data.session.userPhone ?? "-"}</p>
+            <p><strong className="text-ink">Model:</strong> {data.session.machineModel ?? "-"}</p>
+            <p><strong className="text-ink">Serial:</strong> {data.session.serialNumber ?? "-"}</p>
+            <p><strong className="text-ink">Product type:</strong> {data.session.productType ?? "-"}</p>
+            <p><strong className="text-ink">Year:</strong> {data.session.manufacturingYear ?? "-"}</p>
+            <p><strong className="text-ink">Session status:</strong> {data.session.status ?? "-"}</p>
+            <p><strong className="text-ink">Phase:</strong> {data.session.phase ?? "-"}</p>
+            <p><strong className="text-ink">Turn count:</strong> {data.session.turnCount ?? "-"}</p>
+            <p><strong className="text-ink">Playbook:</strong> {data.session.playbookId ?? "-"}</p>
+            <p><strong className="text-ink">Resolution outcome:</strong> {data.session.resolutionOutcome ?? "-"}</p>
+            <p><strong className="text-ink">Escalation reason:</strong> {data.session.escalationReason ?? "-"}</p>
+            <p><strong className="text-ink">Created:</strong> {formatDate(data.session.createdAt)}</p>
+            <p><strong className="text-ink">Updated:</strong> {formatDate(data.session.updatedAt)}</p>
           </div>
 
           <div>
-            <h2 className="mb-2 text-sm font-semibold text-gray-900 dark:text-white">
+            <h2 className="mb-2 text-sm font-semibold text-ink">
               Evidence summary
             </h2>
             {evidenceEntries.length === 0 ? (
-              <p className="text-sm text-gray-600 dark:text-gray-400">No evidence captured.</p>
+              <p className="text-sm text-muted">No evidence captured.</p>
             ) : (
               <ul className="space-y-2 text-sm">
                 {evidenceEntries.map(([key, value]) => {
                   const display = toEvidenceDisplay(value);
                   return (
-                    <li key={key} className="rounded border border-gray-200 p-2 dark:border-gray-700">
-                      <p className="font-medium text-gray-900 dark:text-gray-100">{key}</p>
-                      <div className="mt-1 space-y-1 text-xs text-gray-600 dark:text-gray-300">
+                    <li key={key} className="rounded border border-border p-2">
+                      <p className="font-medium text-ink">{key}</p>
+                      <div className="mt-1 space-y-1 text-xs text-muted">
                         <p className="break-words">
                           <span className="font-medium">Value:</span> {display.value}
                         </p>
@@ -541,11 +535,11 @@ export default function AdminTicketDetailPage() {
           </div>
 
           <div>
-            <h2 className="mb-2 text-sm font-semibold text-gray-900 dark:text-white">
+            <h2 className="mb-2 text-sm font-semibold text-ink">
               Hypotheses summary
             </h2>
             {hypotheses.length === 0 ? (
-              <p className="text-sm text-gray-600 dark:text-gray-400">No hypotheses captured.</p>
+              <p className="text-sm text-muted">No hypotheses captured.</p>
             ) : (
               <ul className="space-y-2 text-sm">
                 {hypotheses.map((item, index) => {
@@ -558,13 +552,13 @@ export default function AdminTicketDetailPage() {
                       ? `${Math.round(row.confidence * 100)}%`
                       : "-";
                   return (
-                    <li key={`${causeId}-${index}`} className="rounded border border-gray-200 p-2 dark:border-gray-700">
-                      <p className="font-medium text-gray-900 dark:text-gray-100">{causeId}</p>
-                      <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">
+                    <li key={`${causeId}-${index}`} className="rounded border border-border p-2">
+                      <p className="font-medium text-ink">{causeId}</p>
+                      <p className="mt-1 text-xs text-muted">
                         Status: {status} • Confidence: {confidence}
                       </p>
                       {"reasoning" in row && (
-                        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                        <p className="mt-1 text-xs text-muted">
                           {toStringValue(row.reasoning)}
                         </p>
                       )}
@@ -574,15 +568,15 @@ export default function AdminTicketDetailPage() {
               </ul>
             )}
           </div>
-        </aside>
+        </Card>
 
         <div className="space-y-6">
-          <section className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
-            <h2 className="mb-4 text-lg font-semibold text-gray-900 dark:text-white">
+          <Card padding="sm">
+            <h2 className="mb-4 text-lg font-semibold text-ink">
               Chat history
             </h2>
             {parsedMessages.length === 0 ? (
-              <p className="text-sm text-gray-600 dark:text-gray-300">No chat messages found.</p>
+              <p className="text-sm text-muted">No chat messages found.</p>
             ) : (
               <div className="max-h-[60vh] space-y-3 overflow-y-auto pr-1">
                 {parsedMessages.map((message, index) => (
@@ -593,8 +587,8 @@ export default function AdminTicketDetailPage() {
                     <div
                       className={`max-w-[85%] rounded-2xl px-4 py-2 text-sm ${
                         message.role === "user"
-                          ? "bg-blue-600 text-white"
-                          : "bg-gray-100 text-gray-900 dark:bg-gray-700 dark:text-gray-100"
+                          ? "bg-primary text-white"
+                          : "bg-page text-ink"
                       }`}
                     >
                       <p className="whitespace-pre-wrap">{message.content || "(empty)"}</p>
@@ -628,8 +622,8 @@ export default function AdminTicketDetailPage() {
                       )}
 
                       {message.resolution?.diagnosis && (
-                        <div className="mt-3 space-y-2 border-t border-green-200 pt-2 text-xs dark:border-green-800">
-                          <p className="font-semibold text-green-700 dark:text-green-300">
+                        <div className="mt-3 space-y-2 border-t border-emerald-200 pt-2 text-xs">
+                          <p className="font-semibold text-emerald-700">
                             Diagnosis: {message.resolution.diagnosis}
                           </p>
                           {message.resolution.steps.length > 0 && (
@@ -644,7 +638,7 @@ export default function AdminTicketDetailPage() {
                       )}
 
                       {message.escalationReason && (
-                        <div className="mt-3 border-t border-amber-200 pt-2 text-xs text-amber-800 dark:border-amber-700 dark:text-amber-300">
+                        <div className="mt-3 border-t border-amber-200 pt-2 text-xs text-amber-800">
                           Connecting to support: {message.escalationReason}
                         </div>
                       )}
@@ -653,33 +647,27 @@ export default function AdminTicketDetailPage() {
                 ))}
               </div>
             )}
-          </section>
+          </Card>
 
-          <section className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
-            <h2 className="mb-4 text-lg font-semibold text-gray-900 dark:text-white">
+          <Card padding="sm">
+            <h2 className="mb-4 text-lg font-semibold text-ink">
               Internal notes
             </h2>
 
             <form onSubmit={handleAddNote} className="mb-4 space-y-2">
-              <textarea
+              <Textarea
                 value={noteInput}
                 onChange={(e) => setNoteInput(e.target.value)}
                 placeholder="Add internal note..."
-                rows={3}
-                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-900"
               />
-              <button
-                type="submit"
-                disabled={noteSaving}
-                className="rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60"
-              >
+              <Button type="submit" size="sm" disabled={noteSaving}>
                 {noteSaving ? "Adding..." : "Add note"}
-              </button>
-              {noteError && <p className="text-sm text-red-600 dark:text-red-400">{noteError}</p>}
+              </Button>
+              {noteError && <p className="text-sm text-red-600">{noteError}</p>}
             </form>
 
             {data.notes.length === 0 ? (
-              <p className="text-sm text-gray-600 dark:text-gray-300">No notes yet.</p>
+              <p className="text-sm text-muted">No notes yet.</p>
             ) : (
               <div className="space-y-3">
                 {data.notes.map((note) => {
@@ -688,9 +676,9 @@ export default function AdminTicketDetailPage() {
                   return (
                     <div
                       key={note.id}
-                      className="rounded-md border border-gray-200 p-3 dark:border-gray-700"
+                      className="rounded-md border border-border p-3"
                     >
-                      <div className="mb-2 flex items-center justify-between gap-2 text-xs text-gray-500 dark:text-gray-400">
+                      <div className="mb-2 flex items-center justify-between gap-2 text-xs text-muted">
                         <span>
                           {note.authorEmail ?? "Unknown user"} • {formatDate(note.createdAt)}
                         </span>
@@ -699,13 +687,13 @@ export default function AdminTicketDetailPage() {
                             type="button"
                             onClick={() => handleDeleteNote(note.id)}
                             disabled={deleting}
-                            className="font-medium text-red-600 hover:underline disabled:opacity-60 dark:text-red-400"
+                            className="font-medium text-red-600 hover:underline disabled:opacity-60"
                           >
                             {deleting ? "Deleting..." : "Delete"}
                           </button>
                         )}
                       </div>
-                      <p className="whitespace-pre-wrap text-sm text-gray-800 dark:text-gray-200">
+                      <p className="whitespace-pre-wrap text-sm text-ink">
                         {note.content}
                       </p>
                     </div>
@@ -713,7 +701,7 @@ export default function AdminTicketDetailPage() {
                 })}
               </div>
             )}
-          </section>
+          </Card>
         </div>
       </section>
     </div>

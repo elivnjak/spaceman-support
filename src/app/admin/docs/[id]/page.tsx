@@ -60,10 +60,10 @@ function getDocTypeLabel(type: DocType): string {
 function DocTypeBadge({ type }: { type: DocType }) {
   const base = "rounded px-2 py-0.5 text-xs font-medium";
   const styles: Record<DocType, string> = {
-    pdf: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
-    txt: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
-    md: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
-    pasted: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400",
+    pdf: "bg-red-100 text-red-800",
+    txt: "bg-green-100 text-green-800",
+    md: "bg-blue-100 text-blue-800",
+    pasted: "bg-purple-100 text-purple-800",
   };
   return (
     <span className={`${base} ${styles[type]}`}>{getDocTypeLabel(type)}</span>
@@ -235,45 +235,45 @@ export default function AdminDocDetailPage() {
       <div className="mb-6 flex items-center gap-4">
         <Link
           href="/admin/docs"
-          className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
+          className="text-muted hover:text-ink"
         >
           ← Back to documents
         </Link>
       </div>
 
-      <header className="mb-8 rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
+      <header className="mb-8 rounded-lg border border-border bg-surface p-6">
         <div className="mb-4 flex flex-wrap items-center gap-3">
           <h1 className="text-2xl font-bold">{doc.title}</h1>
           <DocTypeBadge type={docType} />
           <span
             className={`rounded px-2 py-0.5 text-sm font-medium ${
               doc.status === "READY"
-                ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
+                ? "bg-emerald-50 text-emerald-700"
                 : doc.status === "ERROR"
-                  ? "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
+                  ? "bg-red-50 text-red-700"
                   : doc.status === "INGESTING"
-                    ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30"
-                    : "bg-gray-100 dark:bg-gray-700"
+                    ? "bg-amber-50 text-amber-700"
+                    : "bg-page"
             }`}
           >
             {doc.status}
           </span>
           {doc.machineModel && (
-            <span className="text-sm text-gray-500 dark:text-gray-400">
+            <span className="text-sm text-muted">
               Machine: {doc.machineModel}
             </span>
           )}
           {doc.labelIds && doc.labelIds.length > 0 && (
-            <span className="text-sm text-gray-500 dark:text-gray-400">
+            <span className="text-sm text-muted">
               Labels: {doc.labelIds.join(", ")}
             </span>
           )}
-          <span className="text-sm text-gray-500 dark:text-gray-400">
+          <span className="text-sm text-muted">
             Created {formatDate(doc.createdAt)}
           </span>
         </div>
         {doc.errorMessage && (
-          <p className="mb-4 text-sm text-red-600 dark:text-red-400">
+          <p className="mb-4 text-sm text-red-600">
             {doc.errorMessage}
           </p>
         )}
@@ -282,14 +282,14 @@ export default function AdminDocDetailPage() {
             type="button"
             onClick={ingest}
             disabled={ingesting || doc.status === "INGESTING"}
-            className="rounded border border-gray-300 px-3 py-1.5 text-sm dark:border-gray-600 disabled:opacity-50"
+            className="rounded border border-border px-3 py-1.5 text-sm disabled:opacity-50"
           >
             {ingesting ? "Ingesting…" : "Ingest / Re-ingest"}
           </button>
           <button
             type="button"
             onClick={editing ? cancelEdit : startEdit}
-            className="rounded border border-gray-300 px-3 py-1.5 text-sm dark:border-gray-600"
+            className="rounded border border-border px-3 py-1.5 text-sm"
           >
             {editing ? "Cancel" : "Edit"}
           </button>
@@ -297,7 +297,7 @@ export default function AdminDocDetailPage() {
             type="button"
             onClick={deleteDoc}
             disabled={deleting}
-            className="rounded border border-red-300 px-3 py-1.5 text-sm text-red-700 hover:bg-red-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-900/20 disabled:opacity-50"
+            className="rounded border border-red-300 px-3 py-1.5 text-sm text-red-700 hover:bg-red-50 disabled:opacity-50"
           >
             {deleting ? "Deleting…" : "Delete"}
           </button>
@@ -305,29 +305,29 @@ export default function AdminDocDetailPage() {
       </header>
 
       {editing && (
-        <div className="mb-8 rounded-lg border border-gray-200 bg-gray-50 p-6 dark:border-gray-700 dark:bg-gray-900">
+        <div className="mb-8 rounded-lg border border-border bg-page p-6">
           <h2 className="mb-4 font-medium">Edit document</h2>
           <div className="grid max-w-2xl gap-3">
             <input
               type="text"
               placeholder="Title"
-              className="rounded border border-gray-300 px-3 py-2 dark:border-gray-600 dark:bg-gray-800"
+              className="rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-ink"
               value={editTitle}
               onChange={(e) => setEditTitle(e.target.value)}
             />
             <input
               type="text"
               placeholder="Machine model (optional)"
-              className="rounded border border-gray-300 px-3 py-2 dark:border-gray-600 dark:bg-gray-800"
+              className="rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-ink"
               value={editMachineModel}
               onChange={(e) => setEditMachineModel(e.target.value)}
             />
-            <div className="rounded border border-gray-200 bg-white p-3 dark:border-gray-600 dark:bg-gray-800/50">
-              <p className="mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+            <div className="rounded border border-border bg-surface p-3">
+              <p className="mb-2 text-sm font-medium text-ink">
                 Labels for retrieval scope
               </p>
               {labels.length === 0 ? (
-                <p className="text-sm text-amber-600 dark:text-amber-400">
+                <p className="text-sm text-amber-600">
                   No labels yet. Add labels in Admin → Labels first.
                 </p>
               ) : (
@@ -344,9 +344,9 @@ export default function AdminDocDetailPage() {
                               : prev.filter((id) => id !== l.id)
                           )
                         }
-                        className="rounded border-gray-300 dark:border-gray-600"
+                        className="rounded border-border"
                       />
-                      <span className="text-sm text-gray-700 dark:text-gray-300">
+                      <span className="text-sm text-ink">
                         {l.displayName} ({l.id})
                       </span>
                     </label>
@@ -358,7 +358,7 @@ export default function AdminDocDetailPage() {
               <input
                 type="text"
                 placeholder="Optional CSS selector (e.g. .articleDetail, #main-content, article)"
-                className="rounded border border-gray-300 px-3 py-2 dark:border-gray-600 dark:bg-gray-800"
+                className="rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-ink"
                 value={editCssSelector}
                 onChange={(e) => setEditCssSelector(e.target.value)}
               />
@@ -366,7 +366,7 @@ export default function AdminDocDetailPage() {
             {doc.filePath === "_pasted" && (
               <textarea
                 placeholder="Paste document content"
-                className="rounded border border-gray-300 px-3 py-2 dark:border-gray-600 dark:bg-gray-800"
+                className="rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-ink"
                 rows={10}
                 value={editPastedContent}
                 onChange={(e) => setEditPastedContent(e.target.value)}
@@ -377,14 +377,14 @@ export default function AdminDocDetailPage() {
                 type="button"
                 onClick={saveEdit}
                 disabled={saving}
-                className="rounded bg-blue-600 px-3 py-1.5 text-sm text-white hover:bg-blue-700 disabled:opacity-50"
+                className="rounded bg-primary px-3 py-1.5 text-sm text-white hover:bg-primary-hover disabled:opacity-50"
               >
                 {saving ? "Saving…" : "Save"}
               </button>
               <button
                 type="button"
                 onClick={cancelEdit}
-                className="rounded border border-gray-300 px-3 py-1.5 text-sm dark:border-gray-600"
+                className="rounded border border-border px-3 py-1.5 text-sm"
               >
                 Cancel
               </button>
@@ -394,16 +394,16 @@ export default function AdminDocDetailPage() {
       )}
 
       {doc.rawTextPreview && (
-        <section className="mb-8 rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
+        <section className="mb-8 rounded-lg border border-border bg-surface p-6">
           <h2 className="mb-3 font-medium">Raw text preview (first ~1000 chars)</h2>
-          <p className="mb-2 text-sm text-gray-500 dark:text-gray-400">
+          <p className="mb-2 text-sm text-muted">
             Initial extraction before chunking. Use this to verify the source was read correctly.
           </p>
-          <pre className="max-h-80 overflow-auto rounded bg-gray-50 p-4 text-sm whitespace-pre-wrap break-words dark:bg-gray-900">
+          <pre className="max-h-80 overflow-auto rounded bg-page p-4 text-sm whitespace-pre-wrap break-words">
             {doc.rawTextPreview}
           </pre>
           {doc.rawTextPreview.length < 100 && (
-            <p className="mt-2 text-sm text-amber-600 dark:text-amber-400">
+            <p className="mt-2 text-sm text-amber-600">
               This PDF may be scanned or image-only. Try uploading a text version or pasting the
               content manually.
             </p>
@@ -411,15 +411,15 @@ export default function AdminDocDetailPage() {
         </section>
       )}
 
-      <section className="rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
+      <section className="rounded-lg border border-border bg-surface p-6">
         <h2 className="mb-3 font-medium">Ingested chunks (RAG content)</h2>
-        <p className="mb-4 text-sm text-gray-500 dark:text-gray-400">
+        <p className="mb-4 text-sm text-muted">
           {chunks.length} chunk(s) in the vector store. Search to filter by content.
         </p>
         <input
           type="text"
           placeholder="Search chunks…"
-          className="mb-4 w-full max-w-md rounded border border-gray-300 px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-800"
+          className="mb-4 w-full max-w-md rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-ink"
           value={chunkSearch}
           onChange={(e) => setChunkSearch(e.target.value)}
         />
@@ -427,14 +427,14 @@ export default function AdminDocDetailPage() {
           {chunks.map((c) => (
             <li
               key={c.id}
-              className="rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-900"
+              className="rounded-lg border border-border bg-page p-4"
             >
               <div className="mb-2 flex items-center gap-2">
-                <span className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                <span className="text-sm font-medium text-muted">
                   Chunk #{c.chunkIndex}
                 </span>
                 {c.metadata && typeof c.metadata === "object" && Object.keys(c.metadata as object).length > 0 ? (
-                  <span className="text-xs text-gray-400 dark:text-gray-500">
+                  <span className="text-xs text-muted">
                     {JSON.stringify(c.metadata)}
                   </span>
                 ) : null}
@@ -446,7 +446,7 @@ export default function AdminDocDetailPage() {
           ))}
         </ul>
         {chunks.length === 0 && (
-          <p className="py-8 text-center text-gray-500 dark:text-gray-400">
+          <p className="py-8 text-center text-muted">
             No chunks yet. Run Ingest to chunk and embed this document.
           </p>
         )}
