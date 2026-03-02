@@ -194,6 +194,7 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
   const [currentPhase, setCurrentPhase] = useState("collecting_issue");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const [expandedCitations, setExpandedCitations] = useState<Set<string>>(new Set());
   const [openCitation, setOpenCitation] = useState<CitationItem | null>(null);
   const [lightbox, setLightbox] = useState<{ images: string[]; index: number } | null>(null);
@@ -426,13 +427,22 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
     setActivePhotoRequestId(null);
   };
 
+  const scrollToBottomIfNeeded = () => {
+    const el = messagesContainerRef.current;
+    if (!el) return;
+    const isOverflowing = el.scrollHeight > el.clientHeight;
+    if (isOverflowing) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  };
+
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    scrollToBottomIfNeeded();
   }, [messages]);
 
   useEffect(() => {
     if (!chatStarted) return;
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    scrollToBottomIfNeeded();
   }, [chatStarted, initialPhase]);
 
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
@@ -963,7 +973,7 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
           </div>
         ) : (
           <>
-            <div className="flex-1 space-y-4 overflow-y-auto">
+            <div ref={messagesContainerRef} className="flex-1 space-y-4 overflow-y-auto">
               {initialPhase === "typing" && (
                 <div className="flex justify-start">
                   <div className="rounded-[1.25rem] bg-aqua px-4 py-3 shadow-card">
