@@ -899,6 +899,11 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
 
         {!chatStarted ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-6">
+            <img
+              src="/kuhlberg-logo.webp"
+              alt="Kühlberg"
+              className="h-12 w-auto"
+            />
             <p className="text-center text-muted">
               Welcome to Kuhlberg support chat. Please enter your details to get started.
             </p>
