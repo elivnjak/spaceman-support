@@ -448,10 +448,16 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
 
   useEffect(() => {
     if (!chatStarted) return;
-    window.scrollTo(0, 0);
-    if (messagesContainerRef.current) {
-      messagesContainerRef.current.scrollTop = 0;
-    }
+    const resetScroll = () => {
+      window.scrollTo(0, 0);
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
+      if (messagesContainerRef.current) {
+        messagesContainerRef.current.scrollTop = 0;
+      }
+    };
+    resetScroll();
+    requestAnimationFrame(resetScroll);
   }, [chatStarted, initialPhase]);
 
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
