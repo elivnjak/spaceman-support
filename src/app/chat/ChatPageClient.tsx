@@ -861,7 +861,7 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
     !hasPendingStructuredRequest;
 
   return (
-    <main className="flex h-dvh flex-col overflow-hidden bg-page">
+    <main className="flex h-dvh flex-col bg-page">
       {TURNSTILE_SITE_KEY && (
         <Script
           src="https://challenges.cloudflare.com/turnstile/v0/api.js"
