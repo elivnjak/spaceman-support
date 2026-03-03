@@ -993,7 +993,7 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
               className="shrink-0 rounded-lg px-3 py-1.5 text-sm font-medium text-white transition-colors hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
               style={{ backgroundColor: '#0F73B9' }}
             >
-              New conversation
+              End conversation
             </button>
           )}
         </div>
