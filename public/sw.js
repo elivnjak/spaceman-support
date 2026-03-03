@@ -1,12 +1,18 @@
-const CACHE_NAME = "rag-support-v3";
-const PRECACHE_URLS = ["/", "/offline"];
+const CACHE_NAME = "rag-support-v4";
+const PRECACHE_URLS = ["/"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches
-      .open(CACHE_NAME)
-      .then((cache) => cache.addAll(PRECACHE_URLS))
-      .then(() => self.skipWaiting())
+    caches.open(CACHE_NAME).then(async (cache) => {
+      await Promise.all(
+        PRECACHE_URLS.map((url) =>
+          cache.add(url).catch((error) => {
+            console.warn(`[sw] Failed to precache ${url}`, error);
+          })
+        )
+      );
+      await self.skipWaiting();
+    })
   );
 });
 
