@@ -13,6 +13,7 @@ import {
   nameplateGuideImages,
   clearanceConfig,
   clearanceGuideImages,
+  diagnosisModeConfig,
 } from "@/lib/db/schema";
 import { asc, eq, inArray } from "drizzle-orm";
 import { openaiTextEmbedder } from "@/lib/embeddings/openai-text";
@@ -744,12 +745,19 @@ export async function POST(request: Request) {
         send(controller, event, safeData);
       };
       try {
-        const [diagnosticConfig, triageConfig, intentManifest] =
+        const [diagnosticConfig, triageConfig, intentManifest, diagnosisModeRow] =
           await Promise.all([
             getDiagnosticConfig(),
             getTriageConfig(),
             getIntentManifest(),
+            db
+              .select()
+              .from(diagnosisModeConfig)
+              .limit(1)
+              .then((rows) => rows[0] ?? null),
           ]);
+        const diagnosisModeEnabled = isAuthenticated ? true : (diagnosisModeRow?.enabled ?? true);
+        const shouldBypassDiagnosis = !diagnosisModeEnabled;
         const generalEscalationMessageHtml = intentManifest.communication.escalationTone;
         const generalEscalationMessage = toPlainEscalationText(
           generalEscalationMessageHtml,
@@ -989,7 +997,7 @@ export async function POST(request: Request) {
           }
 
           if (hasSubstantiveIssue) {
-            if (!intentManifest.safety.requireNameplate) {
+            if (!intentManifest.safety.requireNameplate && diagnosisModeEnabled) {
               const availableProductTypes = await getProductTypeOptions();
               const productTypeOptions = availableProductTypes.map(
                 (item) => item.name
@@ -1414,6 +1422,56 @@ export async function POST(request: Request) {
                   phase: "escalated",
                   requests: [],
                   escalation_reason: `Machine is more than ${intentManifest.safety.machineAgeThresholdYears} years old based on serial number.`,
+                })
+              );
+              closeController(controller);
+              return;
+            }
+
+            if (shouldBypassDiagnosis) {
+              const { instructionText, guideImages: clearanceGuideImages } = await getClearancePrompt();
+              const responseMessage = `Thanks. ${instructionText}`;
+              const assistantTurn: ChatMessage & {
+                requests?: PlannerOutput["requests"];
+                guideImages?: string[];
+              } = {
+                role: "assistant",
+                content: responseMessage,
+                timestamp: new Date().toISOString(),
+                requests: [
+                  {
+                    type: "photo",
+                    id: "clearance_photos",
+                    prompt: "Please upload machine clearance photos from different angles.",
+                    expectedInput: { type: "photo" },
+                  },
+                ],
+                guideImages: clearanceGuideImages.length > 0 ? clearanceGuideImages : undefined,
+              };
+              messages.push(assistantTurn);
+
+              await db
+                .update(diagnosticSessions)
+                .set({
+                  machineModel: canonical,
+                  serialNumber: extractedSerial,
+                  manufacturingYear,
+                  messages,
+                  phase: "clearance_check",
+                  status: "active",
+                  updatedAt: new Date(),
+                })
+                .where(eq(diagnosticSessions.id, sessionId));
+
+              sendEvent(
+                controller,
+                "message",
+                JSON.stringify({
+                  sessionId,
+                  message: responseMessage,
+                  phase: "clearance_check",
+                  requests: assistantTurn.requests,
+                  guideImages: clearanceGuideImages.length > 0 ? clearanceGuideImages : undefined,
                 })
               );
               closeController(controller);
@@ -1882,6 +1940,58 @@ export async function POST(request: Request) {
             availableProductTypes.map((item) => [item.name.trim().toLowerCase(), item.name])
           );
           const matchedOption = normalizedOptions.get(normalizedMessage);
+          if (shouldBypassDiagnosis) {
+            const provisionalProductType =
+              matchedOption ??
+              (!isPlaceholderUserMessage(message) &&
+              !isTrivialMessage(message) &&
+              !isIdontKnowMessage(message)
+                ? message.trim()
+                : null);
+            const { instructionText, guideImages } = await getClearancePrompt();
+            const clearanceResponseMessage = `Thanks. ${instructionText}`;
+            const assistantTurn: ChatMessage & {
+              requests?: PlannerOutput["requests"];
+              guideImages?: string[];
+            } = {
+              role: "assistant",
+              content: clearanceResponseMessage,
+              timestamp: new Date().toISOString(),
+              requests: [
+                {
+                  type: "photo",
+                  id: "clearance_photos",
+                  prompt: "Please upload machine clearance photos from different angles.",
+                  expectedInput: { type: "photo" },
+                },
+              ],
+              guideImages: guideImages.length > 0 ? guideImages : undefined,
+            };
+            messages.push(assistantTurn);
+            await db
+              .update(diagnosticSessions)
+              .set({
+                productType: provisionalProductType ?? session.productType ?? null,
+                messages,
+                phase: "clearance_check",
+                status: "active",
+                updatedAt: new Date(),
+              })
+              .where(eq(diagnosticSessions.id, sessionId));
+            sendEvent(
+              controller,
+              "message",
+              JSON.stringify({
+                sessionId,
+                message: clearanceResponseMessage,
+                phase: "clearance_check",
+                requests: assistantTurn.requests,
+                guideImages: assistantTurn.guideImages,
+              })
+            );
+            closeController(controller);
+            return;
+          }
 
           if (!message.trim() || isPlaceholderUserMessage(message) || isTrivialMessage(message)) {
             const assistantTurn: ChatMessage & { requests?: PlannerOutput["requests"] } = {
@@ -2236,6 +2346,62 @@ export async function POST(request: Request) {
         }
 
         const isTriageFlow = session.phase === "triaging";
+        if (isTriageFlow && shouldBypassDiagnosis) {
+          const escalationReason =
+            "Diagnosis mode is disabled for public users; escalating after intake collection.";
+          messages.push({
+            role: "assistant",
+            content: generalEscalationMessage,
+            content_html: generalEscalationMessageHtml,
+            timestamp: new Date().toISOString(),
+          });
+          const evidence = (session.evidence as Record<string, unknown>) ?? {};
+          const hypotheses = (session.hypotheses as unknown[]) ?? [];
+          const escalationHandoff = buildEscalationHandoff({
+            sessionId,
+            userName: session.userName ?? null,
+            userPhone: session.userPhone ?? null,
+            machineModel: session.machineModel ?? null,
+            serialNumber: session.serialNumber ?? null,
+            productType: session.productType ?? null,
+            manufacturingYear: session.manufacturingYear ?? null,
+            clearanceImagePaths: session.clearanceImagePaths ?? [],
+            escalationReason,
+            playbookTitle: "Pre-diagnosis",
+            labelId: "diagnosis_mode_disabled",
+            turnCount: session.turnCount ?? 0,
+            evidence: evidence as Parameters<typeof buildEscalationHandoff>[0]["evidence"],
+            hypotheses: hypotheses as Parameters<typeof buildEscalationHandoff>[0]["hypotheses"],
+            messages,
+          });
+          await db
+            .update(diagnosticSessions)
+            .set({
+              messages,
+              phase: "escalated",
+              status: "escalated",
+              escalationReason,
+              escalationHandoff,
+              updatedAt: new Date(),
+            })
+            .where(eq(diagnosticSessions.id, sessionId));
+          sendEvent(
+            controller,
+            "message",
+            JSON.stringify({
+              sessionId,
+              message: generalEscalationMessage,
+              message_html: generalEscalationMessageHtml,
+              phase: "escalated",
+              requests: [],
+              escalation_reason: escalationReason,
+            })
+          );
+          sendEscalationWebhook(escalationHandoff).catch(() => {});
+          sendEscalationTelegram(escalationHandoff).catch(() => {});
+          closeController(controller);
+          return;
+        }
         if (isTriageFlow) {
           sendEvent("stage", JSON.stringify({ message: STAGE_MESSAGES.selecting_playbook }));
           if (imageBuffersForLlm.length > 0) {

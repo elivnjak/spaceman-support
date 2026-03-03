@@ -192,6 +192,12 @@ export const maintenanceConfig = pgTable("maintenance_config", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });
 
+export const diagnosisModeConfig = pgTable("diagnosis_mode_config", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  enabled: boolean("enabled").notNull().default(true),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+});
+
 export const telegramConfig = pgTable("telegram_config", {
   id: uuid("id").primaryKey().defaultRandom(),
   enabled: boolean("enabled").notNull().default(false),
@@ -327,6 +333,8 @@ export type ClearanceGuideImage = typeof clearanceGuideImages.$inferSelect;
 export type NewClearanceGuideImage = typeof clearanceGuideImages.$inferInsert;
 export type MaintenanceConfig = typeof maintenanceConfig.$inferSelect;
 export type NewMaintenanceConfig = typeof maintenanceConfig.$inferInsert;
+export type DiagnosisModeConfig = typeof diagnosisModeConfig.$inferSelect;
+export type NewDiagnosisModeConfig = typeof diagnosisModeConfig.$inferInsert;
 export type TelegramConfig = typeof telegramConfig.$inferSelect;
 export type NewTelegramConfig = typeof telegramConfig.$inferInsert;
 export type IntentManifestRow = typeof intentManifest.$inferSelect;
