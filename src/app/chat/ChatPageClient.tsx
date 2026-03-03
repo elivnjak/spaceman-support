@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import Link from "next/link";
 import Script from "next/script";
 
@@ -120,7 +120,7 @@ export type ChatPageClientProps = {
 };
 
 const INITIAL_ASSISTANT_MESSAGE =
-  "Hi! What issue are you experiencing with your machine? You can also attach a photo if that helps.";
+  "Hi!!!! What issue are you experiencing with your machine? You can also attach a photo if that helps.";
 const PUBLIC_TECHNICAL_DIFFICULTIES_MESSAGE =
   "We're experiencing technical difficulties right now. I'm connecting you with a technician to continue helping you.";
 
@@ -214,10 +214,76 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
   const skipDisplayMessageRef = useRef<string>("I don't know");
   const sendInFlightRef = useRef(false);
   const pendingSubmitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const startScrollResetTimersRef = useRef<Array<ReturnType<typeof setTimeout>>>([]);
+  const startScrollViewportCleanupRef = useRef<(() => void) | null>(null);
   const lastSubmissionRef = useRef<{ key: string; atMs: number } | null>(null);
   const SNIPPET_LENGTH = 280;
 
   messagesRef.current = messages;
+
+  const clearStartScrollResetTimers = useCallback(() => {
+    for (const timer of startScrollResetTimersRef.current) {
+      clearTimeout(timer);
+    }
+    startScrollResetTimersRef.current = [];
+    if (startScrollViewportCleanupRef.current) {
+      startScrollViewportCleanupRef.current();
+      startScrollViewportCleanupRef.current = null;
+    }
+  }, []);
+
+  const resetPageScrollToTop = useCallback(() => {
+    const scrollingEl = document.scrollingElement;
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    if (scrollingEl) {
+      scrollingEl.scrollTop = 0;
+    }
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+    if (window.visualViewport?.offsetTop) {
+      window.scrollBy(0, -Math.ceil(window.visualViewport.offsetTop));
+    }
+    if (messagesContainerRef.current) {
+      messagesContainerRef.current.scrollTop = 0;
+    }
+  }, []);
+
+  const forceTopScrollAfterStart = useCallback(() => {
+    const activeEl = document.activeElement;
+    if (activeEl instanceof HTMLElement) {
+      activeEl.blur();
+    }
+
+    clearStartScrollResetTimers();
+    resetPageScrollToTop();
+    requestAnimationFrame(resetPageScrollToTop);
+
+    for (const delayMs of [40, 100, 180, 280, 420, 620, 900, 1200]) {
+      const timer = setTimeout(resetPageScrollToTop, delayMs);
+      startScrollResetTimersRef.current.push(timer);
+    }
+
+    const viewport = window.visualViewport;
+    if (!viewport) return;
+
+    const onViewportShift = () => {
+      resetPageScrollToTop();
+    };
+    viewport.addEventListener("resize", onViewportShift);
+    viewport.addEventListener("scroll", onViewportShift);
+    startScrollViewportCleanupRef.current = () => {
+      viewport.removeEventListener("resize", onViewportShift);
+      viewport.removeEventListener("scroll", onViewportShift);
+    };
+
+    const removeViewportListenersTimer = setTimeout(() => {
+      if (startScrollViewportCleanupRef.current) {
+        startScrollViewportCleanupRef.current();
+        startScrollViewportCleanupRef.current = null;
+      }
+    }, 1500);
+    startScrollResetTimersRef.current.push(removeViewportListenersTimer);
+  }, [clearStartScrollResetTimers, resetPageScrollToTop]);
 
   // Restore session from sessionStorage on mount (e.g. after page reload).
   useEffect(() => {
@@ -298,8 +364,9 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
         clearTimeout(pendingSubmitTimerRef.current);
         pendingSubmitTimerRef.current = null;
       }
+      clearStartScrollResetTimers();
     };
-  }, []);
+  }, [clearStartScrollResetTimers]);
 
   const updateRequestInput = (id: string, value: string) => {
     setRequestInputs((prev) => ({ ...prev, [id]: value }));
@@ -400,6 +467,7 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
   };
 
   const startNewConversation = () => {
+    clearStartScrollResetTimers();
     if (pendingSubmitTimerRef.current) {
       clearTimeout(pendingSubmitTimerRef.current);
       pendingSubmitTimerRef.current = null;
@@ -448,17 +516,8 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
 
   useEffect(() => {
     if (!chatStarted) return;
-    const resetScroll = () => {
-      window.scrollTo(0, 0);
-      document.documentElement.scrollTop = 0;
-      document.body.scrollTop = 0;
-      if (messagesContainerRef.current) {
-        messagesContainerRef.current.scrollTop = 0;
-      }
-    };
-    resetScroll();
-    requestAnimationFrame(resetScroll);
-  }, [chatStarted, initialPhase]);
+    forceTopScrollAfterStart();
+  }, [chatStarted, forceTopScrollAfterStart]);
 
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
 
@@ -930,6 +989,7 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
                 setPhoneError(err);
                 if (err) return;
                 if (!userName.trim() || !userPhone.trim()) return;
+                forceTopScrollAfterStart();
                 setChatStarted(true);
                 setInitialPhase("typing");
               }}
