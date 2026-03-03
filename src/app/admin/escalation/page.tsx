@@ -4,14 +4,23 @@ import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { Textarea } from "@/components/ui/Input";
+import { RichTextEditor } from "@/components/ui/RichTextEditor";
 
 type EscalationConfigPayload = {
   generalEscalationMessage: string;
   frustrationEscalationIntentMessage: string;
   noModelNumberEscalationMessage: string;
+  technicalDifficultiesEscalationMessage: string;
   telegramEscalationNotificationText: string;
 };
+
+function hasVisibleText(html: string): boolean {
+  return html
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/gi, " ")
+    .trim().length > 0;
+}
 
 export default function AdminEscalationPage() {
   const [loading, setLoading] = useState(true);
@@ -25,6 +34,8 @@ export default function AdminEscalationPage() {
     useState("");
   const [noModelNumberEscalationMessage, setNoModelNumberEscalationMessage] =
     useState("");
+  const [technicalDifficultiesEscalationMessage, setTechnicalDifficultiesEscalationMessage] =
+    useState("");
   const [telegramEscalationNotificationText, setTelegramEscalationNotificationText] =
     useState("");
 
@@ -37,6 +48,7 @@ export default function AdminEscalationPage() {
     setGeneralEscalationMessage(data.generalEscalationMessage ?? "");
     setFrustrationEscalationIntentMessage(data.frustrationEscalationIntentMessage ?? "");
     setNoModelNumberEscalationMessage(data.noModelNumberEscalationMessage ?? "");
+    setTechnicalDifficultiesEscalationMessage(data.technicalDifficultiesEscalationMessage ?? "");
     setTelegramEscalationNotificationText(data.telegramEscalationNotificationText ?? "");
   }
 
@@ -61,6 +73,7 @@ export default function AdminEscalationPage() {
           generalEscalationMessage,
           frustrationEscalationIntentMessage,
           noModelNumberEscalationMessage,
+          technicalDifficultiesEscalationMessage,
           telegramEscalationNotificationText,
           updatedBy: "admin",
         }),
@@ -99,10 +112,10 @@ export default function AdminEscalationPage() {
           Shown for system-driven escalations (for example: safety/trigger,
           maximum turns, no progress, or unresolved triage).
         </p>
-        <Textarea
-          rows={4}
+        <RichTextEditor
           value={generalEscalationMessage}
-          onChange={(e) => setGeneralEscalationMessage(e.target.value)}
+          onChange={setGeneralEscalationMessage}
+          placeholder="Enter general escalation message..."
         />
       </Card>
 
@@ -114,10 +127,10 @@ export default function AdminEscalationPage() {
           Shown when the user requests a human or escalation is triggered from
           frustration handling.
         </p>
-        <Textarea
-          rows={4}
+        <RichTextEditor
           value={frustrationEscalationIntentMessage}
-          onChange={(e) => setFrustrationEscalationIntentMessage(e.target.value)}
+          onChange={setFrustrationEscalationIntentMessage}
+          placeholder="Enter frustration escalation message..."
         />
       </Card>
 
@@ -129,10 +142,25 @@ export default function AdminEscalationPage() {
           Shown when a user cannot provide machine model/serial details and the
           chat escalates.
         </p>
-        <Textarea
-          rows={4}
+        <RichTextEditor
           value={noModelNumberEscalationMessage}
-          onChange={(e) => setNoModelNumberEscalationMessage(e.target.value)}
+          onChange={setNoModelNumberEscalationMessage}
+          placeholder="Enter no model/serial escalation message..."
+        />
+      </Card>
+
+      <Card>
+        <h2 className="mb-2 text-lg font-semibold text-ink">
+          Technical difficulties escalation message
+        </h2>
+        <p className="mb-3 text-sm text-muted">
+          Shown when the system hits an internal error and escalates the chat
+          to a technician.
+        </p>
+        <RichTextEditor
+          value={technicalDifficultiesEscalationMessage}
+          onChange={setTechnicalDifficultiesEscalationMessage}
+          placeholder="Enter technical difficulties escalation message..."
         />
       </Card>
 
@@ -148,10 +176,11 @@ export default function AdminEscalationPage() {
           </code>
           .
         </p>
-        <Textarea
-          rows={4}
+        <RichTextEditor
           value={telegramEscalationNotificationText}
-          onChange={(e) => setTelegramEscalationNotificationText(e.target.value)}
+          onChange={setTelegramEscalationNotificationText}
+          placeholder="Enter Telegram escalation lead line..."
+          minHeightClassName="min-h-[6rem]"
         />
       </Card>
 
@@ -171,10 +200,11 @@ export default function AdminEscalationPage() {
         onClick={save}
         disabled={
           saving ||
-          !generalEscalationMessage.trim() ||
-          !frustrationEscalationIntentMessage.trim() ||
-          !noModelNumberEscalationMessage.trim() ||
-          !telegramEscalationNotificationText.trim()
+          !hasVisibleText(generalEscalationMessage) ||
+          !hasVisibleText(frustrationEscalationIntentMessage) ||
+          !hasVisibleText(noModelNumberEscalationMessage) ||
+          !hasVisibleText(technicalDifficultiesEscalationMessage) ||
+          !hasVisibleText(telegramEscalationNotificationText)
         }
       >
         {saving ? "Saving..." : "Save escalation config"}

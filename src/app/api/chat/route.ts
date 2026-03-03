@@ -54,6 +54,7 @@ import {
 import { AuditLogger } from "@/lib/audit";
 import { verifyTurnstileToken } from "@/lib/turnstile";
 import { logErrorEvent } from "@/lib/error-logs";
+import { richTextToPlainText } from "@/lib/rich-text";
 
 const STAGE_MESSAGES: Record<string, string> = {
   requesting_nameplate: "Collecting machine details…",
@@ -68,7 +69,7 @@ const VERIFICATION_REQUEST_ID = "_verification";
 const VERIFICATION_REQUEST_OPTIONS = ["Yes, it's fixed", "No, still having issues"];
 const ESCALATION_OFFER_REQUEST_ID = "_escalation_offer";
 const SKIP_SIGNAL = "__skip__";
-const TECHNICAL_DIFFICULTIES_MESSAGE =
+const DEFAULT_TECHNICAL_DIFFICULTIES_MESSAGE =
   "We're experiencing technical difficulties right now. I'm connecting you with a technician to continue helping you.";
 const TECHNICAL_DIFFICULTIES_ESCALATION_REASON =
   "Technical difficulties while processing chat request.";
@@ -109,6 +110,11 @@ function buildVerificationRequest(
       options: [...VERIFICATION_REQUEST_OPTIONS],
     },
   };
+}
+
+function toPlainEscalationText(html: string, fallback: string): string {
+  const plain = richTextToPlainText(html);
+  return plain || fallback;
 }
 
 /** True if the error indicates the stream controller is already closed (e.g. client disconnected). */
@@ -504,7 +510,9 @@ async function escalateOnTechnicalFailure(opts: {
   messages: ChatMessage[];
   evidence: Record<string, EvidenceRecord>;
   hypotheses: HypothesisState[];
-}): Promise<{ sessionId: string; message: string; escalationReason: string }> {
+  technicalDifficultiesMessage: string;
+  technicalDifficultiesMessageHtml: string;
+}): Promise<{ sessionId: string; message: string; message_html: string; escalationReason: string }> {
   let resolvedSession = opts.existingSession;
 
   if (!resolvedSession && opts.sessionId) {
@@ -533,11 +541,12 @@ async function escalateOnTechnicalFailure(opts: {
   if (
     !lastMessage ||
     lastMessage.role !== "assistant" ||
-    lastMessage.content !== TECHNICAL_DIFFICULTIES_MESSAGE
+    lastMessage.content !== opts.technicalDifficultiesMessage
   ) {
     mergedMessages.push({
       role: "assistant",
-      content: TECHNICAL_DIFFICULTIES_MESSAGE,
+      content: opts.technicalDifficultiesMessage,
+      content_html: opts.technicalDifficultiesMessageHtml,
       timestamp: new Date().toISOString(),
     });
   }
@@ -608,7 +617,8 @@ async function escalateOnTechnicalFailure(opts: {
 
   return {
     sessionId: resolvedSession.id,
-    message: TECHNICAL_DIFFICULTIES_MESSAGE,
+    message: opts.technicalDifficultiesMessage,
+    message_html: opts.technicalDifficultiesMessageHtml,
     escalationReason: TECHNICAL_DIFFICULTIES_ESCALATION_REASON,
   };
 }
@@ -703,6 +713,8 @@ export async function POST(request: Request) {
       let turnCountForError = 0;
       let playbookIdForError: string | null = null;
       let machineModelForError: string | null = machineModel;
+      let technicalDifficultiesMessage = DEFAULT_TECHNICAL_DIFFICULTIES_MESSAGE;
+      let technicalDifficultiesMessageHtml = DEFAULT_TECHNICAL_DIFFICULTIES_MESSAGE;
       const sendEvent = (
         ...args:
           | [string, string]
@@ -738,7 +750,29 @@ export async function POST(request: Request) {
             getTriageConfig(),
             getIntentManifest(),
           ]);
-        const generalEscalationMessage = intentManifest.communication.escalationTone;
+        const generalEscalationMessageHtml = intentManifest.communication.escalationTone;
+        const generalEscalationMessage = toPlainEscalationText(
+          generalEscalationMessageHtml,
+          "I'm connecting you with a technician now."
+        );
+        const frustrationEscalationMessageHtml =
+          intentManifest.frustrationHandling.escalationIntentMessage;
+        const frustrationEscalationMessage = toPlainEscalationText(
+          frustrationEscalationMessageHtml,
+          "I understand this is frustrating. I can connect you with a technician now."
+        );
+        const noModelNumberEscalationMessageHtml =
+          intentManifest.communication.noModelNumberEscalationMessage;
+        const noModelNumberEscalationMessage = toPlainEscalationText(
+          noModelNumberEscalationMessageHtml,
+          "Since we don't have the machine model/serial details, I'm connecting you with a technician to continue."
+        );
+        technicalDifficultiesMessageHtml =
+          intentManifest.communication.technicalDifficultiesEscalationMessage;
+        technicalDifficultiesMessage = toPlainEscalationText(
+          technicalDifficultiesMessageHtml,
+          DEFAULT_TECHNICAL_DIFFICULTIES_MESSAGE
+        );
         const frustrationPatterns =
           intentManifest.frustrationHandling.detectionPatterns.map(
             (item) => item.pattern
@@ -792,6 +826,7 @@ export async function POST(request: Request) {
                 JSON.stringify({
                   sessionId,
                   message: latestAssistant.content,
+                  message_html: latestAssistant.content_html,
                   phase: session.phase ?? "collecting_issue",
                   requests: latestAssistant.requests,
                   resolution: latestAssistant.resolution,
@@ -853,6 +888,7 @@ export async function POST(request: Request) {
               JSON.stringify({
                 sessionId,
                 message: duplicateReply.content,
+                message_html: duplicateReply.content_html,
                 phase: session.phase ?? "collecting_issue",
                 requests: duplicateReply.requests,
                 resolution: duplicateReply.resolution,
@@ -895,11 +931,11 @@ export async function POST(request: Request) {
 
           if (userExplicitlyAskedForHuman) {
             const escalationReason = "User asked to speak with a human";
-            const escalationMessage =
-              intentManifest.frustrationHandling.escalationIntentMessage;
+            const escalationMessage = frustrationEscalationMessage;
             messages.push({
               role: "assistant",
               content: escalationMessage,
+              content_html: frustrationEscalationMessageHtml,
               timestamp: new Date().toISOString(),
             });
             const evidence = (session.evidence as Record<string, unknown>) ?? {};
@@ -940,6 +976,7 @@ export async function POST(request: Request) {
               JSON.stringify({
                 sessionId,
                 message: escalationMessage,
+                message_html: frustrationEscalationMessageHtml,
                 phase: "escalated",
                 requests: [],
                 escalation_reason: escalationReason,
@@ -1140,17 +1177,17 @@ export async function POST(request: Request) {
           const isManualSerialRetry = pendingRequestIds.has("nameplate_manual_serial_retry");
           const unsupportedMessage =
             `Your machine isn't a ${intentManifest.safety.supportedBrand} machine. We only support ${intentManifest.safety.supportedBrand} machines.`;
-          const noModelNumberEscalationMessage =
-            intentManifest.communication.noModelNumberEscalationMessage;
 
           const escalateFromNameplate = async (
             escalationMessage: string,
             escalationReason: string,
-            labelId: string
+            labelId: string,
+            escalationMessageHtml?: string
           ) => {
             messages.push({
               role: "assistant",
               content: escalationMessage,
+              content_html: escalationMessageHtml,
               timestamp: new Date().toISOString(),
             });
             const evidence = (activeSession.evidence as Record<string, unknown>) ?? {};
@@ -1189,6 +1226,7 @@ export async function POST(request: Request) {
               JSON.stringify({
                 sessionId,
                 message: escalationMessage,
+                message_html: escalationMessageHtml,
                 phase: "escalated",
                 requests: [],
                 escalation_reason: escalationReason,
@@ -1487,7 +1525,8 @@ export async function POST(request: Request) {
               await escalateFromNameplate(
                 noModelNumberEscalationMessage,
                 "User does not have a photo of the machine name plate and cannot provide model/serial manually.",
-                "nameplate_manual_unknown"
+                "nameplate_manual_unknown",
+                noModelNumberEscalationMessageHtml
               );
               return;
             }
@@ -1536,7 +1575,8 @@ export async function POST(request: Request) {
               await escalateFromNameplate(
                 noModelNumberEscalationMessage,
                 "User could not provide machine model during manual nameplate entry.",
-                "nameplate_manual_model_missing"
+                "nameplate_manual_model_missing",
+                noModelNumberEscalationMessageHtml
               );
               return;
             }
@@ -1587,7 +1627,8 @@ export async function POST(request: Request) {
               await escalateFromNameplate(
                 noModelNumberEscalationMessage,
                 "User could not provide machine serial during manual nameplate entry.",
-                "nameplate_manual_serial_missing"
+                "nameplate_manual_serial_missing",
+                noModelNumberEscalationMessageHtml
               );
               return;
             }
@@ -2355,6 +2396,7 @@ export async function POST(request: Request) {
             const assistantTurn: ChatMessage & { requests?: PlannerOutput["requests"] } = {
               role: "assistant",
               content: responseMessage,
+              ...(shouldEscalate ? { content_html: generalEscalationMessageHtml } : {}),
               timestamp: new Date().toISOString(),
               requests: !shouldEscalate
                 ? [
@@ -2395,6 +2437,7 @@ export async function POST(request: Request) {
               JSON.stringify({
                 sessionId,
                 message: responseMessage,
+                message_html: shouldEscalate ? generalEscalationMessageHtml : undefined,
                 phase: responsePhase,
                 requests: assistantTurn.requests,
                 escalation_reason: shouldEscalate
@@ -2710,7 +2753,8 @@ export async function POST(request: Request) {
             if (wantsEscalation) {
               phase = "escalated";
               plannerOutput = {
-                message: intentManifest.frustrationHandling.escalationIntentMessage,
+                message: frustrationEscalationMessage,
+                message_html: frustrationEscalationMessageHtml,
                 phase: "escalated",
                 requests: [],
                 hypotheses_update: hypotheses,
@@ -2735,6 +2779,7 @@ export async function POST(request: Request) {
               phase = "escalated";
               plannerOutput = {
                 message: generalEscalationMessage,
+                message_html: generalEscalationMessageHtml,
                 phase: "escalated",
                 requests: [],
                 hypotheses_update: hypotheses,
@@ -2745,6 +2790,7 @@ export async function POST(request: Request) {
               phase = "escalated";
               plannerOutput = {
                 message: generalEscalationMessage,
+                message_html: generalEscalationMessageHtml,
                 phase: "escalated",
                 requests: [],
                 hypotheses_update: hypotheses,
@@ -2847,8 +2893,8 @@ export async function POST(request: Request) {
               newEscalationContextTurnCount = 0;
               phase = "escalated";
               plannerOutput = {
-                message:
-                  intentManifest.frustrationHandling.escalationIntentMessage,
+                message: frustrationEscalationMessage,
+                message_html: frustrationEscalationMessageHtml,
                 phase: "escalated",
                 requests: [],
                 hypotheses_update: hypotheses,
@@ -2859,8 +2905,8 @@ export async function POST(request: Request) {
               newEscalationContextTurnCount = 0;
               phase = "escalated";
               plannerOutput = {
-                message:
-                  intentManifest.frustrationHandling.escalationIntentMessage,
+                message: frustrationEscalationMessage,
+                message_html: frustrationEscalationMessageHtml,
                 phase: "escalated",
                 requests: [],
                 hypotheses_update: hypotheses,
@@ -2992,6 +3038,7 @@ export async function POST(request: Request) {
         } = {
           role: "assistant",
           content: plannerOutput.message,
+          content_html: plannerOutput.message_html,
           timestamp: now,
           requests: plannerOutput.requests?.length ? plannerOutput.requests : undefined,
           ...(phase === "resolving" && plannerOutput.resolution
@@ -3074,6 +3121,7 @@ export async function POST(request: Request) {
           responseToSend = {
             ...plannerOutput,
             message: generalEscalationMessage,
+            message_html: generalEscalationMessageHtml,
             phase: "escalated",
             requests: [],
             escalation_reason: escalationReason,
@@ -3081,6 +3129,7 @@ export async function POST(request: Request) {
           messages[messages.length - 1] = {
             ...messages[messages.length - 1],
             content: generalEscalationMessage,
+            content_html: generalEscalationMessageHtml,
           } as ChatMessage & { requests?: PlannerOutput["requests"] };
         }
 
@@ -3099,6 +3148,7 @@ export async function POST(request: Request) {
           responseToSend = {
             ...plannerOutput,
             message: generalEscalationMessage,
+            message_html: generalEscalationMessageHtml,
             phase: "escalated",
             requests: [],
             escalation_reason: escalationReason,
@@ -3106,6 +3156,7 @@ export async function POST(request: Request) {
           const stallMessage: ChatMessage = {
             role: "assistant",
             content: generalEscalationMessage,
+            content_html: generalEscalationMessageHtml,
             timestamp: new Date().toISOString(),
           };
           messages[messages.length - 1] = stallMessage;
@@ -3188,6 +3239,7 @@ export async function POST(request: Request) {
         const responsePayload = {
           sessionId,
           message: responseToSend.message,
+          message_html: responseToSend.message_html,
           phase: responseToSend.phase,
           requests: responseToSend.requests,
           resolution: responseToSend.resolution,
@@ -3243,12 +3295,15 @@ export async function POST(request: Request) {
             messages: messagesForError,
             evidence: evidenceForError,
             hypotheses: hypothesesForError,
+            technicalDifficultiesMessage,
+            technicalDifficultiesMessageHtml,
           });
           sendEvent(
             "message",
             JSON.stringify({
               sessionId: escalationPayload.sessionId,
               message: escalationPayload.message,
+              message_html: escalationPayload.message_html,
               phase: "escalated",
               requests: [],
               escalation_reason: escalationPayload.escalationReason,
@@ -3272,7 +3327,8 @@ export async function POST(request: Request) {
             "message",
             JSON.stringify({
               sessionId: sessionIdForError ?? crypto.randomUUID(),
-              message: TECHNICAL_DIFFICULTIES_MESSAGE,
+              message: technicalDifficultiesMessage,
+              message_html: technicalDifficultiesMessageHtml,
               phase: "escalated",
               requests: [],
               escalation_reason: TECHNICAL_DIFFICULTIES_ESCALATION_REASON,

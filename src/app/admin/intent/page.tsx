@@ -14,6 +14,7 @@ const ESCALATION_PAGE_MANAGED_FIELDS = new Set([
   "communication.escalationTone",
   "communication.telegramEscalationNotificationText",
   "communication.noModelNumberEscalationMessage",
+  "communication.technicalDifficultiesEscalationMessage",
   "frustrationHandling.escalationIntentMessage",
 ]);
 

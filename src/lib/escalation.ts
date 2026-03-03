@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { telegramConfig } from "@/lib/db/schema";
 import { getIntentManifest } from "@/lib/intent/loader";
 import { readStorageFile } from "@/lib/storage";
+import { sanitizeRichTextHtml } from "@/lib/rich-text";
 
 function getBaseUrl(): string | null {
   const raw = process.env.NEXT_PUBLIC_BASE_URL?.trim();
@@ -227,17 +228,27 @@ export async function sendEscalationTelegram(handoff: EscalationHandoff): Promis
   const phone = handoff.userPhone?.trim() || "Unknown";
   const tel = handoff.userPhone?.replace(/[^\d+]/g, "") || "";
   const intentManifest = await getIntentManifest();
-  const notificationLeadLine = renderTemplate(
+  const escapedTemplateVariables = {
+    machineModel: escapeTelegramHtml(machine),
+    customerName: escapeTelegramHtml(customer),
+    productType: escapeTelegramHtml(productType),
+    serialNumber: escapeTelegramHtml(serial),
+    sessionId: escapeTelegramHtml(handoff.sessionId),
+    escalationReason: escapeTelegramHtml(handoff.escalationReason),
+  };
+  const renderedLeadLine = renderTemplate(
     intentManifest.communication.telegramEscalationNotificationText,
-    {
-      machineModel: machine,
-      customerName: customer,
-      productType,
-      serialNumber: serial,
-      sessionId: handoff.sessionId,
-      escalationReason: handoff.escalationReason,
-    }
-  ).trim() || `ESCALATION - ${machine}`;
+    escapedTemplateVariables
+  ).trim();
+  const fallbackLeadLine = `ESCALATION - ${escapeTelegramHtml(machine)}`;
+  const sanitizedLeadLineHtml = sanitizeRichTextHtml(
+    renderedLeadLine || fallbackLeadLine,
+    "telegram"
+  );
+  const leadLineHasTags = /<[^>]+>/.test(sanitizedLeadLineHtml);
+  const leadLine = leadLineHasTags
+    ? sanitizedLeadLineHtml
+    : `<b>${sanitizedLeadLineHtml || fallbackLeadLine}</b>`;
 
   const evidenceLines = Object.entries(handoff.evidenceCollected)
     .slice(0, 6)
@@ -255,7 +266,7 @@ export async function sendEscalationTelegram(handoff: EscalationHandoff): Promis
     .map((step) => `- ${escapeTelegramHtml(step.instruction)}`);
 
   const summary = [
-    `<b>${escapeTelegramHtml(notificationLeadLine)}</b>`,
+    leadLine,
     "",
     `<b>Customer:</b> ${escapeTelegramHtml(customer)}`,
     tel ? `<b>Phone:</b> <a href="tel:${escapeTelegramHtml(tel)}">${escapeTelegramHtml(phone)}</a>` : `<b>Phone:</b> ${escapeTelegramHtml(phone)}`,

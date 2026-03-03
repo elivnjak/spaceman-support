@@ -50,6 +50,7 @@ export const intentManifestSchema = z.object({
     escalationTone: z.string().min(1),
     telegramEscalationNotificationText: z.string().min(1),
     noModelNumberEscalationMessage: z.string().min(1),
+    technicalDifficultiesEscalationMessage: z.string().min(1),
     verificationQuestion: z.string().min(1),
   }),
   models: z.object({

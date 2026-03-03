@@ -12,6 +12,10 @@ import {
   intentManifestOverrideSchema,
 } from "@/lib/intent/types";
 import { withApiRouteErrorLogging } from "@/lib/error-logs";
+import {
+  richTextHasVisibleText,
+  sanitizeRichTextHtml,
+} from "@/lib/rich-text";
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -61,6 +65,8 @@ async function GETHandler() {
       manifest.frustrationHandling.escalationIntentMessage,
     noModelNumberEscalationMessage:
       manifest.communication.noModelNumberEscalationMessage,
+    technicalDifficultiesEscalationMessage:
+      manifest.communication.technicalDifficultiesEscalationMessage,
     telegramEscalationNotificationText:
       manifest.communication.telegramEscalationNotificationText,
   });
@@ -71,37 +77,43 @@ async function PUTHandler(request: Request) {
     generalEscalationMessage?: unknown;
     frustrationEscalationIntentMessage?: unknown;
     noModelNumberEscalationMessage?: unknown;
+    technicalDifficultiesEscalationMessage?: unknown;
     telegramEscalationNotificationText?: unknown;
     updatedBy?: unknown;
   };
 
   const generalEscalationMessage =
     typeof body.generalEscalationMessage === "string"
-      ? body.generalEscalationMessage.trim()
+      ? sanitizeRichTextHtml(body.generalEscalationMessage, "chat")
       : "";
   const frustrationEscalationIntentMessage =
     typeof body.frustrationEscalationIntentMessage === "string"
-      ? body.frustrationEscalationIntentMessage.trim()
+      ? sanitizeRichTextHtml(body.frustrationEscalationIntentMessage, "chat")
       : "";
   const noModelNumberEscalationMessage =
     typeof body.noModelNumberEscalationMessage === "string"
-      ? body.noModelNumberEscalationMessage.trim()
+      ? sanitizeRichTextHtml(body.noModelNumberEscalationMessage, "chat")
+      : "";
+  const technicalDifficultiesEscalationMessage =
+    typeof body.technicalDifficultiesEscalationMessage === "string"
+      ? sanitizeRichTextHtml(body.technicalDifficultiesEscalationMessage, "chat")
       : "";
   const telegramEscalationNotificationText =
     typeof body.telegramEscalationNotificationText === "string"
-      ? body.telegramEscalationNotificationText.trim()
+      ? sanitizeRichTextHtml(body.telegramEscalationNotificationText, "telegram")
       : "";
 
   if (
-    !generalEscalationMessage ||
-    !frustrationEscalationIntentMessage ||
-    !noModelNumberEscalationMessage ||
-    !telegramEscalationNotificationText
+    !richTextHasVisibleText(generalEscalationMessage) ||
+    !richTextHasVisibleText(frustrationEscalationIntentMessage) ||
+    !richTextHasVisibleText(noModelNumberEscalationMessage) ||
+    !richTextHasVisibleText(technicalDifficultiesEscalationMessage) ||
+    !richTextHasVisibleText(telegramEscalationNotificationText)
   ) {
     return NextResponse.json(
       {
         error:
-          "generalEscalationMessage, frustrationEscalationIntentMessage, noModelNumberEscalationMessage, and telegramEscalationNotificationText are required.",
+          "generalEscalationMessage, frustrationEscalationIntentMessage, noModelNumberEscalationMessage, technicalDifficultiesEscalationMessage, and telegramEscalationNotificationText are required.",
       },
       { status: 400 }
     );
@@ -121,6 +133,7 @@ async function PUTHandler(request: Request) {
     communication: {
       escalationTone: generalEscalationMessage,
       noModelNumberEscalationMessage,
+      technicalDifficultiesEscalationMessage,
       telegramEscalationNotificationText,
     },
     frustrationHandling: {

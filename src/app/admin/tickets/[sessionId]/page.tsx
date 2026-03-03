@@ -52,6 +52,7 @@ type TicketDetailResponse = {
 type ChatMessage = {
   role: "user" | "assistant";
   content: string;
+  contentHtml: string | null;
   images: string[];
   guideImages: string[];
   resolution: {
@@ -217,6 +218,8 @@ function parseChatMessages(sessionId: string, rawMessages: unknown): ChatMessage
     return {
       role,
       content,
+      contentHtml:
+        typeof raw.content_html === "string" ? raw.content_html : null,
       images,
       guideImages,
       resolution,
@@ -591,7 +594,14 @@ export default function AdminTicketDetailPage() {
                           : "bg-page text-ink"
                       }`}
                     >
-                      <p className="whitespace-pre-wrap">{message.content || "(empty)"}</p>
+                      {message.contentHtml ? (
+                        <div
+                          className="whitespace-pre-wrap [&_a]:font-medium [&_a]:text-primary [&_a]:underline"
+                          dangerouslySetInnerHTML={{ __html: message.contentHtml }}
+                        />
+                      ) : (
+                        <p className="whitespace-pre-wrap">{message.content || "(empty)"}</p>
+                      )}
 
                       {message.images.length > 0 && (
                         <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">

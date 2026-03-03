@@ -109,6 +109,8 @@ export const MANIFEST_DEFAULTS: IntentManifest = {
     telegramEscalationNotificationText: "ESCALATION - {{machineModel}}",
     noModelNumberEscalationMessage:
       "Since we don't have the machine model/serial details, I'm connecting you with a technician to continue.",
+    technicalDifficultiesEscalationMessage:
+      "We're experiencing technical difficulties right now. I'm connecting you with a technician to continue helping you.",
     verificationQuestion: "Did that fix the issue?",
   },
   models: {
@@ -403,6 +405,12 @@ export const MANIFEST_META: IntentManifestMeta = {
       "Message shown when the user cannot provide model/serial details and the chat escalates to a technician.",
       "Changing this updates manual-nameplate escalation wording before handoff.",
       d.communication.noModelNumberEscalationMessage
+    ),
+    technicalDifficultiesEscalationMessage: meta(
+      "Technical difficulties escalation message",
+      "Message shown when an internal/system error occurs and the chat is escalated to a technician.",
+      "Changing this updates user-facing handoff wording for technical-failure fallbacks.",
+      d.communication.technicalDifficultiesEscalationMessage
     ),
     verificationQuestion: meta(
       "Resolution verification question",

@@ -48,6 +48,7 @@ type CitationItem = {
 type ChatMessage = {
   role: "user" | "assistant";
   content: string;
+  content_html?: string;
   images?: string[];
   guideImages?: string[];
   requests?: RequestItem[];
@@ -64,6 +65,7 @@ type ChatMessage = {
 type MessagePayload = {
   sessionId: string;
   message: string;
+  message_html?: string;
   phase: string;
   requests: RequestItem[];
   resolution?: ChatMessage["resolution"];
@@ -117,11 +119,15 @@ export type ChatPageClientProps = {
   isHomePage?: boolean;
   /** True when user has an authenticated admin/editor session. */
   isAuthenticated?: boolean;
+  /** Public fallback message shown if chat transport fails and escalation is required. */
+  technicalDifficultiesMessage?: string;
 };
 
 const INITIAL_ASSISTANT_MESSAGE =
   "Hi! What issue are you experiencing with your machine? You can also attach a photo if that helps.";
-const PUBLIC_TECHNICAL_DIFFICULTIES_MESSAGE =
+const DEFAULT_PUBLIC_TECHNICAL_DIFFICULTIES_MESSAGE_HTML =
+  "We're experiencing technical difficulties right now. I'm connecting you with a technician to continue helping you.";
+const DEFAULT_PUBLIC_TECHNICAL_DIFFICULTIES_MESSAGE_TEXT =
   "We're experiencing technical difficulties right now. I'm connecting you with a technician to continue helping you.";
 
 type InitialPhase = "idle" | "typing" | "done";
@@ -178,7 +184,20 @@ function toImageUrl(sessionId: string | null, img: string): string {
   return sessionId ? toSessionImageUrl(sessionId, img) : img;
 }
 
-export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPageClientProps) {
+function htmlToText(html: string): string {
+  if (typeof window === "undefined") {
+    return html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  }
+  const container = document.createElement("div");
+  container.innerHTML = html;
+  return (container.textContent ?? "").replace(/\s+/g, " ").trim();
+}
+
+export function ChatPageClient({
+  isHomePage,
+  isAuthenticated = false,
+  technicalDifficultiesMessage,
+}: ChatPageClientProps) {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [userName, setUserName] = useState("");
   const [userPhone, setUserPhone] = useState("");
@@ -204,6 +223,11 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
   const [addNoteOpen, setAddNoteOpen] = useState(false);
   const [inputSource, setInputSource] = useState<"chat" | "structured" | "skip" | "note">("chat");
   const [connectionInterrupted, setConnectionInterrupted] = useState(false);
+  const publicTechnicalDifficultiesMessageHtml =
+    technicalDifficultiesMessage?.trim() || DEFAULT_PUBLIC_TECHNICAL_DIFFICULTIES_MESSAGE_HTML;
+  const publicTechnicalDifficultiesMessage =
+    htmlToText(publicTechnicalDifficultiesMessageHtml) ||
+    DEFAULT_PUBLIC_TECHNICAL_DIFFICULTIES_MESSAGE_TEXT;
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [turnstileScriptLoaded, setTurnstileScriptLoaded] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
@@ -771,7 +795,8 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
                     const last = prev[prev.length - 1];
                     if (
                       last?.role === "assistant" &&
-                      last.content === PUBLIC_TECHNICAL_DIFFICULTIES_MESSAGE
+                      (last.content === publicTechnicalDifficultiesMessage ||
+                        last.content_html === publicTechnicalDifficultiesMessageHtml)
                     ) {
                       return prev;
                     }
@@ -779,7 +804,8 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
                       ...prev,
                       {
                         role: "assistant",
-                        content: PUBLIC_TECHNICAL_DIFFICULTIES_MESSAGE,
+                        content: publicTechnicalDifficultiesMessage,
+                        content_html: publicTechnicalDifficultiesMessageHtml,
                       },
                     ];
                   });
@@ -800,6 +826,10 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
           {
             role: "assistant",
             content: toDisplayString(payload.message, ""),
+            content_html:
+              typeof payload.message_html === "string"
+                ? payload.message_html
+                : undefined,
             requests: payload.requests?.length ? payload.requests : undefined,
             resolution: payload.resolution,
             escalation_reason: payload.escalation_reason,
@@ -859,7 +889,8 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
             const last = prev[prev.length - 1];
             if (
               last?.role === "assistant" &&
-              last.content === PUBLIC_TECHNICAL_DIFFICULTIES_MESSAGE
+              (last.content === publicTechnicalDifficultiesMessage ||
+                last.content_html === publicTechnicalDifficultiesMessageHtml)
             ) {
               return prev;
             }
@@ -867,7 +898,8 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
               ...prev,
               {
                 role: "assistant",
-                content: PUBLIC_TECHNICAL_DIFFICULTIES_MESSAGE,
+                content: publicTechnicalDifficultiesMessage,
+                content_html: publicTechnicalDifficultiesMessageHtml,
               },
             ];
           });
@@ -927,7 +959,8 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
           const last = prev[prev.length - 1];
           if (
             last?.role === "assistant" &&
-            last.content === PUBLIC_TECHNICAL_DIFFICULTIES_MESSAGE
+            (last.content === publicTechnicalDifficultiesMessage ||
+              last.content_html === publicTechnicalDifficultiesMessageHtml)
           ) {
             return prev;
           }
@@ -935,7 +968,8 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
             ...prev,
             {
               role: "assistant",
-              content: PUBLIC_TECHNICAL_DIFFICULTIES_MESSAGE,
+              content: publicTechnicalDifficultiesMessage,
+              content_html: publicTechnicalDifficultiesMessageHtml,
             },
           ];
         });
@@ -1157,7 +1191,14 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
                           )}
                         </p>
                       ) : (
-                        <p className="whitespace-pre-wrap">{m.content}</p>
+                        m.role === "assistant" && m.content_html ? (
+                          <div
+                            className="whitespace-pre-wrap [&_a]:font-medium [&_a]:text-primary [&_a]:underline"
+                            dangerouslySetInnerHTML={{ __html: m.content_html }}
+                          />
+                        ) : (
+                          <p className="whitespace-pre-wrap">{m.content}</p>
+                        )
                       )}
                       {m.role === "assistant" && m.guideImages && m.guideImages.length > 0 && (() => {
                         const count = m.guideImages.length;

@@ -4,17 +4,22 @@ import { MaintenancePage } from "@/app/chat/MaintenancePage";
 import { db } from "@/lib/db";
 import { maintenanceConfig, type MaintenanceConfig } from "@/lib/db/schema";
 import { getSessionCookieName, validateSession } from "@/lib/auth";
+import { getIntentManifest } from "@/lib/intent/loader";
 
 export const dynamic = "force-dynamic";
 
 const DEFAULT_TITLE = "Chat Unavailable";
 const DEFAULT_DESCRIPTION =
   "Our support chat is currently undergoing maintenance.";
+const DEFAULT_TECHNICAL_DIFFICULTIES_ESCALATION_MESSAGE =
+  "We're experiencing technical difficulties right now. I'm connecting you with a technician to continue helping you.";
 
 export default async function HomePage() {
   let isMaintenance = false;
   let config: MaintenanceConfig | undefined;
   let isAuthenticated = false;
+  let technicalDifficultiesEscalationMessage =
+    DEFAULT_TECHNICAL_DIFFICULTIES_ESCALATION_MESSAGE;
 
   try {
     const cookieStore = await cookies();
@@ -35,6 +40,14 @@ export default async function HomePage() {
     isMaintenance = false;
   }
 
+  try {
+    const manifest = await getIntentManifest();
+    technicalDifficultiesEscalationMessage =
+      manifest.communication.technicalDifficultiesEscalationMessage;
+  } catch {
+    // Keep default public fallback message if manifest cannot be loaded.
+  }
+
   if (isMaintenance && config) {
     return (
       <MaintenancePage
@@ -50,7 +63,11 @@ export default async function HomePage() {
   return (
     <main className="flex min-h-screen flex-col">
       <div className="min-h-0 flex-1">
-        <ChatPageClient isHomePage isAuthenticated={isAuthenticated} />
+        <ChatPageClient
+          isHomePage
+          isAuthenticated={isAuthenticated}
+          technicalDifficultiesMessage={technicalDifficultiesEscalationMessage}
+        />
       </div>
     </main>
   );

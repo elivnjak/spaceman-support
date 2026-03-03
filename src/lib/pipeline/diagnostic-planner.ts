@@ -78,6 +78,7 @@ export type HypothesisState = {
 export type ChatMessage = {
   role: "user" | "assistant" | "system";
   content: string;
+  content_html?: string;
   images?: string[];
   timestamp?: string;
 };
@@ -98,6 +99,7 @@ export type PlannerRequest = {
 
 export type PlannerOutput = {
   message: string;
+  message_html?: string;
   phase: "triaging" | "gathering_info" | "diagnosing" | "resolving" | "resolved_followup" | "escalated";
   requests: PlannerRequest[];
   hypotheses_update: {
@@ -501,6 +503,9 @@ export function validateAndSanitizePlannerOutput(
 ): { output: PlannerOutput; errors: string[] } {
   const errors: string[] = [];
   const sanitized = { ...output, requests: [...output.requests] };
+  if ("message_html" in sanitized) {
+    delete (sanitized as { message_html?: string }).message_html;
+  }
 
   if (sanitized.phase === "resolving" && sanitized.resolution && sanitized.requests.length > 0) {
     errors.push("Stripped requests from resolving turn: resolution and requests are mutually exclusive");
