@@ -1,6 +1,7 @@
 import type { ChatMessage, EvidenceRecord, HypothesisState, PlannerOutput } from "./pipeline/diagnostic-planner";
 import { db } from "@/lib/db";
 import { telegramConfig } from "@/lib/db/schema";
+import { getIntentManifest } from "@/lib/intent/loader";
 import { readStorageFile } from "@/lib/storage";
 
 function getBaseUrl(): string | null {
@@ -29,6 +30,16 @@ function getImageContentType(imagePath: string): string {
   if (lower.endsWith(".webp")) return "image/webp";
   if (lower.endsWith(".gif")) return "image/gif";
   return "image/jpeg";
+}
+
+function renderTemplate(
+  template: string,
+  variables: Record<string, string>
+): string {
+  return template.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_match, key: string) => {
+    const value = variables[key];
+    return value == null ? "" : value;
+  });
 }
 
 export type EscalationHandoff = {
@@ -215,6 +226,18 @@ export async function sendEscalationTelegram(handoff: EscalationHandoff): Promis
   const year = handoff.manufacturingYear != null ? String(handoff.manufacturingYear) : "Unknown";
   const phone = handoff.userPhone?.trim() || "Unknown";
   const tel = handoff.userPhone?.replace(/[^\d+]/g, "") || "";
+  const intentManifest = await getIntentManifest();
+  const notificationLeadLine = renderTemplate(
+    intentManifest.communication.telegramEscalationNotificationText,
+    {
+      machineModel: machine,
+      customerName: customer,
+      productType,
+      serialNumber: serial,
+      sessionId: handoff.sessionId,
+      escalationReason: handoff.escalationReason,
+    }
+  ).trim() || `ESCALATION - ${machine}`;
 
   const evidenceLines = Object.entries(handoff.evidenceCollected)
     .slice(0, 6)
@@ -232,7 +255,7 @@ export async function sendEscalationTelegram(handoff: EscalationHandoff): Promis
     .map((step) => `- ${escapeTelegramHtml(step.instruction)}`);
 
   const summary = [
-    `<b>ESCALATION - ${escapeTelegramHtml(machine)}</b>`,
+    `<b>${escapeTelegramHtml(notificationLeadLine)}</b>`,
     "",
     `<b>Customer:</b> ${escapeTelegramHtml(customer)}`,
     tel ? `<b>Phone:</b> <a href="tel:${escapeTelegramHtml(tel)}">${escapeTelegramHtml(phone)}</a>` : `<b>Phone:</b> ${escapeTelegramHtml(phone)}`,

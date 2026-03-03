@@ -48,6 +48,8 @@ export const intentManifestSchema = z.object({
     citationPolicy: z.enum(["always", "admin_only", "never"]),
     groundingStrictness: z.enum(["strict", "moderate", "relaxed"]),
     escalationTone: z.string().min(1),
+    telegramEscalationNotificationText: z.string().min(1),
+    noModelNumberEscalationMessage: z.string().min(1),
     verificationQuestion: z.string().min(1),
   }),
   models: z.object({

@@ -780,7 +780,6 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
                       {
                         role: "assistant",
                         content: PUBLIC_TECHNICAL_DIFFICULTIES_MESSAGE,
-                        escalation_reason: "Technical difficulties while processing chat request.",
                       },
                     ];
                   });
@@ -869,7 +868,6 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
               {
                 role: "assistant",
                 content: PUBLIC_TECHNICAL_DIFFICULTIES_MESSAGE,
-                escalation_reason: "Technical difficulties while processing chat request.",
               },
             ];
           });
@@ -938,7 +936,6 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
             {
               role: "assistant",
               content: PUBLIC_TECHNICAL_DIFFICULTIES_MESSAGE,
-              escalation_reason: "Technical difficulties while processing chat request.",
             },
           ];
         });
@@ -1124,11 +1121,23 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
                 >
                   <div className={`flex max-w-[85%] flex-col ${m.role === "assistant" ? "gap-3" : ""}`}>
                     <div
-                      className={`rounded-2xl px-4 py-2.5 ${m.role === "user"
-                        ? "bg-primary text-white"
-                        : "bg-surface text-ink shadow-card border border-border"
-                        }`}
+                      className={`rounded-2xl px-4 py-2.5 ${
+                        m.role === "user"
+                          ? "bg-primary text-white"
+                          : m.role === "assistant" &&
+                              (m.escalation_reason ||
+                                (currentPhase === "escalated" && i === messages.length - 1))
+                            ? "border border-amber-300 bg-amber-50 text-amber-950 shadow-card dark:border-amber-500/50 dark:bg-amber-900/25 dark:text-amber-100"
+                            : "bg-surface text-ink shadow-card border border-border"
+                      }`}
                     >
+                      {/* {m.role === "assistant" &&
+                        (m.escalation_reason ||
+                          (currentPhase === "escalated" && i === messages.length - 1)) && (
+                          <p className="mb-2 inline-flex rounded-full border border-amber-300 bg-amber-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-amber-800 dark:border-amber-500/50 dark:bg-amber-800/35 dark:text-amber-100">
+                            Escalation
+                          </p>
+                        )} */}
                       {m.role === "assistant" && m.citations && m.citations.length > 0 ? (
                         <p className="whitespace-pre-wrap">
                           {getMessageSegments(m.content, m.citations).map((seg, k) =>
@@ -1216,7 +1225,7 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
                           )}
                         </div>
                       )}
-                      {m.role === "assistant" && m.escalation_reason && (
+                      {isAuthenticated && m.role === "assistant" && m.escalation_reason && (
                         <div className="mt-3 border-t border-accent/30 pt-2">
                           <p className="text-xs font-medium text-amber-700 dark:text-amber-300">
                             Connecting to support: {m.escalation_reason}

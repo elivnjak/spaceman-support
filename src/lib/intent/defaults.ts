@@ -106,6 +106,9 @@ export const MANIFEST_DEFAULTS: IntentManifest = {
     groundingStrictness: "strict",
     escalationTone:
       "For safety, we're escalating this to a technician immediately. Please stop troubleshooting and keep the machine in a safe state.",
+    telegramEscalationNotificationText: "ESCALATION - {{machineModel}}",
+    noModelNumberEscalationMessage:
+      "Since we don't have the machine model/serial details, I'm connecting you with a technician to continue.",
     verificationQuestion: "Did that fix the issue?",
   },
   models: {
@@ -388,6 +391,18 @@ export const MANIFEST_META: IntentManifestMeta = {
       "Default user-facing message used for immediate safety escalation.",
       "Editing this changes how urgent/specific safety escalation messaging feels.",
       d.communication.escalationTone
+    ),
+    telegramEscalationNotificationText: meta(
+      "Telegram escalation notification text",
+      "Lead line sent to Telegram when a session escalates. Supports placeholders like {{machineModel}}, {{customerName}}, {{productType}}, {{serialNumber}}, {{sessionId}}, and {{escalationReason}}.",
+      "Changing this updates how escalation alerts are titled in Telegram.",
+      d.communication.telegramEscalationNotificationText
+    ),
+    noModelNumberEscalationMessage: meta(
+      "No-model-number escalation message",
+      "Message shown when the user cannot provide model/serial details and the chat escalates to a technician.",
+      "Changing this updates manual-nameplate escalation wording before handoff.",
+      d.communication.noModelNumberEscalationMessage
     ),
     verificationQuestion: meta(
       "Resolution verification question",

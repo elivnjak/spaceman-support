@@ -710,14 +710,26 @@ export async function POST(request: Request) {
       ) => {
         const event = args.length === 3 ? args[1] : args[0];
         const data = args.length === 3 ? args[2] : args[1];
-        if (event === "message") {
+        let safeData = data;
+        if (!isAuthenticated && event === "message") {
           try {
-            audit?.logApiResponse(JSON.parse(data));
+            const parsed = JSON.parse(data) as Record<string, unknown>;
+            if (parsed && typeof parsed === "object" && "escalation_reason" in parsed) {
+              delete parsed.escalation_reason;
+              safeData = JSON.stringify(parsed);
+            }
           } catch {
-            audit?.logApiResponse(data);
+            // Keep original payload if it's not JSON
           }
         }
-        send(controller, event, data);
+        if (event === "message") {
+          try {
+            audit?.logApiResponse(JSON.parse(safeData));
+          } catch {
+            audit?.logApiResponse(safeData);
+          }
+        }
+        send(controller, event, safeData);
       };
       try {
         const [diagnosticConfig, triageConfig, intentManifest] =
@@ -726,6 +738,7 @@ export async function POST(request: Request) {
             getTriageConfig(),
             getIntentManifest(),
           ]);
+        const generalEscalationMessage = intentManifest.communication.escalationTone;
         const frustrationPatterns =
           intentManifest.frustrationHandling.detectionPatterns.map(
             (item) => item.pattern
@@ -1127,6 +1140,8 @@ export async function POST(request: Request) {
           const isManualSerialRetry = pendingRequestIds.has("nameplate_manual_serial_retry");
           const unsupportedMessage =
             `Your machine isn't a ${intentManifest.safety.supportedBrand} machine. We only support ${intentManifest.safety.supportedBrand} machines.`;
+          const noModelNumberEscalationMessage =
+            intentManifest.communication.noModelNumberEscalationMessage;
 
           const escalateFromNameplate = async (
             escalationMessage: string,
@@ -1470,7 +1485,7 @@ export async function POST(request: Request) {
 
             if (!knowsManualDetails) {
               await escalateFromNameplate(
-                "No problem. Since we don't have a name plate photo or manual model/serial details, I'm connecting you with a technician to continue.",
+                noModelNumberEscalationMessage,
                 "User does not have a photo of the machine name plate and cannot provide model/serial manually.",
                 "nameplate_manual_unknown"
               );
@@ -1519,7 +1534,7 @@ export async function POST(request: Request) {
             const enteredModel = message.trim();
             if (!enteredModel || isIdontKnowMessage(message)) {
               await escalateFromNameplate(
-                "Since the model/serial details aren't available, I'm connecting you with a technician to continue.",
+                noModelNumberEscalationMessage,
                 "User could not provide machine model during manual nameplate entry.",
                 "nameplate_manual_model_missing"
               );
@@ -1570,7 +1585,7 @@ export async function POST(request: Request) {
             const enteredModel = (activeSession.machineModel ?? "").trim();
             if (!enteredSerial || isIdontKnowMessage(message)) {
               await escalateFromNameplate(
-                "Since the model/serial details aren't available, I'm connecting you with a technician to continue.",
+                noModelNumberEscalationMessage,
                 "User could not provide machine serial during manual nameplate entry.",
                 "nameplate_manual_serial_missing"
               );
@@ -2334,7 +2349,7 @@ export async function POST(request: Request) {
               "I need one more detail to choose the correct diagnostic guide. What symptom do you notice first?";
             const shouldEscalate = triageRound >= triageConfig.maxRounds;
             const responseMessage = shouldEscalate
-              ? "I still can't confidently identify the right playbook from the provided details. I'm connecting you with a technician."
+              ? generalEscalationMessage
               : followUpQuestion;
             const responsePhase = shouldEscalate ? "escalated" : "triaging";
             const assistantTurn: ChatMessage & { requests?: PlannerOutput["requests"] } = {
@@ -2695,7 +2710,7 @@ export async function POST(request: Request) {
             if (wantsEscalation) {
               phase = "escalated";
               plannerOutput = {
-                message: "Understood. I'm connecting you with a technician now.",
+                message: intentManifest.frustrationHandling.escalationIntentMessage,
                 phase: "escalated",
                 requests: [],
                 hypotheses_update: hypotheses,
@@ -2719,7 +2734,7 @@ export async function POST(request: Request) {
             if (escalationFromTrigger.triggered) {
               phase = "escalated";
               plannerOutput = {
-                message: `For your safety we're connecting you with a technician. ${escalationFromTrigger.matched?.reason ?? "Please describe what you're seeing to support."}`,
+                message: generalEscalationMessage,
                 phase: "escalated",
                 requests: [],
                 hypotheses_update: hypotheses,
@@ -2729,7 +2744,7 @@ export async function POST(request: Request) {
             } else if (overSafetyTurnCap) {
               phase = "escalated";
               plannerOutput = {
-                message: "This session has reached its maximum length. Connecting you with a technician who can help further.",
+                message: generalEscalationMessage,
                 phase: "escalated",
                 requests: [],
                 hypotheses_update: hypotheses,
@@ -3058,14 +3073,14 @@ export async function POST(request: Request) {
             "We weren't able to pinpoint the cause from the information provided. Connecting you with a technician who can help further.";
           responseToSend = {
             ...plannerOutput,
-            message: escalationReason,
+            message: generalEscalationMessage,
             phase: "escalated",
             requests: [],
             escalation_reason: escalationReason,
           };
           messages[messages.length - 1] = {
             ...messages[messages.length - 1],
-            content: escalationReason,
+            content: generalEscalationMessage,
           } as ChatMessage & { requests?: PlannerOutput["requests"] };
         }
 
@@ -3083,14 +3098,14 @@ export async function POST(request: Request) {
           escalationReason = "No new evidence for several turns; connecting you with support.";
           responseToSend = {
             ...plannerOutput,
-            message: escalationReason,
+            message: generalEscalationMessage,
             phase: "escalated",
             requests: [],
             escalation_reason: escalationReason,
           };
           const stallMessage: ChatMessage = {
             role: "assistant",
-            content: escalationReason,
+            content: generalEscalationMessage,
             timestamp: new Date().toISOString(),
           };
           messages[messages.length - 1] = stallMessage;

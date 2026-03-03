@@ -38,6 +38,7 @@ const navGroups: NavGroup[] = [
   {
     section: "Configuration",
     items: [
+      { href: "/admin/escalation", label: "Escalation" },
       { href: "/admin/product-types", label: "Product types" },
       { href: "/admin/models", label: "Supported models" },
       { href: "/admin/nameplate", label: "Nameplate config" },

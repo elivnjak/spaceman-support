@@ -10,6 +10,13 @@ type IntentManifestApiResponse = {
   overriddenFields: string[];
 };
 
+const ESCALATION_PAGE_MANAGED_FIELDS = new Set([
+  "communication.escalationTone",
+  "communication.telegramEscalationNotificationText",
+  "communication.noModelNumberEscalationMessage",
+  "frustrationHandling.escalationIntentMessage",
+]);
+
 function isEqual(a: unknown, b: unknown): boolean {
   return JSON.stringify(a) === JSON.stringify(b);
 }
@@ -151,14 +158,18 @@ export default function AdminIntentManifestPage() {
     <div className="space-y-6">
       <PageHeader
         title="Intent Manifest"
-        description="Tune organizational intent values used by the diagnostic chatbot. Every field includes an explanation of what it controls and the impact of changing it."
+        description="Tune organizational intent values used by the diagnostic chatbot. Every field includes an explanation of what it controls and the impact of changing it. Escalation message text is managed under Admin > Escalation."
         className="mb-0"
       />
 
       {domainKeys.map((domainKey) => {
         const domainMeta = metadata[domainKey];
         const domainValues = manifest[domainKey] as Record<string, unknown>;
-        const fields = Object.keys(domainMeta).filter((key) => key !== "_domain");
+        const fields = Object.keys(domainMeta).filter(
+          (key) =>
+            key !== "_domain" &&
+            !ESCALATION_PAGE_MANAGED_FIELDS.has(`${String(domainKey)}.${key}`)
+        );
         return (
           <details
             key={String(domainKey)}

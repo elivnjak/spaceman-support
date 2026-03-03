@@ -17,8 +17,8 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "RAG Support Agent",
-  description: "Visual + Text RAG support assistant",
+  title: "Kuhlberg Support",
+  description: "Support agent for Spaceman machines",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
