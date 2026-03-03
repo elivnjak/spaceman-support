@@ -120,7 +120,7 @@ export type ChatPageClientProps = {
 };
 
 const INITIAL_ASSISTANT_MESSAGE =
-  "Hi!!!! What issue are you experiencing with your machine? You can also attach a photo if that helps.";
+  "Hi! What issue are you experiencing with your machine? You can also attach a photo if that helps.";
 const PUBLIC_TECHNICAL_DIFFICULTIES_MESSAGE =
   "We're experiencing technical difficulties right now. I'm connecting you with a technician to continue helping you.";
 
@@ -258,7 +258,7 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
     resetPageScrollToTop();
     requestAnimationFrame(resetPageScrollToTop);
 
-    for (const delayMs of [40, 100, 180, 280, 420, 620, 900, 1200]) {
+    for (const delayMs of [40, 100, 180, 280, 420, 620, 900, 1200, 2000, 3000]) {
       const timer = setTimeout(resetPageScrollToTop, delayMs);
       startScrollResetTimersRef.current.push(timer);
     }
@@ -281,7 +281,7 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
         startScrollViewportCleanupRef.current();
         startScrollViewportCleanupRef.current = null;
       }
-    }, 1500);
+    }, 3500);
     startScrollResetTimersRef.current.push(removeViewportListenersTimer);
   }, [clearStartScrollResetTimers, resetPageScrollToTop]);
 
