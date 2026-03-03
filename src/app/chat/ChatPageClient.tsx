@@ -206,7 +206,6 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
   const [connectionInterrupted, setConnectionInterrupted] = useState(false);
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [turnstileScriptLoaded, setTurnstileScriptLoaded] = useState(false);
-  const [visualViewportTop, setVisualViewportTop] = useState(0);
   const formRef = useRef<HTMLFormElement>(null);
   const messagesRef = useRef<ChatMessage[]>([]);
   const turnstileContainerRef = useRef<HTMLDivElement>(null);
@@ -234,19 +233,32 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
   }, []);
 
   const resetPageScrollToTop = useCallback(() => {
+    const html = document.documentElement;
+    const body = document.body;
     const scrollingEl = document.scrollingElement;
+    const prevHtmlScrollBehavior = html.style.scrollBehavior;
+    const prevBodyScrollBehavior = body.style.scrollBehavior;
+    html.style.scrollBehavior = "auto";
+    body.style.scrollBehavior = "auto";
+
+    window.scrollTo(0, 0);
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
     if (scrollingEl) {
       scrollingEl.scrollTop = 0;
     }
-    document.documentElement.scrollTop = 0;
-    document.body.scrollTop = 0;
+    html.scrollTop = 0;
+    body.scrollTop = 0;
     if (window.visualViewport?.offsetTop) {
       window.scrollBy(0, -Math.ceil(window.visualViewport.offsetTop));
     }
     if (messagesContainerRef.current) {
       messagesContainerRef.current.scrollTop = 0;
     }
+
+    requestAnimationFrame(() => {
+      html.style.scrollBehavior = prevHtmlScrollBehavior;
+      body.style.scrollBehavior = prevBodyScrollBehavior;
+    });
   }, []);
 
   const forceTopScrollAfterStart = useCallback(() => {
@@ -258,8 +270,16 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
     clearStartScrollResetTimers();
     resetPageScrollToTop();
     requestAnimationFrame(resetPageScrollToTop);
+    const blurTimer = setTimeout(() => {
+      const currentActive = document.activeElement;
+      if (currentActive instanceof HTMLElement) {
+        currentActive.blur();
+      }
+      resetPageScrollToTop();
+    }, 60);
+    startScrollResetTimersRef.current.push(blurTimer);
 
-    for (const delayMs of [40, 100, 180, 280, 420, 620, 900, 1200]) {
+    for (const delayMs of [40, 100, 180, 280, 420, 620, 900, 1200, 1800, 2500, 3500]) {
       const timer = setTimeout(resetPageScrollToTop, delayMs);
       startScrollResetTimersRef.current.push(timer);
     }
@@ -282,7 +302,7 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
         startScrollViewportCleanupRef.current();
         startScrollViewportCleanupRef.current = null;
       }
-    }, 1500);
+    }, 4000);
     startScrollResetTimersRef.current.push(removeViewportListenersTimer);
   }, [clearStartScrollResetTimers, resetPageScrollToTop]);
 
@@ -358,34 +378,6 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
     }, FIRST_MESSAGE_DELAY_MS);
     return () => clearTimeout(t);
   }, [initialPhase]);
-
-  useEffect(() => {
-    const viewport = window.visualViewport;
-    if (!viewport) return;
-    let rafId: number | null = null;
-    const update = () => {
-      const next = Math.max(0, Math.round(viewport.offsetTop));
-      setVisualViewportTop((prev) => (prev === next ? prev : next));
-    };
-    const scheduleUpdate = () => {
-      if (rafId !== null) cancelAnimationFrame(rafId);
-      rafId = requestAnimationFrame(() => {
-        rafId = null;
-        update();
-      });
-    };
-
-    update();
-    viewport.addEventListener("resize", scheduleUpdate);
-    viewport.addEventListener("scroll", scheduleUpdate);
-    window.addEventListener("orientationchange", scheduleUpdate);
-    return () => {
-      if (rafId !== null) cancelAnimationFrame(rafId);
-      viewport.removeEventListener("resize", scheduleUpdate);
-      viewport.removeEventListener("scroll", scheduleUpdate);
-      window.removeEventListener("orientationchange", scheduleUpdate);
-    };
-  }, []);
 
   useEffect(() => {
     return () => {
@@ -957,14 +949,7 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
           onLoad={() => setTurnstileScriptLoaded(true)}
         />
       )}
-      <header
-        className="sticky z-10 px-4 pb-3"
-        style={{
-          top: visualViewportTop,
-          paddingTop: "max(0.75rem, env(safe-area-inset-top))",
-          backgroundColor: "#0B111E",
-        }}
-      >
+      <header className="sticky top-0 z-10 px-4 py-3" style={{ backgroundColor: "#0B111E" }}>
         <div className="mx-auto flex max-w-2xl items-center justify-between gap-2">
           <div className="min-w-0 flex-1">
             <h1 className="text-lg font-semibold text-white">Kuhlberg Support</h1>

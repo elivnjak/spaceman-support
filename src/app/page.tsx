@@ -48,8 +48,10 @@ export default async function HomePage() {
   }
 
   return (
-    <main className="h-dvh overflow-hidden">
-      <ChatPageClient isHomePage isAuthenticated={isAuthenticated} />
+    <main className="flex min-h-screen flex-col">
+      <div className="min-h-0 flex-1">
+        <ChatPageClient isHomePage isAuthenticated={isAuthenticated} />
+      </div>
     </main>
   );
 }
