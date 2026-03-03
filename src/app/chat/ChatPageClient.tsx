@@ -258,7 +258,7 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
     resetPageScrollToTop();
     requestAnimationFrame(resetPageScrollToTop);
 
-    for (const delayMs of [40, 100, 180, 280, 420, 620, 900, 1200, 2000, 3000]) {
+    for (const delayMs of [40, 100, 180, 280, 420, 620, 900, 1200]) {
       const timer = setTimeout(resetPageScrollToTop, delayMs);
       startScrollResetTimersRef.current.push(timer);
     }
@@ -281,7 +281,7 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
         startScrollViewportCleanupRef.current();
         startScrollViewportCleanupRef.current = null;
       }
-    }, 3500);
+    }, 1500);
     startScrollResetTimersRef.current.push(removeViewportListenersTimer);
   }, [clearStartScrollResetTimers, resetPageScrollToTop]);
 
@@ -357,6 +357,27 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
     }, FIRST_MESSAGE_DELAY_MS);
     return () => clearTimeout(t);
   }, [initialPhase]);
+
+  useEffect(() => {
+    const html = document.documentElement;
+    const body = document.body;
+    const prevHtmlOverflow = html.style.overflow;
+    const prevBodyOverflow = body.style.overflow;
+    const prevHtmlOverscrollBehaviorY = html.style.overscrollBehaviorY;
+    const prevBodyOverscrollBehaviorY = body.style.overscrollBehaviorY;
+
+    html.style.overflow = "hidden";
+    body.style.overflow = "hidden";
+    html.style.overscrollBehaviorY = "none";
+    body.style.overscrollBehaviorY = "none";
+
+    return () => {
+      html.style.overflow = prevHtmlOverflow;
+      body.style.overflow = prevBodyOverflow;
+      html.style.overscrollBehaviorY = prevHtmlOverscrollBehaviorY;
+      body.style.overscrollBehaviorY = prevBodyOverscrollBehaviorY;
+    };
+  }, []);
 
   useEffect(() => {
     return () => {
