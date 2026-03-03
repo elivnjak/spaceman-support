@@ -232,6 +232,16 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
     }
   }, []);
 
+  const nudgeWindowScrollToTop = useCallback(() => {
+    try {
+      window.scrollTo({ top: -1, left: 0, behavior: "instant" as ScrollBehavior });
+      window.scrollTo({ top: 0, left: 0, behavior: "instant" as ScrollBehavior });
+    } catch {
+      window.scrollTo({ top: -1, left: 0, behavior: "auto" });
+      window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    }
+  }, []);
+
   const resetPageScrollToTop = useCallback(() => {
     const html = document.documentElement;
     const body = document.body;
@@ -241,6 +251,7 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
     html.style.scrollBehavior = "auto";
     body.style.scrollBehavior = "auto";
 
+    nudgeWindowScrollToTop();
     window.scrollTo(0, 0);
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
     if (scrollingEl) {
@@ -259,7 +270,7 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
       html.style.scrollBehavior = prevHtmlScrollBehavior;
       body.style.scrollBehavior = prevBodyScrollBehavior;
     });
-  }, []);
+  }, [nudgeWindowScrollToTop]);
 
   const forceTopScrollAfterStart = useCallback(() => {
     const activeEl = document.activeElement;
@@ -278,6 +289,15 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
       resetPageScrollToTop();
     }, 60);
     startScrollResetTimersRef.current.push(blurTimer);
+    const safariNudgeTimerA = setTimeout(() => {
+      nudgeWindowScrollToTop();
+      resetPageScrollToTop();
+    }, 150);
+    const safariNudgeTimerB = setTimeout(() => {
+      nudgeWindowScrollToTop();
+      resetPageScrollToTop();
+    }, 500);
+    startScrollResetTimersRef.current.push(safariNudgeTimerA, safariNudgeTimerB);
 
     for (const delayMs of [40, 100, 180, 280, 420, 620, 900, 1200, 1800, 2500, 3500]) {
       const timer = setTimeout(resetPageScrollToTop, delayMs);
@@ -304,7 +324,14 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
       }
     }, 4000);
     startScrollResetTimersRef.current.push(removeViewportListenersTimer);
-  }, [clearStartScrollResetTimers, resetPageScrollToTop]);
+  }, [clearStartScrollResetTimers, nudgeWindowScrollToTop, resetPageScrollToTop]);
+
+  const scrollTopAfterWelcomeFieldBlur = useCallback(() => {
+    const nowTimer = setTimeout(resetPageScrollToTop, 0);
+    const t1 = setTimeout(resetPageScrollToTop, 120);
+    const t2 = setTimeout(resetPageScrollToTop, 320);
+    startScrollResetTimersRef.current.push(nowTimer, t1, t2);
+  }, [resetPageScrollToTop]);
 
   // Restore session from sessionStorage on mount (e.g. after page reload).
   useEffect(() => {
@@ -1025,6 +1052,7 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
                   required
                   value={userName}
                   onChange={(e) => setUserName(e.target.value)}
+                  onBlur={scrollTopAfterWelcomeFieldBlur}
                   placeholder="Your name"
                   className="w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-ink placeholder:text-muted focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
                 />
@@ -1042,7 +1070,10 @@ export function ChatPageClient({ isHomePage, isAuthenticated = false }: ChatPage
                     setUserPhone(e.target.value);
                     setPhoneError(getAustralianPhoneError(e.target.value));
                   }}
-                  onBlur={() => setPhoneError(getAustralianPhoneError(userPhone))}
+                  onBlur={() => {
+                    setPhoneError(getAustralianPhoneError(userPhone));
+                    scrollTopAfterWelcomeFieldBlur();
+                  }}
                   placeholder="Your phone number"
                   aria-invalid={!!phoneError}
                   aria-describedby={phoneError ? "prechat-phone-error" : undefined}
