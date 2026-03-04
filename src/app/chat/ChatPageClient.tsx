@@ -229,6 +229,7 @@ export function ChatPageClient({
     DEFAULT_PUBLIC_TECHNICAL_DIFFICULTIES_MESSAGE_TEXT;
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [turnstileScriptLoaded, setTurnstileScriptLoaded] = useState(false);
+  const [turnstileDebug, setTurnstileDebug] = useState<string | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const messagesRef = useRef<ChatMessage[]>([]);
   const turnstileContainerRef = useRef<HTMLDivElement>(null);
@@ -662,6 +663,7 @@ export function ChatPageClient({
     if (!container || typeof window === "undefined" || !window.turnstile) return;
 
     setTurnstileToken(null);
+    setTurnstileDebug(null);
     if (turnstileWidgetIdRef.current) {
       window.turnstile.remove(turnstileWidgetIdRef.current);
       turnstileWidgetIdRef.current = null;
@@ -670,9 +672,20 @@ export function ChatPageClient({
     turnstileWidgetIdRef.current = window.turnstile.render(container, {
       sitekey: activeTurnstileSiteKey,
       appearance: "interaction-only",
-      callback: (token) => setTurnstileToken(token),
-      "expired-callback": () => setTurnstileToken(null),
-      "error-callback": () => setTurnstileToken(null),
+      callback: (token) => {
+        setTurnstileToken(token);
+        setTurnstileDebug(null);
+      },
+      "expired-callback": () => {
+        setTurnstileToken(null);
+        setTurnstileDebug("Verification expired. Please complete it again.");
+      },
+      "error-callback": () => {
+        setTurnstileToken(null);
+        setTurnstileDebug(
+          "Verification widget error. Disable blockers/VPN, refresh, and try again."
+        );
+      },
     });
   }, [sessionId, turnstileScriptLoaded, activeTurnstileSiteKey]);
 
@@ -687,6 +700,9 @@ export function ChatPageClient({
     }
     if (!sessionId && activeTurnstileSiteKey && !turnstileToken) {
       setError("Please complete verification and try again.");
+      if (!turnstileScriptLoaded) {
+        setTurnstileDebug("Verification script did not load yet. Please refresh the page.");
+      }
       return;
     }
     const latestAssistantWithRequests = [...messagesRef.current]
@@ -1008,6 +1024,9 @@ export function ChatPageClient({
           src="https://challenges.cloudflare.com/turnstile/v0/api.js"
           strategy="afterInteractive"
           onLoad={() => setTurnstileScriptLoaded(true)}
+          onError={() =>
+            setTurnstileDebug("Verification script failed to load. Check blockers/network.")
+          }
         />
       )}
       <header className="sticky top-0 z-10 px-4 py-3" style={{ backgroundColor: "#0B111E" }}>
@@ -1123,10 +1142,17 @@ export function ChatPageClient({
                 )}
               </div>
               {activeTurnstileSiteKey && (
-                <div
-                  ref={turnstileContainerRef}
-                  className="overflow-hidden"
-                />
+                <>
+                  <div
+                    ref={turnstileContainerRef}
+                    className="overflow-hidden"
+                  />
+                  {turnstileDebug && (
+                    <p className="mt-1 text-sm text-amber-700" role="status">
+                      {turnstileDebug}
+                    </p>
+                  )}
+                </>
               )}
               <button
                 type="submit"
