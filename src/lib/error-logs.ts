@@ -2,10 +2,7 @@ import { appendFile, mkdir, readdir, readFile, stat, unlink } from "fs/promises"
 import path from "path";
 import { NextResponse } from "next/server";
 import {
-  getSessionCookieName,
-  getSessionFromRequest,
   requireAdminUiAuth,
-  rotateSessionToken,
 } from "@/lib/auth";
 
 export type ErrorLogLevel = "error" | "warn" | "info";
@@ -369,20 +366,6 @@ export function withApiRouteErrorLogging<
   routeName: string,
   handler: (...args: TArgs) => TResult
 ): (...args: TArgs) => Promise<Response> {
-  function buildSessionCookie(token: string, expiresAt: Date): string {
-    const parts = [
-      `${getSessionCookieName()}=${encodeURIComponent(token)}`,
-      "Path=/",
-      "HttpOnly",
-      "SameSite=Lax",
-      `Expires=${expiresAt.toUTCString()}`,
-    ];
-    if (process.env.NODE_ENV === "production") {
-      parts.push("Secure");
-    }
-    return parts.join("; ");
-  }
-
   const wrapped = async (...args: TArgs): Promise<Response> => {
     const ctx = await extractContextData(args as unknown[]).catch(() => ({
       method: null,
@@ -390,7 +373,6 @@ export function withApiRouteErrorLogging<
       sessionId: null,
       params: null,
     }));
-    let sessionTokenForRotation: string | null = null;
 
     try {
       if (routeName.startsWith("/api/admin")) {
@@ -400,29 +382,10 @@ export function withApiRouteErrorLogging<
           if (authError) {
             return authError;
           }
-
-          const session = await getSessionFromRequest(request);
-          sessionTokenForRotation = session?.token ?? null;
         }
       }
 
       const response = await handler(...args);
-      if (
-        sessionTokenForRotation &&
-        response.status < 400 &&
-        routeName.startsWith("/api/admin")
-      ) {
-        const rotated = await rotateSessionToken(sessionTokenForRotation).catch(
-          () => null
-        );
-        if (rotated) {
-          response.headers.append(
-            "Set-Cookie",
-            buildSessionCookie(rotated.token, rotated.expiresAt)
-          );
-        }
-      }
-
       if (response.status >= 500) {
         await logErrorEvent({
           level: "error",

@@ -28,6 +28,21 @@ type Label = {
 
 type DocType = "pdf" | "txt" | "md" | "pasted" | "html";
 
+function toArray<T>(value: unknown): T[] {
+  return Array.isArray(value) ? (value as T[]) : [];
+}
+
+async function fetchJsonSafe(url: string): Promise<{ ok: boolean; status: number; data: unknown }> {
+  const response = await fetch(url);
+  let data: unknown = null;
+  try {
+    data = await response.json();
+  } catch {
+    data = null;
+  }
+  return { ok: response.ok, status: response.status, data };
+}
+
 function getDocType(filePath: string): DocType {
   if (filePath === "_pasted") return "pasted";
   if (filePath === "_url") return "html";
@@ -111,15 +126,28 @@ export default function AdminDocsPage() {
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
+  const refreshDocs = async () => {
+    const docsRes = await fetchJsonSafe("/api/admin/docs");
+    setDocs(toArray<Doc>(docsRes.data));
+  };
+
   useEffect(() => {
-    fetch("/api/admin/docs")
-      .then((r) => r.json())
-      .then(setDocs)
-      .finally(() => setLoading(false));
-    fetch("/api/admin/labels")
-      .then((r) => r.json())
-      .then(setLabels)
-      .catch(() => setLabels([]));
+    const load = async () => {
+      try {
+        const [docsRes, labelsRes] = await Promise.all([
+          fetchJsonSafe("/api/admin/docs"),
+          fetchJsonSafe("/api/admin/labels"),
+        ]);
+        setDocs(toArray<Doc>(docsRes.data));
+        setLabels(toArray<Label>(labelsRes.data));
+      } catch {
+        setDocs([]);
+        setLabels([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+    void load();
   }, []);
 
   const handleUpload = async (e: React.FormEvent) => {
@@ -295,8 +323,8 @@ export default function AdminDocsPage() {
             body: "{}",
           });
           if (ingestRes.ok) {
-            const listRes = await fetch("/api/admin/docs");
-            const list = await listRes.json();
+            const listRes = await fetchJsonSafe("/api/admin/docs");
+            const list = toArray<Doc>(listRes.data);
             setDocs(list);
             setBulkProgress((prev) =>
               prev
@@ -361,9 +389,7 @@ export default function AdminDocsPage() {
         body: JSON.stringify(pasted != null ? { pastedText: pasted } : {}),
       });
       if (res.ok) {
-        const listRes = await fetch("/api/admin/docs");
-        const list = await listRes.json();
-        setDocs(list);
+        await refreshDocs();
       } else {
         const err = await res.json();
         setDocs((prev) =>

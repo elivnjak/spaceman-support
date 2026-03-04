@@ -1,4 +1,6 @@
 import { cookies } from "next/headers";
+import { headers } from "next/headers";
+import { redirect } from "next/navigation";
 import {
   getSessionCookieName,
   hasAdminUiAccess,
@@ -12,6 +14,8 @@ export default async function AdminLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const headerStore = await headers();
+  const pathname = headerStore.get("x-pathname") ?? "/admin";
   let role: AdminUiRole | null = null;
   try {
     const cookieStore = await cookies();
@@ -23,6 +27,10 @@ export default async function AdminLayout({
   }
 
   if (!role) {
+    if (pathname !== "/admin") {
+      const next = encodeURIComponent(pathname);
+      redirect(`/admin?unauthorized=1&next=${next}`);
+    }
     return (
       <div className="min-h-screen bg-page">
         {children}

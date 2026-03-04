@@ -32,7 +32,6 @@ const navGroups: NavGroup[] = [
     items: [
       { href: "/admin/actions", label: "Actions" },
       { href: "/admin/labels", label: "Labels" },
-      { href: "/admin/images", label: "Reference images" },
       { href: "/admin/docs", label: "Documents" },
       { href: "/admin/playbooks", label: "Playbooks" },
       { href: "/admin/intent", label: "Intent manifest" },

@@ -42,6 +42,14 @@ function getAllowedOrigins(request: NextRequest): Set<string> {
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-pathname", pathname);
+  const nextWithPathHeader = () =>
+    NextResponse.next({
+      request: {
+        headers: requestHeaders,
+      },
+    });
   // Support both production (__Host-session_token) and local/dev (session_token) cookies.
   const sessionToken =
     request.cookies.get("__Host-session_token")?.value?.trim() ??
@@ -50,7 +58,7 @@ export async function proxy(request: NextRequest) {
 
   // Allow admin root to render login form when unauthenticated.
   if (pathname === "/admin") {
-    return NextResponse.next();
+    return nextWithPathHeader();
   }
 
   // --- Admin UI routes: require session cookie ---
@@ -61,7 +69,7 @@ export async function proxy(request: NextRequest) {
       redirectUrl.searchParams.set("next", pathname);
       return NextResponse.redirect(redirectUrl);
     }
-    return NextResponse.next();
+    return nextWithPathHeader();
   }
 
   // --- Admin API routes: require session cookie ---
@@ -72,7 +80,7 @@ export async function proxy(request: NextRequest) {
         { status: 401 }
       );
     }
-    return NextResponse.next();
+    return nextWithPathHeader();
   }
 
   // --- Chat API routes: CORS, rate limiting ---
@@ -122,10 +130,10 @@ export async function proxy(request: NextRequest) {
       }
     }
 
-    return NextResponse.next();
+    return nextWithPathHeader();
   }
 
-  return NextResponse.next();
+  return nextWithPathHeader();
 }
 
 export const config = {
