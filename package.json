@@ -2,6 +2,9 @@
   "name": "ai-rag-saas",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": "22.x"
+  },
   "scripts": {
     "dev": "next dev -p 3001",
     "build": "next build",
@@ -14,8 +17,8 @@
     "db:init": "npx tsx scripts/init-vector-extension.ts",
     "db:deploy": "npx tsx scripts/init-vector-extension.ts && npm run db:migrate",
     "db:setup": "npx tsx scripts/init-vector-extension.ts && npm run db:migrate && npm run db:seed",
-    "railway:link": "railway link",
-    "railway:setup": "railway run npm run db:setup",
+    "railway:link": "npx @railway/cli@latest link",
+    "railway:setup": "npx @railway/cli@latest run npm run db:setup",
     "railway:setup:prod": "npx tsx scripts/run-with-production-env.ts npm run db:setup",
     "railway:migrate": "npm run db:deploy",
     "railway:start": "npm run railway:migrate && npm start",
@@ -55,7 +58,6 @@
     }
   },
   "devDependencies": {
-    "@railway/cli": "^4.30.3",
     "@types/bcryptjs": "^2.4.6",
     "@types/jsdom": "^27.0.0",
     "@types/node": "^25.3.3",
