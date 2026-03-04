@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Button } from "@/components/ui/Button";
@@ -23,6 +23,10 @@ export default function AdminUsersPageClient({
   const [savingEdit, setSavingEdit] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [query, setQuery] = useState("");
+  const [roleFilter, setRoleFilter] = useState<"all" | "admin" | "editor">("all");
+  const [pageSize, setPageSize] = useState(25);
+  const [page, setPage] = useState(1);
 
   const loadList = () => {
     setError(null);
@@ -50,6 +54,10 @@ export default function AdminUsersPageClient({
   useEffect(() => {
     loadList();
   }, []);
+
+  useEffect(() => {
+    setPage(1);
+  }, [query, roleFilter, pageSize]);
 
   const startEdit = (user: User) => {
     setEditing(user);
@@ -101,6 +109,31 @@ export default function AdminUsersPageClient({
     }
   };
 
+  const sortedUsers = useMemo(
+    () => [...list].sort((a, b) => a.email.localeCompare(b.email)),
+    [list]
+  );
+
+  const normalizedQuery = query.trim().toLowerCase();
+  const filteredUsers = useMemo(() => {
+    return sortedUsers.filter((user) => {
+      if (roleFilter !== "all" && user.role !== roleFilter) return false;
+      if (!normalizedQuery) return true;
+      return user.email.toLowerCase().includes(normalizedQuery);
+    });
+  }, [sortedUsers, roleFilter, normalizedQuery]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredUsers.length / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const paginatedUsers = filteredUsers.slice(
+    (safePage - 1) * pageSize,
+    safePage * pageSize
+  );
+
+  useEffect(() => {
+    if (page !== safePage) setPage(safePage);
+  }, [page, safePage]);
+
   if (loading) return <p className="text-muted">Loading…</p>;
 
   return (
@@ -122,45 +155,208 @@ export default function AdminUsersPageClient({
         </p>
       )}
 
-      <ul className="space-y-2">
-        {list.map((u) => (
-          <li
-            key={u.id}
-            className="flex flex-wrap items-center justify-between gap-2 rounded-card border border-border bg-surface p-3 shadow-card"
-          >
-            <div>
-              <span className="font-medium text-ink">{u.email}</span>
-              <Badge className="ml-2" variant={u.role === "admin" ? "info" : "default"}>
-                {u.role}
-              </Badge>
-              {currentUserId === u.id && (
-                <span className="ml-2 text-xs text-muted">(you)</span>
-              )}
-              <p className="mt-1 text-sm text-muted">
-                Created {new Date(u.createdAt).toLocaleDateString()}
-              </p>
-            </div>
-            <div className="flex gap-2">
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => startEdit(u)}
+      <section className="mb-4 flex flex-wrap items-center gap-3">
+        <div className="min-w-[260px] flex-1">
+          <Input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Filter by email..."
+          />
+        </div>
+        <select
+          value={roleFilter}
+          onChange={(e) => setRoleFilter(e.target.value as "all" | "admin" | "editor")}
+          className="min-h-[44px] rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-ink"
+          aria-label="Filter by role"
+        >
+          <option value="all">All roles</option>
+          <option value="admin">Admin</option>
+          <option value="editor">Editor</option>
+        </select>
+        <select
+          value={String(pageSize)}
+          onChange={(e) => setPageSize(Number(e.target.value))}
+          className="min-h-[44px] rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-ink"
+          aria-label="Users per page"
+        >
+          <option value="10">10 / page</option>
+          <option value="25">25 / page</option>
+          <option value="50">50 / page</option>
+          <option value="100">100 / page</option>
+        </select>
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={() => {
+            setQuery("");
+            setRoleFilter("all");
+          }}
+          disabled={!query && roleFilter === "all"}
+        >
+          Clear filters
+        </Button>
+      </section>
+
+      <div className="mb-4 text-right text-sm text-muted">
+        {filteredUsers.length} shown / {list.length} total
+      </div>
+
+      <div className="overflow-x-auto rounded-card border border-border bg-surface shadow-card">
+        <table className="min-w-full divide-y divide-border">
+          <thead className="bg-page">
+            <tr className="text-left text-xs uppercase tracking-wide text-muted">
+              <th className="px-4 py-3">Email</th>
+              <th className="px-4 py-3">Role</th>
+              <th className="px-4 py-3">Created</th>
+              <th className="px-4 py-3 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {list.length === 0 ? (
+              <tr>
+                <td className="px-4 py-6 text-sm text-muted" colSpan={4}>
+                  No users found.
+                </td>
+              </tr>
+            ) : filteredUsers.length === 0 ? (
+              <tr>
+                <td className="px-4 py-6 text-sm text-muted" colSpan={4}>
+                  No users match the current filters.
+                </td>
+              </tr>
+            ) : (
+              paginatedUsers.map((u) => (
+                <tr key={u.id} className="text-sm">
+                  <td className="px-4 py-3">
+                    <div className="font-medium text-ink">{u.email}</div>
+                    {currentUserId === u.id && <div className="text-xs text-muted">(you)</div>}
+                  </td>
+                  <td className="px-4 py-3">
+                    <Badge variant={u.role === "admin" ? "info" : "default"}>{u.role}</Badge>
+                  </td>
+                  <td className="px-4 py-3 text-muted">
+                    {new Date(u.createdAt).toLocaleDateString()}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex justify-end gap-2">
+                      <Button variant="secondary" size="sm" onClick={() => startEdit(u)}>
+                        Edit
+                      </Button>
+                      <Button
+                        variant="danger"
+                        size="sm"
+                        onClick={() => setDeleteId(u.id)}
+                        disabled={currentUserId === u.id}
+                        title={
+                          currentUserId === u.id
+                            ? "You cannot delete your own account"
+                            : "Delete user"
+                        }
+                      >
+                        Delete
+                      </Button>
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {filteredUsers.length > 0 && (
+        <div className="mt-4 flex flex-col items-center gap-2">
+          {totalPages > 1 && (
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setPage(1)}
+                disabled={safePage <= 1}
+                aria-label="First page"
+                className="flex h-8 w-8 items-center justify-center rounded-md border border-border bg-surface text-sm text-ink transition-colors hover:bg-page disabled:cursor-not-allowed disabled:opacity-40"
               >
-                Edit
-              </Button>
-              <Button
-                variant="danger"
-                size="sm"
-                onClick={() => setDeleteId(u.id)}
-                disabled={currentUserId === u.id}
-                title={currentUserId === u.id ? "You cannot delete your own account" : "Delete user"}
+                «
+              </button>
+              <button
+                type="button"
+                onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+                disabled={safePage <= 1}
+                aria-label="Previous page"
+                className="flex h-8 w-8 items-center justify-center rounded-md border border-border bg-surface text-sm text-ink transition-colors hover:bg-page disabled:cursor-not-allowed disabled:opacity-40"
               >
-                Delete
-              </Button>
+                ‹
+              </button>
+
+              {(() => {
+                const pages: (number | "...")[] = [];
+                const total = totalPages;
+                const current = safePage;
+                if (total <= 7) {
+                  for (let i = 1; i <= total; i++) pages.push(i);
+                } else {
+                  pages.push(1);
+                  if (current > 3) pages.push("...");
+                  const start = Math.max(2, current - 1);
+                  const end = Math.min(total - 1, current + 1);
+                  for (let i = start; i <= end; i++) pages.push(i);
+                  if (current < total - 2) pages.push("...");
+                  pages.push(total);
+                }
+                return pages.map((p, idx) =>
+                  p === "..." ? (
+                    <span
+                      key={`ellipsis-${idx}`}
+                      className="flex h-8 w-8 items-center justify-center text-sm text-muted"
+                    >
+                      …
+                    </span>
+                  ) : (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setPage(p as number)}
+                      aria-label={`Page ${p}`}
+                      aria-current={p === current ? "page" : undefined}
+                      className={`flex h-8 min-w-[2rem] items-center justify-center rounded-md border px-2 text-sm transition-colors ${
+                        p === current
+                          ? "border-primary bg-primary text-white"
+                          : "border-border bg-surface text-ink hover:bg-page"
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  )
+                );
+              })()}
+
+              <button
+                type="button"
+                onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
+                disabled={safePage >= totalPages}
+                aria-label="Next page"
+                className="flex h-8 w-8 items-center justify-center rounded-md border border-border bg-surface text-sm text-ink transition-colors hover:bg-page disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                ›
+              </button>
+              <button
+                type="button"
+                onClick={() => setPage(totalPages)}
+                disabled={safePage >= totalPages}
+                aria-label="Last page"
+                className="flex h-8 w-8 items-center justify-center rounded-md border border-border bg-surface text-sm text-ink transition-colors hover:bg-page disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                »
+              </button>
             </div>
-          </li>
-        ))}
-      </ul>
+          )}
+          <p className="text-sm text-muted">
+            Showing {(safePage - 1) * pageSize + 1}–
+            {Math.min(safePage * pageSize, filteredUsers.length)} of {filteredUsers.length} user
+            {filteredUsers.length === 1 ? "" : "s"}
+          </p>
+        </div>
+      )}
 
       <Modal open={!!editing} onClose={() => setEditing(null)}>
         <h2 className="mb-4 text-lg font-semibold text-ink">Edit user</h2>

@@ -10,6 +10,7 @@ type AuditSessionSummary = {
   sessionId: string;
   logCount: number;
   lastLogAt: string | null;
+  userName: string | null;
   status: string | null;
   phase: string | null;
   turnCount: number | null;
@@ -39,6 +40,10 @@ export default function AdminAuditLogsPage() {
   const [selectedSessionIds, setSelectedSessionIds] = useState<Set<string>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [phaseFilter, setPhaseFilter] = useState("all");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
 
   useEffect(() => {
     fetch("/api/admin/audit-logs")
@@ -53,16 +58,60 @@ export default function AdminAuditLogsPage() {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return rows;
-    return rows.filter((row) =>
-      [row.sessionId, row.machineModel, row.serialNumber, row.productType, row.phase, row.status]
+    return rows.filter((row) => {
+      if (statusFilter !== "all" && (row.status ?? "") !== statusFilter) return false;
+      if (phaseFilter !== "all" && (row.phase ?? "") !== phaseFilter) return false;
+      if (!q) return true;
+      return [
+        row.sessionId,
+        row.userName,
+        row.machineModel,
+        row.serialNumber,
+        row.productType,
+        row.phase,
+        row.status,
+      ]
         .filter(Boolean)
-        .some((value) => String(value).toLowerCase().includes(q))
+        .some((value) => String(value).toLowerCase().includes(q));
+    });
+  }, [phaseFilter, query, rows, statusFilter]);
+
+  const statusOptions = useMemo(() => {
+    const unique = new Set(
+      rows
+        .map((row) => row.status)
+        .filter((value): value is string => Boolean(value))
     );
-  }, [query, rows]);
+    return Array.from(unique).sort((a, b) => a.localeCompare(b));
+  }, [rows]);
+
+  const phaseOptions = useMemo(() => {
+    const unique = new Set(
+      rows
+        .map((row) => row.phase)
+        .filter((value): value is string => Boolean(value))
+    );
+    return Array.from(unique).sort((a, b) => a.localeCompare(b));
+  }, [rows]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [query, statusFilter, phaseFilter, pageSize]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const paginatedRows = useMemo(
+    () => filtered.slice((safePage - 1) * pageSize, safePage * pageSize),
+    [filtered, pageSize, safePage]
+  );
+
+  useEffect(() => {
+    if (page !== safePage) setPage(safePage);
+  }, [page, safePage]);
 
   const allFilteredSelected =
-    filtered.length > 0 && filtered.every((row) => selectedSessionIds.has(row.sessionId));
+    paginatedRows.length > 0 &&
+    paginatedRows.every((row) => selectedSessionIds.has(row.sessionId));
   const selectedCount = selectedSessionIds.size;
 
   function toggleSelectOne(sessionId: string): void {
@@ -81,9 +130,9 @@ export default function AdminAuditLogsPage() {
     setSelectedSessionIds((prev) => {
       const next = new Set(prev);
       if (allFilteredSelected) {
-        filtered.forEach((row) => next.delete(row.sessionId));
+        paginatedRows.forEach((row) => next.delete(row.sessionId));
       } else {
-        filtered.forEach((row) => next.add(row.sessionId));
+        paginatedRows.forEach((row) => next.add(row.sessionId));
       }
       return next;
     });
@@ -159,14 +208,60 @@ export default function AdminAuditLogsPage() {
         description="Browse sessions with stored diagnostic audit data."
       />
 
-      <div className="mb-4">
+      <section className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-3">
         <Input
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Filter by session ID, model, serial, status..."
+          placeholder="Filter by session, user, model, serial, status..."
         />
-      </div>
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          className="rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-ink min-h-[44px]"
+        >
+          <option value="all">All statuses</option>
+          {statusOptions.map((status) => (
+            <option key={status} value={status}>
+              {status}
+            </option>
+          ))}
+        </select>
+        <div className="flex gap-2">
+          <select
+            value={phaseFilter}
+            onChange={(e) => setPhaseFilter(e.target.value)}
+            className="w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-ink min-h-[44px]"
+          >
+            <option value="all">All phases</option>
+            {phaseOptions.map((phase) => (
+              <option key={phase} value={phase}>
+                {phase}
+              </option>
+            ))}
+          </select>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setQuery("");
+              setStatusFilter("all");
+              setPhaseFilter("all");
+            }}
+            disabled={!query && statusFilter === "all" && phaseFilter === "all"}
+          >
+            Clear
+          </Button>
+        </div>
+      </section>
+      {!loading && filtered.length > 0 && (
+        <div className="mb-4 text-right text-sm text-muted">
+          {(() => {
+            const from = (safePage - 1) * pageSize + 1;
+            const to = Math.min(safePage * pageSize, filtered.length);
+            return `Showing ${from}–${to} of ${filtered.length} session${filtered.length === 1 ? "" : "s"}`;
+          })()}
+        </div>
+      )}
       {selectedCount > 0 && (
         <div className="mb-4 flex items-center gap-3">
           <Button
@@ -205,11 +300,12 @@ export default function AdminAuditLogsPage() {
                     type="checkbox"
                     checked={allFilteredSelected}
                     onChange={toggleSelectAllFiltered}
-                    disabled={filtered.length === 0 || bulkDeleting}
-                    aria-label="Select all filtered audit sessions"
+                    disabled={paginatedRows.length === 0 || bulkDeleting}
+                    aria-label="Select all visible audit sessions"
                   />
                 </th>
                 <th className="px-4 py-3">Session</th>
+                <th className="px-4 py-3">User</th>
                 <th className="px-4 py-3">Model</th>
                 <th className="px-4 py-3">Status</th>
                 <th className="px-4 py-3">Phase</th>
@@ -220,7 +316,7 @@ export default function AdminAuditLogsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {filtered.map((row) => (
+              {paginatedRows.map((row) => (
                 <tr key={row.sessionId} className="text-sm">
                   <td className="px-4 py-3">
                     <input
@@ -240,6 +336,7 @@ export default function AdminAuditLogsPage() {
                       {truncate(row.sessionId, 18)}
                     </Link>
                   </td>
+                  <td className="px-4 py-3 text-muted">{row.userName ?? "-"}</td>
                   <td className="px-4 py-3 text-muted">{row.machineModel ?? "-"}</td>
                   <td className="px-4 py-3 text-muted">{row.status ?? "-"}</td>
                   <td className="px-4 py-3 text-muted">{row.phase ?? "-"}</td>
@@ -262,6 +359,110 @@ export default function AdminAuditLogsPage() {
           </table>
         )}
       </div>
+
+      {!loading && filtered.length > 0 && (
+        <div className="mt-4 flex flex-col items-center gap-2">
+          {totalPages > 1 && (
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setPage(1)}
+                disabled={safePage <= 1}
+                aria-label="First page"
+                className="flex h-8 w-8 items-center justify-center rounded-md border border-border bg-surface text-sm text-ink transition-colors hover:bg-page disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                «
+              </button>
+              <button
+                type="button"
+                onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+                disabled={safePage <= 1}
+                aria-label="Previous page"
+                className="flex h-8 w-8 items-center justify-center rounded-md border border-border bg-surface text-sm text-ink transition-colors hover:bg-page disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                ‹
+              </button>
+              {(() => {
+                const pages: (number | "...")[] = [];
+                const total = totalPages;
+                const current = safePage;
+
+                if (total <= 7) {
+                  for (let i = 1; i <= total; i++) pages.push(i);
+                } else {
+                  pages.push(1);
+                  if (current > 3) pages.push("...");
+                  const start = Math.max(2, current - 1);
+                  const end = Math.min(total - 1, current + 1);
+                  for (let i = start; i <= end; i++) pages.push(i);
+                  if (current < total - 2) pages.push("...");
+                  pages.push(total);
+                }
+
+                return pages.map((p, idx) =>
+                  p === "..." ? (
+                    <span
+                      key={`ellipsis-${idx}`}
+                      className="flex h-8 w-8 items-center justify-center text-sm text-muted"
+                    >
+                      …
+                    </span>
+                  ) : (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setPage(p as number)}
+                      aria-label={`Page ${p}`}
+                      aria-current={p === current ? "page" : undefined}
+                      className={`flex h-8 min-w-[2rem] items-center justify-center rounded-md border px-2 text-sm transition-colors ${
+                        p === current
+                          ? "border-primary bg-primary text-white"
+                          : "border-border bg-surface text-ink hover:bg-page"
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  )
+                );
+              })()}
+              <button
+                type="button"
+                onClick={() => setPage((prev) => prev + 1)}
+                disabled={safePage >= totalPages}
+                aria-label="Next page"
+                className="flex h-8 w-8 items-center justify-center rounded-md border border-border bg-surface text-sm text-ink transition-colors hover:bg-page disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                ›
+              </button>
+              <button
+                type="button"
+                onClick={() => setPage(totalPages)}
+                disabled={safePage >= totalPages}
+                aria-label="Last page"
+                className="flex h-8 w-8 items-center justify-center rounded-md border border-border bg-surface text-sm text-ink transition-colors hover:bg-page disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                »
+              </button>
+            </div>
+          )}
+          <div className="flex items-center gap-2">
+            <label htmlFor="audit-page-size" className="text-sm text-muted">
+              Rows per page
+            </label>
+            <select
+              id="audit-page-size"
+              value={String(pageSize)}
+              onChange={(e) => setPageSize(Number(e.target.value))}
+              className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-ink"
+            >
+              <option value="10">10</option>
+              <option value="25">25</option>
+              <option value="50">50</option>
+              <option value="100">100</option>
+            </select>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

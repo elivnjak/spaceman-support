@@ -79,6 +79,10 @@ export default function AdminErrorLogsPage() {
   const [levelFilter, setLevelFilter] = useState<"" | ErrorLogLevel>("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [summaryPage, setSummaryPage] = useState(1);
+  const [summaryPageSize, setSummaryPageSize] = useState(10);
+  const [entriesPage, setEntriesPage] = useState(1);
+  const [entriesPageSize, setEntriesPageSize] = useState(20);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -116,6 +120,11 @@ export default function AdminErrorLogsPage() {
     };
   }, [levelFilter, query, sessionIdFilter]);
 
+  useEffect(() => {
+    setSummaryPage(1);
+    setEntriesPage(1);
+  }, [query, sessionIdFilter, levelFilter, summaryPageSize, entriesPageSize]);
+
   const totalCount = entries.length;
   const levelCounts = useMemo(() => {
     return entries.reduce(
@@ -126,6 +135,36 @@ export default function AdminErrorLogsPage() {
       { error: 0, warn: 0, info: 0 }
     );
   }, [entries]);
+
+  const summaryTotalPages = Math.max(1, Math.ceil(summary.length / summaryPageSize));
+  const safeSummaryPage = Math.min(summaryPage, summaryTotalPages);
+  const paginatedSummary = useMemo(
+    () =>
+      summary.slice(
+        (safeSummaryPage - 1) * summaryPageSize,
+        safeSummaryPage * summaryPageSize
+      ),
+    [summary, safeSummaryPage, summaryPageSize]
+  );
+
+  const entriesTotalPages = Math.max(1, Math.ceil(entries.length / entriesPageSize));
+  const safeEntriesPage = Math.min(entriesPage, entriesTotalPages);
+  const paginatedEntries = useMemo(
+    () =>
+      entries.slice(
+        (safeEntriesPage - 1) * entriesPageSize,
+        safeEntriesPage * entriesPageSize
+      ),
+    [entries, safeEntriesPage, entriesPageSize]
+  );
+
+  useEffect(() => {
+    if (summaryPage !== safeSummaryPage) setSummaryPage(safeSummaryPage);
+  }, [summaryPage, safeSummaryPage]);
+
+  useEffect(() => {
+    if (entriesPage !== safeEntriesPage) setEntriesPage(safeEntriesPage);
+  }, [entriesPage, safeEntriesPage]);
 
   return (
     <div>
@@ -213,7 +252,7 @@ export default function AdminErrorLogsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {summary.map((row) => (
+              {paginatedSummary.map((row) => (
                 <tr key={row.sessionId ?? "__no_session__"} className="text-sm">
                   <td className="px-4 py-3">
                     {row.sessionId ? (
@@ -246,8 +285,126 @@ export default function AdminErrorLogsPage() {
         )}
       </section>
 
+      {!loading && !error && summary.length > 0 && (
+        <div className="mb-6 flex flex-col items-center gap-2">
+          {summaryTotalPages > 1 && (
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setSummaryPage(1)}
+                disabled={safeSummaryPage <= 1}
+                aria-label="First summary page"
+                className="flex h-8 w-8 items-center justify-center rounded-md border border-border bg-surface text-sm text-ink transition-colors hover:bg-page disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                «
+              </button>
+              <button
+                type="button"
+                onClick={() => setSummaryPage((prev) => Math.max(1, prev - 1))}
+                disabled={safeSummaryPage <= 1}
+                aria-label="Previous summary page"
+                className="flex h-8 w-8 items-center justify-center rounded-md border border-border bg-surface text-sm text-ink transition-colors hover:bg-page disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                ‹
+              </button>
+              {(() => {
+                const pages: (number | "...")[] = [];
+                const total = summaryTotalPages;
+                const current = safeSummaryPage;
+                if (total <= 7) {
+                  for (let i = 1; i <= total; i++) pages.push(i);
+                } else {
+                  pages.push(1);
+                  if (current > 3) pages.push("...");
+                  const start = Math.max(2, current - 1);
+                  const end = Math.min(total - 1, current + 1);
+                  for (let i = start; i <= end; i++) pages.push(i);
+                  if (current < total - 2) pages.push("...");
+                  pages.push(total);
+                }
+                return pages.map((p, idx) =>
+                  p === "..." ? (
+                    <span
+                      key={`summary-ellipsis-${idx}`}
+                      className="flex h-8 w-8 items-center justify-center text-sm text-muted"
+                    >
+                      …
+                    </span>
+                  ) : (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setSummaryPage(p as number)}
+                      aria-label={`Summary page ${p}`}
+                      aria-current={p === current ? "page" : undefined}
+                      className={`flex h-8 min-w-[2rem] items-center justify-center rounded-md border px-2 text-sm transition-colors ${
+                        p === current
+                          ? "border-primary bg-primary text-white"
+                          : "border-border bg-surface text-ink hover:bg-page"
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  )
+                );
+              })()}
+              <button
+                type="button"
+                onClick={() => setSummaryPage((prev) => Math.min(summaryTotalPages, prev + 1))}
+                disabled={safeSummaryPage >= summaryTotalPages}
+                aria-label="Next summary page"
+                className="flex h-8 w-8 items-center justify-center rounded-md border border-border bg-surface text-sm text-ink transition-colors hover:bg-page disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                ›
+              </button>
+              <button
+                type="button"
+                onClick={() => setSummaryPage(summaryTotalPages)}
+                disabled={safeSummaryPage >= summaryTotalPages}
+                aria-label="Last summary page"
+                className="flex h-8 w-8 items-center justify-center rounded-md border border-border bg-surface text-sm text-ink transition-colors hover:bg-page disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                »
+              </button>
+            </div>
+          )}
+          <div className="flex flex-wrap items-center justify-center gap-3 text-sm text-muted">
+            <span>
+              Showing {(safeSummaryPage - 1) * summaryPageSize + 1}–
+              {Math.min(safeSummaryPage * summaryPageSize, summary.length)} of {summary.length} sessions
+            </span>
+            <select
+              value={String(summaryPageSize)}
+              onChange={(e) => setSummaryPageSize(Number(e.target.value))}
+              className="rounded-lg border border-border bg-surface px-2 py-1.5 text-sm text-ink"
+              aria-label="Summary rows per page"
+            >
+              <option value="10">10 / page</option>
+              <option value="25">25 / page</option>
+              <option value="50">50 / page</option>
+              <option value="100">100 / page</option>
+            </select>
+          </div>
+        </div>
+      )}
+
       <section className="space-y-3">
-        <h2 className="text-lg font-semibold text-ink">Log entries</h2>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold text-ink">Log entries</h2>
+          {!loading && !error && entries.length > 0 && (
+            <select
+              value={String(entriesPageSize)}
+              onChange={(e) => setEntriesPageSize(Number(e.target.value))}
+              className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-ink"
+              aria-label="Log entries per page"
+            >
+              <option value="10">10 / page</option>
+              <option value="20">20 / page</option>
+              <option value="50">50 / page</option>
+              <option value="100">100 / page</option>
+            </select>
+          )}
+        </div>
         {loading ? (
           <Card>
             <p className="text-sm text-muted">Loading entries...</p>
@@ -261,7 +418,7 @@ export default function AdminErrorLogsPage() {
             <p className="text-sm text-muted">No matching log entries.</p>
           </Card>
         ) : (
-          entries.map((entry) => (
+          paginatedEntries.map((entry) => (
             <article
               key={entry.id}
               className={`rounded-card border bg-surface p-4 ${levelCardClasses(entry.level)}`}
@@ -322,6 +479,96 @@ export default function AdminErrorLogsPage() {
           ))
         )}
       </section>
+
+      {!loading && !error && entries.length > 0 && (
+        <div className="mt-4 flex flex-col items-center gap-2">
+          {entriesTotalPages > 1 && (
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setEntriesPage(1)}
+                disabled={safeEntriesPage <= 1}
+                aria-label="First log page"
+                className="flex h-8 w-8 items-center justify-center rounded-md border border-border bg-surface text-sm text-ink transition-colors hover:bg-page disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                «
+              </button>
+              <button
+                type="button"
+                onClick={() => setEntriesPage((prev) => Math.max(1, prev - 1))}
+                disabled={safeEntriesPage <= 1}
+                aria-label="Previous log page"
+                className="flex h-8 w-8 items-center justify-center rounded-md border border-border bg-surface text-sm text-ink transition-colors hover:bg-page disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                ‹
+              </button>
+              {(() => {
+                const pages: (number | "...")[] = [];
+                const total = entriesTotalPages;
+                const current = safeEntriesPage;
+                if (total <= 7) {
+                  for (let i = 1; i <= total; i++) pages.push(i);
+                } else {
+                  pages.push(1);
+                  if (current > 3) pages.push("...");
+                  const start = Math.max(2, current - 1);
+                  const end = Math.min(total - 1, current + 1);
+                  for (let i = start; i <= end; i++) pages.push(i);
+                  if (current < total - 2) pages.push("...");
+                  pages.push(total);
+                }
+                return pages.map((p, idx) =>
+                  p === "..." ? (
+                    <span
+                      key={`entry-ellipsis-${idx}`}
+                      className="flex h-8 w-8 items-center justify-center text-sm text-muted"
+                    >
+                      …
+                    </span>
+                  ) : (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setEntriesPage(p as number)}
+                      aria-label={`Log page ${p}`}
+                      aria-current={p === current ? "page" : undefined}
+                      className={`flex h-8 min-w-[2rem] items-center justify-center rounded-md border px-2 text-sm transition-colors ${
+                        p === current
+                          ? "border-primary bg-primary text-white"
+                          : "border-border bg-surface text-ink hover:bg-page"
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  )
+                );
+              })()}
+              <button
+                type="button"
+                onClick={() => setEntriesPage((prev) => Math.min(entriesTotalPages, prev + 1))}
+                disabled={safeEntriesPage >= entriesTotalPages}
+                aria-label="Next log page"
+                className="flex h-8 w-8 items-center justify-center rounded-md border border-border bg-surface text-sm text-ink transition-colors hover:bg-page disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                ›
+              </button>
+              <button
+                type="button"
+                onClick={() => setEntriesPage(entriesTotalPages)}
+                disabled={safeEntriesPage >= entriesTotalPages}
+                aria-label="Last log page"
+                className="flex h-8 w-8 items-center justify-center rounded-md border border-border bg-surface text-sm text-ink transition-colors hover:bg-page disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                »
+              </button>
+            </div>
+          )}
+          <p className="text-sm text-muted">
+            Showing {(safeEntriesPage - 1) * entriesPageSize + 1}–
+            {Math.min(safeEntriesPage * entriesPageSize, entries.length)} of {entries.length} entries
+          </p>
+        </div>
+      )}
     </div>
   );
 }

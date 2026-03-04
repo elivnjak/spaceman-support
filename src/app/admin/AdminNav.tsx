@@ -43,7 +43,7 @@ const navGroups: NavGroup[] = [
       { href: "/admin/diagnosis-mode", label: "Diagnosis mode" },
       { href: "/admin/escalation", label: "Escalation" },
       { href: "/admin/product-types", label: "Product types" },
-      { href: "/admin/models/manage", label: "Supported models" },
+      { href: "/admin/models", label: "Supported models" },
       { href: "/admin/nameplate", label: "Nameplate config" },
       { href: "/admin/clearance", label: "Clearance config" },
     ],

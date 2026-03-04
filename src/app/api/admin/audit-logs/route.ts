@@ -9,6 +9,7 @@ type SessionSummary = {
   sessionId: string;
   logCount: number;
   lastLogAt: string | null;
+  userName: string | null;
   status: string | null;
   phase: string | null;
   turnCount: number | null;
@@ -48,6 +49,7 @@ async function GETHandler(request: Request) {
   const sessions = await db
     .select({
       id: diagnosticSessions.id,
+      userName: diagnosticSessions.userName,
       status: diagnosticSessions.status,
       phase: diagnosticSessions.phase,
       turnCount: diagnosticSessions.turnCount,
@@ -67,6 +69,7 @@ async function GETHandler(request: Request) {
       sessionId,
       logCount: summary.count,
       lastLogAt: summary.lastLogAt,
+      userName: session?.userName ?? null,
       status: session?.status ?? null,
       phase: session?.phase ?? null,
       turnCount: session?.turnCount ?? null,
