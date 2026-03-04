@@ -1,11 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Card } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
-import { Textarea } from "@/components/ui/Input";
 
 type SupportedModel = {
   id: string;
@@ -16,10 +14,9 @@ type SupportedModel = {
 export default function AdminModelsPage() {
   const [models, setModels] = useState<SupportedModel[]>([]);
   const [loading, setLoading] = useState(true);
-  const [modelNumber, setModelNumber] = useState("");
-  const [displayName, setDisplayName] = useState("");
-  const [bulkInput, setBulkInput] = useState("");
-  const [submitting, setSubmitting] = useState(false);
+  const [query, setQuery] = useState("");
+  const [pageSize, setPageSize] = useState(25);
+  const [page, setPage] = useState(1);
 
   async function reload() {
     const res = await fetch("/api/admin/supported-models");
@@ -31,45 +28,9 @@ export default function AdminModelsPage() {
     reload().finally(() => setLoading(false));
   }, []);
 
-  async function addSingle() {
-    if (!modelNumber.trim()) return;
-    setSubmitting(true);
-    try {
-      await fetch("/api/admin/supported-models", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          modelNumber: modelNumber.trim(),
-          displayName: displayName.trim() || null,
-        }),
-      });
-      setModelNumber("");
-      setDisplayName("");
-      await reload();
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  async function addBulk() {
-    const parsed = bulkInput
-      .split(/[,\n]/g)
-      .map((value) => value.trim())
-      .filter(Boolean);
-    if (parsed.length === 0) return;
-    setSubmitting(true);
-    try {
-      await fetch("/api/admin/supported-models", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ models: parsed }),
-      });
-      setBulkInput("");
-      await reload();
-    } finally {
-      setSubmitting(false);
-    }
-  }
+  useEffect(() => {
+    setPage(1);
+  }, [query, pageSize]);
 
   async function remove(id: string) {
     await fetch("/api/admin/supported-models", {
@@ -80,65 +41,97 @@ export default function AdminModelsPage() {
     await reload();
   }
 
+  const sortedModels = useMemo(
+    () => [...models].sort((a, b) => a.modelNumber.localeCompare(b.modelNumber)),
+    [models]
+  );
+
+  const normalizedQuery = query.trim().toLowerCase();
+  const filteredModels = useMemo(() => {
+    if (!normalizedQuery) return sortedModels;
+    return sortedModels.filter((model) => {
+      const modelNumber = model.modelNumber.toLowerCase();
+      const displayName = (model.displayName ?? "").toLowerCase();
+      return modelNumber.includes(normalizedQuery) || displayName.includes(normalizedQuery);
+    });
+  }, [sortedModels, normalizedQuery]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredModels.length / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const paginatedModels = filteredModels.slice(
+    (safePage - 1) * pageSize,
+    safePage * pageSize
+  );
+
+  useEffect(() => {
+    if (page !== safePage) setPage(safePage);
+  }, [page, safePage]);
+
   if (loading) return <p>Loading...</p>;
 
   return (
     <div className="space-y-8">
-      <PageHeader title="Supported models" />
+      <PageHeader
+        title="Supported models"
+        description="View and remove currently configured models."
+      />
 
       <Card>
-        <h2 className="mb-4 text-lg font-semibold text-ink">Add model</h2>
-        <div className="grid gap-3 sm:grid-cols-3">
-          <Input
-            type="text"
-            value={modelNumber}
-            onChange={(e) => setModelNumber(e.target.value)}
-            placeholder="Model number (e.g. 6210-C)"
-          />
-          <Input
-            type="text"
-            value={displayName}
-            onChange={(e) => setDisplayName(e.target.value)}
-            placeholder="Display name (optional)"
-          />
-          <Button
-            onClick={addSingle}
-            disabled={submitting || !modelNumber.trim()}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold text-ink">Manage models</h2>
+            <p className="text-sm text-muted">
+              Add single models or bulk import from the dedicated page.
+            </p>
+          </div>
+          <Link
+            href="/admin/models/manage"
+            className="rounded bg-primary px-3 py-2 text-sm font-medium text-white hover:bg-primary-hover"
           >
-            Add model
-          </Button>
+            Open add/bulk import
+          </Link>
         </div>
       </Card>
 
       <Card>
-        <h2 className="mb-4 text-lg font-semibold text-ink">Bulk import</h2>
-        <p className="mb-2 text-sm text-muted">
-          Paste model numbers separated by commas or new lines.
-        </p>
-        <Textarea
-          value={bulkInput}
-          onChange={(e) => setBulkInput(e.target.value)}
-          rows={5}
-          placeholder={"6210-C, 6235A\n6350-C"}
-        />
-        <Button
-          onClick={addBulk}
-          disabled={submitting || !bulkInput.trim()}
-          className="mt-3"
-        >
-          Import models
-        </Button>
-      </Card>
-
-      <Card>
-        <div className="mb-3 flex items-center justify-between">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-lg font-semibold text-ink">Current supported models</h2>
-          <p className="text-sm text-muted">{models.length} total</p>
+          <p className="text-sm text-muted">
+            {filteredModels.length} shown / {models.length} total
+          </p>
         </div>
+
+        <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-[1fr_auto_auto]">
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Filter by model number or display name..."
+            className="rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-ink"
+          />
+          <select
+            value={String(pageSize)}
+            onChange={(e) => setPageSize(Number(e.target.value))}
+            className="rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-ink"
+            aria-label="Rows per page"
+          >
+            <option value="10">10 / page</option>
+            <option value="25">25 / page</option>
+            <option value="50">50 / page</option>
+            <option value="100">100 / page</option>
+          </select>
+          <button
+            type="button"
+            onClick={() => setQuery("")}
+            disabled={!query}
+            className="rounded-lg border border-border px-3 py-2.5 text-sm text-muted hover:bg-page disabled:opacity-50"
+          >
+            Clear filter
+          </button>
+        </div>
+
         <div className="space-y-2">
-          {[...models]
-            .sort((a, b) => a.modelNumber.localeCompare(b.modelNumber))
-            .map((model) => (
+          {paginatedModels.map((model) => (
             <div
               key={model.id}
               className="flex items-center justify-between rounded-lg border border-border px-3 py-2"
@@ -160,8 +153,40 @@ export default function AdminModelsPage() {
           ))}
           {models.length === 0 ? (
             <p className="text-sm text-muted">No supported models configured yet.</p>
+          ) : filteredModels.length === 0 ? (
+            <p className="text-sm text-muted">No models match the current filter.</p>
           ) : null}
         </div>
+
+        {filteredModels.length > 0 && (
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
+            <p className="text-sm text-muted">
+              Showing {(safePage - 1) * pageSize + 1}–
+              {Math.min(safePage * pageSize, filteredModels.length)} of {filteredModels.length}
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+                disabled={safePage <= 1}
+                className="rounded border border-border px-2.5 py-1.5 text-sm text-ink hover:bg-page disabled:opacity-50"
+              >
+                Prev
+              </button>
+              <span className="text-sm text-muted">
+                Page {safePage} / {totalPages}
+              </span>
+              <button
+                type="button"
+                onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
+                disabled={safePage >= totalPages}
+                className="rounded border border-border px-2.5 py-1.5 text-sm text-ink hover:bg-page disabled:opacity-50"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
       </Card>
     </div>
   );
