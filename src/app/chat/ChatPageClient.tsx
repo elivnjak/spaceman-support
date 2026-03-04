@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import Script from "next/script";
 
 declare global {
@@ -1074,9 +1075,12 @@ export function ChatPageClient({
 
         {!chatStarted ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-6">
-            <img
+            <Image
               src="/kuhlberg-logo.webp"
               alt="Kühlberg"
+              width={180}
+              height={48}
+              priority
               className="h-12 w-auto"
             />
             <p className="text-center text-muted">

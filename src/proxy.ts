@@ -40,7 +40,7 @@ function getAllowedOrigins(request: NextRequest): Set<string> {
   return allowedOrigins;
 }
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const sessionToken =
     request.cookies.get("__Host-session_token")?.value?.trim() ?? "";

@@ -6,7 +6,7 @@
     "dev": "next dev -p 3001",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint .",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
@@ -35,7 +35,7 @@
     "drizzle-orm": "^0.36.0",
     "exceljs": "^4.4.0",
     "jsdom": "^28.1.0",
-    "next": "^15.0.0",
+    "next": "^16.1.6",
     "openai": "^4.0.0",
     "pdfjs-dist": "^5.4.624",
     "playwright": "^1.58.2",
@@ -47,20 +47,24 @@
     "zod": "^3.25.76"
   },
   "overrides": {
-    "punycode": "^2.3.1"
+    "punycode": "^2.3.1",
+    "tar": "^7.5.8",
+    "@esbuild-kit/core-utils": {
+      "esbuild": "^0.25.0"
+    }
   },
   "devDependencies": {
     "@railway/cli": "^4.30.3",
     "@types/bcryptjs": "^2.4.6",
     "@types/jsdom": "^27.0.0",
-    "@types/node": "^22.0.0",
+    "@types/node": "^25.3.3",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@types/turndown": "^5.0.6",
     "dotenv": "^16.6.1",
-    "drizzle-kit": "^0.28.0",
+    "drizzle-kit": "^0.31.9",
     "eslint": "^9.0.0",
-    "eslint-config-next": "^15.0.0",
+    "eslint-config-next": "^16.1.6",
     "postcss": "^8.4.0",
     "tailwindcss": "^3.4.0",
     "tsx": "^4.0.0",
