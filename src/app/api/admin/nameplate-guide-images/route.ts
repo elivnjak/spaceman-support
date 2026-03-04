@@ -2,7 +2,12 @@ import { NextResponse } from "next/server";
 import { asc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { nameplateGuideImages } from "@/lib/db/schema";
-import { nameplateGuideImagePath, sha256, writeStorageFile } from "@/lib/storage";
+import {
+  getSafeImageExtension,
+  nameplateGuideImagePath,
+  sha256,
+  writeStorageFile,
+} from "@/lib/storage";
 import { withApiRouteErrorLogging } from "@/lib/error-logs";
 
 async function GETHandler() {
@@ -33,7 +38,7 @@ async function POSTHandler(request: Request) {
       continue;
     }
 
-    const ext = file.name.split(".").pop() || "jpg";
+    const ext = getSafeImageExtension(file.name);
     const filename = `${hash.slice(0, 12)}_${Date.now()}.${ext}`;
     const relativePath = nameplateGuideImagePath(filename);
     const filePath = await writeStorageFile(relativePath, buffer);

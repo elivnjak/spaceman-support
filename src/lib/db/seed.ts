@@ -110,8 +110,17 @@ export async function ensureAuthTables(): Promise<void> {
 
 export async function seedAdminUser(): Promise<void> {
   await ensureAuthTables();
-  const email = (process.env.ADMIN_EMAIL ?? "admin@admin.com").trim().toLowerCase();
-  const password = (process.env.ADMIN_PASSWORD ?? "admin123").trim();
+  const rawEmail = process.env.ADMIN_EMAIL?.trim();
+  const rawPassword = process.env.ADMIN_PASSWORD?.trim();
+  if (!rawEmail) {
+    throw new Error("ADMIN_EMAIL must be set when seeding admin user");
+  }
+  if (!rawPassword) {
+    throw new Error("ADMIN_PASSWORD must be set when seeding admin user");
+  }
+
+  const email = rawEmail.toLowerCase();
+  const password = rawPassword;
 
   if (!password) {
     throw new Error("ADMIN_PASSWORD cannot be empty when seeding admin user");

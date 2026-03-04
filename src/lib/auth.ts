@@ -4,8 +4,8 @@ import { and, eq, gt } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { sessions, users, type User } from "@/lib/db/schema";
 
-const SESSION_COOKIE_NAME = "session_token";
-const SESSION_DURATION_MS = 1000 * 60 * 60 * 24 * 30; // 30 days
+const SESSION_COOKIE_NAME = "__Host-session_token";
+const SESSION_DURATION_MS = 1000 * 60 * 60 * 24; // 24 hours
 export const ADMIN_ROLE = "admin";
 export const EDITOR_ROLE = "editor";
 export type AdminUiRole = typeof ADMIN_ROLE | typeof EDITOR_ROLE;
@@ -48,6 +48,22 @@ export async function createSession(userId: string): Promise<{ token: string; ex
 
 export async function deleteSession(token: string): Promise<void> {
   await db.delete(sessions).where(eq(sessions.token, token));
+}
+
+export async function rotateSessionToken(
+  token: string
+): Promise<{ token: string; expiresAt: Date } | null> {
+  const nextToken = crypto.randomUUID();
+  const expiresAt = new Date(Date.now() + SESSION_DURATION_MS);
+  const [updated] = await db
+    .update(sessions)
+    .set({
+      token: nextToken,
+      expiresAt,
+    })
+    .where(eq(sessions.token, token))
+    .returning({ token: sessions.token, expiresAt: sessions.expiresAt });
+  return updated ?? null;
 }
 
 export async function validateSession(

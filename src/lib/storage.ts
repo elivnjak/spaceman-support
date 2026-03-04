@@ -12,6 +12,13 @@ export function sha256(buffer: Buffer): string {
   return createHash("sha256").update(buffer).digest("hex");
 }
 
+const ALLOWED_IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "gif", "webp"]);
+
+export function getSafeImageExtension(fileName: string, fallback = "jpg"): string {
+  const ext = fileName.split(".").pop()?.trim().toLowerCase() ?? "";
+  return ALLOWED_IMAGE_EXTENSIONS.has(ext) ? ext : fallback;
+}
+
 export async function writeStorageFile(
   relativePath: string,
   data: Buffer | string

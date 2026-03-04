@@ -28,6 +28,8 @@
   },
   "dependencies": {
     "@mozilla/readability": "^0.6.0",
+    "@upstash/ratelimit": "^2.0.8",
+    "@upstash/redis": "^1.36.3",
     "bcryptjs": "^3.0.3",
     "clsx": "^2.1.1",
     "drizzle-orm": "^0.36.0",

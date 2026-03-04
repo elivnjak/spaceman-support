@@ -1,6 +1,6 @@
 /**
- * Simple in-memory sliding-window rate limiter.
- * For production, replace with Redis-backed implementation.
+ * In-memory sliding-window rate limiter.
+ * Used by edge middleware and as fallback for server-side limiters.
  */
 
 type RateLimitEntry = {
@@ -29,12 +29,6 @@ export type RateLimitResult = {
   resetMs: number;
 };
 
-/**
- * Check and consume a rate limit token.
- * @param key Unique key (e.g. IP address, session ID)
- * @param maxRequests Max requests in the window
- * @param windowMs Window duration in milliseconds
- */
 export function checkRateLimit(
   key: string,
   maxRequests: number,

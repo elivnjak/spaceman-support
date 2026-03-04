@@ -68,6 +68,13 @@ function normalizeChatIds(value: unknown): string[] {
     .filter(Boolean);
 }
 
+function maskSecret(secret: string): string {
+  const trimmed = secret.trim();
+  if (!trimmed) return "";
+  if (trimmed.length <= 4) return "****";
+  return `****${trimmed.slice(-4)}`;
+}
+
 async function GETHandler() {
   const [config] = await db.select().from(telegramConfig).limit(1);
   const chatIds = normalizeChatIds(config?.chatIds);
@@ -76,7 +83,9 @@ async function GETHandler() {
     chatIds.length > 0 ? chatIds : legacyChatId ? [legacyChatId] : [];
   return NextResponse.json({
     enabled: config?.enabled ?? false,
-    botToken: config?.botToken ?? "",
+    botToken: "",
+    hasBotToken: Boolean(config?.botToken?.trim()),
+    botTokenPreview: maskSecret(config?.botToken ?? ""),
     chatId: legacyChatId,
     chatIds: chatIdsList,
   });
@@ -90,8 +99,9 @@ async function PUTHandler(request: Request) {
     chatIds?: string[];
   };
   const enabled = typeof body.enabled === "boolean" ? body.enabled : undefined;
-  const botToken =
+  const parsedToken =
     typeof body.botToken === "string" ? body.botToken.trim() : undefined;
+  const botToken = parsedToken && !parsedToken.startsWith("****") ? parsedToken : undefined;
   const chatIds =
     Array.isArray(body.chatIds) ? normalizeChatIds(body.chatIds) : undefined;
 

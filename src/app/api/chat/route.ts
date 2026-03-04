@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/lib/auth";
-import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
+import { RATE_LIMITS } from "@/lib/rate-limit";
+import { checkRateLimit } from "@/lib/rate-limit-server";
 import { db } from "@/lib/db";
 import {
   diagnosticSessions,
@@ -688,7 +689,7 @@ export async function POST(request: Request) {
   // Per-session rate limit (skip when admin is logged in, e.g. for testing)
   if (sessionIdRaw && !isAdmin) {
     const { chatPerSession } = RATE_LIMITS;
-    const result = checkRateLimit(
+    const result = await checkRateLimit(
       `session:${sessionIdRaw}`,
       chatPerSession.maxRequests,
       chatPerSession.windowMs

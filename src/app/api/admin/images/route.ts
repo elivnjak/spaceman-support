@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { referenceImages } from "@/lib/db/schema";
 import {
+  getSafeImageExtension,
   writeStorageFile,
   sha256,
   referenceImagePath,
@@ -46,7 +47,7 @@ async function POSTHandler(request: Request) {
       continue;
     }
 
-    const ext = file.name.split(".").pop() || "jpg";
+    const ext = getSafeImageExtension(file.name);
     const filename = `${hash.slice(0, 12)}_${Date.now()}.${ext}`;
     const relativePath = referenceImagePath(labelId, filename);
     const fullPath = await writeStorageFile(relativePath, buffer);

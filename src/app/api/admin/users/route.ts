@@ -3,6 +3,13 @@ import { db } from "@/lib/db";
 import { users } from "@/lib/db/schema";
 import { EDITOR_ROLE, hashPassword, normalizeAdminUiRole, requireAdminAuth } from "@/lib/auth";
 import { withApiRouteErrorLogging } from "@/lib/error-logs";
+import { z } from "zod";
+
+const createUserSchema = z.object({
+  email: z.string().trim().email(),
+  password: z.string().min(12, "password must be at least 12 characters"),
+  role: z.string().optional(),
+});
 
 async function GETHandler(request: Request) {
   const authError = await requireAdminAuth(request);
@@ -21,23 +28,23 @@ async function POSTHandler(request: Request) {
   const authError = await requireAdminAuth(request);
   if (authError) return authError;
 
-  let body: { email?: string; password?: string; role?: string };
+  let body: z.infer<typeof createUserSchema>;
   try {
-    body = await request.json();
+    body = createUserSchema.parse(await request.json());
   } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
-  }
-
-  const email = (body.email ?? "").trim().toLowerCase();
-  const password = body.password ?? "";
-  const role = body.role === undefined ? EDITOR_ROLE : normalizeAdminUiRole(body.role);
-
-  if (!email || !password) {
     return NextResponse.json(
-      { error: "email and password are required" },
+      {
+        error:
+          "Invalid request body. email must be valid and password must be at least 12 characters.",
+      },
       { status: 400 }
     );
   }
+
+  const email = body.email.trim().toLowerCase();
+  const password = body.password;
+  const role = body.role === undefined ? EDITOR_ROLE : normalizeAdminUiRole(body.role);
+
   if (!role) {
     return NextResponse.json(
       { error: "role must be 'admin' or 'editor'" },

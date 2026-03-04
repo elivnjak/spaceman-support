@@ -9,8 +9,43 @@ import {
   verifyPassword,
 } from "@/lib/auth";
 import { withApiRouteErrorLogging } from "@/lib/error-logs";
+import {
+  clearFailedLoginAttempts,
+  getLoginLockStatus,
+  recordFailedLoginAttempt,
+} from "@/lib/login-security";
+import { RATE_LIMITS } from "@/lib/rate-limit";
+import { checkRateLimit } from "@/lib/rate-limit-server";
+
+function getClientIp(request: Request): string {
+  const forwardedFor = request.headers.get("x-forwarded-for");
+  if (forwardedFor) {
+    return forwardedFor.split(",")[0]?.trim() || "unknown";
+  }
+  return request.headers.get("x-real-ip") ?? "unknown";
+}
 
 async function POSTHandler(request: Request) {
+  const ip = getClientIp(request);
+  const limit = RATE_LIMITS.adminPerIp;
+  const ipRateLimit = await checkRateLimit(
+    `auth:login:${ip}`,
+    limit.maxRequests,
+    limit.windowMs
+  );
+  if (!ipRateLimit.allowed) {
+    return NextResponse.json(
+      { error: "Too many login attempts. Please wait before trying again." },
+      {
+        status: 429,
+        headers: {
+          "Retry-After": String(Math.ceil(ipRateLimit.resetMs / 1000)),
+          "X-RateLimit-Remaining": "0",
+        },
+      }
+    );
+  }
+
   let body: { email?: string; password?: string };
   try {
     body = await request.json();
@@ -24,6 +59,19 @@ async function POSTHandler(request: Request) {
     return NextResponse.json(
       { error: "email and password are required" },
       { status: 400 }
+    );
+  }
+
+  const lockStatus = await getLoginLockStatus(email);
+  if (lockStatus.isLocked) {
+    return NextResponse.json(
+      { error: "Too many failed login attempts. Please try again later." },
+      {
+        status: 429,
+        headers: {
+          "Retry-After": String(Math.ceil(lockStatus.retryAfterMs / 1000)),
+        },
+      }
     );
   }
 
@@ -46,13 +94,17 @@ async function POSTHandler(request: Request) {
   }
   const user = userRows[0];
   if (!user || !hasAdminUiAccess(user.role)) {
+    await recordFailedLoginAttempt(email);
     return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
   }
 
   const validPassword = await verifyPassword(password, user.passwordHash);
   if (!validPassword) {
+    await recordFailedLoginAttempt(email);
     return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
   }
+
+  await clearFailedLoginAttempts(email);
 
   const { token, expiresAt } = await createSession(user.id);
   const response = NextResponse.json({ ok: true });

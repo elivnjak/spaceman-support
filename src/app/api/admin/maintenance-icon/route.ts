@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { maintenanceConfig } from "@/lib/db/schema";
 import {
   deleteStorageFile,
+  getSafeImageExtension,
   maintenanceIconPath,
   sha256,
   writeStorageFile,
@@ -21,10 +22,7 @@ async function POSTHandler(request: Request) {
   }
 
   const buffer = Buffer.from(await file.arrayBuffer());
-  const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
-  const safeExt = ["jpg", "jpeg", "png", "gif", "webp"].includes(ext)
-    ? ext
-    : "jpg";
+  const safeExt = getSafeImageExtension(file.name);
   const filename = `icon_${sha256(buffer).slice(0, 12)}_${Date.now()}.${safeExt}`;
   const relativePath = maintenanceIconPath(filename);
   await writeStorageFile(relativePath, buffer);

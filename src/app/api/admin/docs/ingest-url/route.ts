@@ -8,6 +8,7 @@ import {
 } from "@/lib/ingestion/document-ingestor";
 import { eq } from "drizzle-orm";
 import { withApiRouteErrorLogging } from "@/lib/error-logs";
+import { validateExternalHttpUrl } from "@/lib/url-security";
 
 async function POSTHandler(request: Request) {
   let body: {
@@ -29,6 +30,13 @@ async function POSTHandler(request: Request) {
   if (!url) {
     return NextResponse.json(
       { error: "url is required" },
+      { status: 400 }
+    );
+  }
+  const urlValidationError = await validateExternalHttpUrl(url);
+  if (urlValidationError) {
+    return NextResponse.json(
+      { error: `URL is not allowed: ${urlValidationError}` },
       { status: 400 }
     );
   }

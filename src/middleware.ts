@@ -40,9 +40,10 @@ function getAllowedOrigins(request: NextRequest): Set<string> {
   return allowedOrigins;
 }
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  const sessionToken = request.cookies.get("session_token")?.value?.trim() ?? "";
+  const sessionToken =
+    request.cookies.get("__Host-session_token")?.value?.trim() ?? "";
 
   // Allow admin root to render login form when unauthenticated.
   if (pathname === "/admin") {
@@ -98,7 +99,11 @@ export function middleware(request: NextRequest) {
       if (!sessionToken) {
         const ip = getClientIp(request);
         const limit = RATE_LIMITS.chatPerIp;
-        const result = checkRateLimit(`ip:${pathname}:${ip}`, limit.maxRequests, limit.windowMs);
+        const result = await checkRateLimit(
+          `ip:${pathname}:${ip}`,
+          limit.maxRequests,
+          limit.windowMs
+        );
         if (!result.allowed) {
           return NextResponse.json(
             { error: "Too many requests. Please wait before trying again." },

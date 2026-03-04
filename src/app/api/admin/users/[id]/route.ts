@@ -10,8 +10,14 @@ import {
   requireAdminAuth,
 } from "@/lib/auth";
 import { withApiRouteErrorLogging } from "@/lib/error-logs";
+import { z } from "zod";
 
 type RouteParams = { params: Promise<{ id: string }> };
+const updateUserSchema = z.object({
+  email: z.string().trim().email().optional(),
+  password: z.string().min(12, "password must be at least 12 characters").optional(),
+  role: z.string().optional(),
+});
 
 async function PATCHHandler(request: Request, { params }: RouteParams) {
   const authError = await requireAdminAuth(request);
@@ -22,11 +28,17 @@ async function PATCHHandler(request: Request, { params }: RouteParams) {
     return NextResponse.json({ error: "User id required" }, { status: 400 });
   }
 
-  let body: { email?: string; password?: string; role?: string };
+  let body: z.infer<typeof updateUserSchema>;
   try {
-    body = await request.json();
+    body = updateUserSchema.parse(await request.json());
   } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+    return NextResponse.json(
+      {
+        error:
+          "Invalid request body. email must be valid and password must be at least 12 characters.",
+      },
+      { status: 400 }
+    );
   }
 
   const updates: { email?: string; passwordHash?: string; role?: string } = {};
