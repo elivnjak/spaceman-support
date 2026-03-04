@@ -4,6 +4,8 @@ import { z } from "zod";
 import { getLlmConfig } from "@/lib/config";
 import { requireAdminUiAuth } from "@/lib/auth";
 import { withApiRouteErrorLogging } from "@/lib/error-logs";
+import { RATE_LIMITS } from "@/lib/rate-limit";
+import { checkRateLimit } from "@/lib/rate-limit-server";
 
 function getOpenAI() {
   const key = process.env.OPENAI_API_KEY;
@@ -23,10 +25,10 @@ const RequestSchema = z.object({
     }),
     playbookStats: z.array(
       z.object({
-        playbookId: z.string(),
-        title: z.string(),
-        labelId: z.string(),
-        labelName: z.string(),
+        playbookId: z.string().max(80),
+        title: z.string().max(200),
+        labelId: z.string().max(80),
+        labelName: z.string().max(200),
         total: z.number(),
         resolved: z.number(),
         escalated: z.number(),
@@ -44,33 +46,33 @@ const RequestSchema = z.object({
         partiallyFixedCount: z.number(),
         topEscalationReasons: z.array(
           z.object({
-            reason: z.string(),
+            reason: z.string().max(300),
             count: z.number(),
           })
-        ),
+        ).max(10),
       })
-    ),
+    ).max(200),
     coverageGaps: z.object({
       unmatchedSessions: z.number(),
       topUnmatchedMachineModels: z.array(
         z.object({
-          label: z.string(),
+          label: z.string().max(200),
           count: z.number(),
         })
-      ),
+      ).max(25),
       topUnmatchedProductTypes: z.array(
         z.object({
-          label: z.string(),
+          label: z.string().max(200),
           count: z.number(),
         })
-      ),
+      ).max(25),
     }),
     playbookMetadata: z.array(
       z.object({
-        playbookId: z.string(),
-        title: z.string(),
-        labelId: z.string(),
-        labelName: z.string(),
+        playbookId: z.string().max(80),
+        title: z.string().max(200),
+        labelId: z.string().max(80),
+        labelName: z.string().max(200),
         stepCount: z.number(),
         symptomCount: z.number(),
         evidenceItemCount: z.number(),
@@ -79,7 +81,7 @@ const RequestSchema = z.object({
         triggerCount: z.number(),
         updatedAt: z.string().nullable(),
       })
-    ),
+    ).max(300),
   }),
 });
 
@@ -106,21 +108,101 @@ const ResponseSchema = z.object({
   recommendations: z.array(RecommendationSchema).max(12),
 });
 
+function getClientIp(request: Request): string {
+  const forwardedFor = request.headers.get("x-forwarded-for");
+  if (forwardedFor) return forwardedFor.split(",")[0]?.trim() || "unknown";
+  return request.headers.get("x-real-ip") ?? "unknown";
+}
+
+function sanitizeForPrompt(text: string, maxLen = 220): string {
+  const normalized = text
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (normalized.length <= maxLen) return normalized;
+  return `${normalized.slice(0, maxLen)}...`;
+}
+
+function buildPromptAnalytics(input: z.infer<typeof RequestSchema>["analytics"]) {
+  return {
+    summary: input.summary,
+    playbookStats: input.playbookStats.slice(0, 80).map((item) => ({
+      playbookId: item.playbookId,
+      title: sanitizeForPrompt(item.title, 120),
+      labelName: sanitizeForPrompt(item.labelName, 100),
+      total: item.total,
+      resolved: item.resolved,
+      escalated: item.escalated,
+      active: item.active,
+      resolutionRate: item.resolutionRate,
+      escalationRate: item.escalationRate,
+      frustrationRate: item.frustrationRate,
+      avgTurns: item.avgTurns,
+      verificationResponseRate: item.verificationResponseRate,
+      notFixedCount: item.notFixedCount,
+      partiallyFixedCount: item.partiallyFixedCount,
+      topEscalationReasons: item.topEscalationReasons
+        .slice(0, 5)
+        .map((r) => ({ reason: sanitizeForPrompt(r.reason, 180), count: r.count })),
+    })),
+    coverageGaps: {
+      unmatchedSessions: input.coverageGaps.unmatchedSessions,
+      topUnmatchedMachineModels: input.coverageGaps.topUnmatchedMachineModels
+        .slice(0, 10)
+        .map((m) => ({ label: sanitizeForPrompt(m.label, 120), count: m.count })),
+      topUnmatchedProductTypes: input.coverageGaps.topUnmatchedProductTypes
+        .slice(0, 10)
+        .map((p) => ({ label: sanitizeForPrompt(p.label, 120), count: p.count })),
+    },
+    playbookMetadata: input.playbookMetadata.slice(0, 120).map((meta) => ({
+      playbookId: meta.playbookId,
+      title: sanitizeForPrompt(meta.title, 120),
+      labelName: sanitizeForPrompt(meta.labelName, 100),
+      stepCount: meta.stepCount,
+      symptomCount: meta.symptomCount,
+      evidenceItemCount: meta.evidenceItemCount,
+      candidateCauseCount: meta.candidateCauseCount,
+      questionCount: meta.questionCount,
+      triggerCount: meta.triggerCount,
+    })),
+  };
+}
+
 async function POSTHandler(request: Request) {
   const authError = await requireAdminUiAuth(request);
   if (authError) return authError;
+
+  const ip = getClientIp(request);
+  const ipRateLimit = await checkRateLimit(
+    `admin:ai-analytics:recommend:${ip}`,
+    Math.max(10, Math.floor(RATE_LIMITS.adminPerIp.maxRequests / 6)),
+    RATE_LIMITS.adminPerIp.windowMs
+  );
+  if (!ipRateLimit.allowed) {
+    return NextResponse.json(
+      { error: "Too many recommendation requests. Please wait before retrying." },
+      {
+        status: 429,
+        headers: {
+          "Retry-After": String(Math.ceil(ipRateLimit.resetMs / 1000)),
+          "X-RateLimit-Remaining": "0",
+          "Cache-Control": "no-store",
+        },
+      }
+    );
+  }
 
   const body = await request.json().catch(() => null);
   const parsedRequest = RequestSchema.safeParse(body);
   if (!parsedRequest.success) {
     return NextResponse.json(
       { error: "Invalid analytics payload", details: parsedRequest.error.flatten() },
-      { status: 400 }
+      { status: 400, headers: { "Cache-Control": "no-store" } }
     );
   }
 
   const llmConfig = await getLlmConfig();
-  const input = parsedRequest.data.analytics;
+  const input = buildPromptAnalytics(parsedRequest.data.analytics);
 
   const systemPrompt = `You are an AI support analytics strategist.
 Your task: analyze playbook and session analytics and return concise, high-value recommendations.
@@ -170,7 +252,7 @@ Return JSON now.`;
   if (!text) {
     return NextResponse.json(
       { error: "Empty recommendation response from model." },
-      { status: 502 }
+      { status: 502, headers: { "Cache-Control": "no-store" } }
     );
   }
 
@@ -188,7 +270,7 @@ Return JSON now.`;
       summary: "Unable to parse structured recommendations from model output.",
       recommendations: [],
       rawText: text,
-    });
+    }, { headers: { "Cache-Control": "no-store" } });
   }
 
   const parsedResponse = ResponseSchema.safeParse(maybeJson);
@@ -199,10 +281,12 @@ Return JSON now.`;
       recommendations: [],
       rawText: text,
       validationErrors: parsedResponse.error.flatten(),
-    });
+    }, { headers: { "Cache-Control": "no-store" } });
   }
 
-  return NextResponse.json(parsedResponse.data);
+  return NextResponse.json(parsedResponse.data, {
+    headers: { "Cache-Control": "no-store" },
+  });
 }
 
 export const POST = withApiRouteErrorLogging(

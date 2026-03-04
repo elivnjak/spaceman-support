@@ -5,10 +5,12 @@ import { db } from "@/lib/db";
 import { diagnosticSessions, labels, playbooks } from "@/lib/db/schema";
 import { withApiRouteErrorLogging } from "@/lib/error-logs";
 
-function parseDateParam(value: string | null): Date | null {
-  if (!value) return null;
-  const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? null : d;
+function parseDateParam(value: string | null): { value: Date | null; invalid: boolean } {
+  if (!value) return { value: null, invalid: false };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return { value: null, invalid: true };
+  const d = new Date(`${value}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return { value: null, invalid: true };
+  return { value: d, invalid: false };
 }
 
 type EscalationReasonItem = {
@@ -48,8 +50,22 @@ async function GETHandler(request: Request) {
   if (authError) return authError;
 
   const { searchParams } = new URL(request.url);
-  const fromDate = parseDateParam(searchParams.get("from"));
-  const toDate = parseDateParam(searchParams.get("to"));
+  const fromDateParsed = parseDateParam(searchParams.get("from"));
+  const toDateParsed = parseDateParam(searchParams.get("to"));
+  if (fromDateParsed.invalid || toDateParsed.invalid) {
+    return NextResponse.json(
+      { error: "Invalid date format. Expected YYYY-MM-DD." },
+      { status: 400, headers: { "Cache-Control": "no-store" } }
+    );
+  }
+  const fromDate = fromDateParsed.value;
+  const toDate = toDateParsed.value;
+  if (fromDate && toDate && fromDate > toDate) {
+    return NextResponse.json(
+      { error: "Invalid date range. 'from' must be before or equal to 'to'." },
+      { status: 400, headers: { "Cache-Control": "no-store" } }
+    );
+  }
 
   const dateFilters: SQL<unknown>[] = [];
   if (fromDate) {
@@ -282,29 +298,32 @@ async function GETHandler(request: Request) {
     updatedAt: row.updatedAt?.toISOString() ?? null,
   }));
 
-  return NextResponse.json({
-    summary: {
-      totalSessions,
-      matchedSessions,
-      unmatchedSessions,
-      avgTriageRound,
-      multiRoundSessions,
-      multiRoundTriageRate,
+  return NextResponse.json(
+    {
+      summary: {
+        totalSessions,
+        matchedSessions,
+        unmatchedSessions,
+        avgTriageRound,
+        multiRoundSessions,
+        multiRoundTriageRate,
+      },
+      playbookStats,
+      coverageGaps: {
+        unmatchedSessions,
+        topUnmatchedMachineModels: unmatchedMachineRows.map((row) => ({
+          label: row.label ?? "Unknown",
+          count: Number(row.total),
+        })),
+        topUnmatchedProductTypes: unmatchedProductTypeRows.map((row) => ({
+          label: row.label ?? "Unknown",
+          count: Number(row.total),
+        })),
+      },
+      playbookMetadata,
     },
-    playbookStats,
-    coverageGaps: {
-      unmatchedSessions,
-      topUnmatchedMachineModels: unmatchedMachineRows.map((row) => ({
-        label: row.label ?? "Unknown",
-        count: Number(row.total),
-      })),
-      topUnmatchedProductTypes: unmatchedProductTypeRows.map((row) => ({
-        label: row.label ?? "Unknown",
-        count: Number(row.total),
-      })),
-    },
-    playbookMetadata,
-  });
+    { headers: { "Cache-Control": "no-store" } }
+  );
 }
 
 export const GET = withApiRouteErrorLogging("/api/admin/ai-analytics", GETHandler);
