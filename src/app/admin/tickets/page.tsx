@@ -322,9 +322,16 @@ export default function AdminTicketsPage() {
         </select>
       </section>
 
-      <div className="mb-4 text-sm text-muted">
-        {loading ? "Loading..." : `${data.total} ticket${data.total === 1 ? "" : "s"}`}
-      </div>
+      {!loading && data.total > 0 && (
+        <div className="mb-4 text-right text-sm text-muted">
+          {(() => {
+            const from = (data.page - 1) * data.pageSize + 1;
+            const to = Math.min(data.page * data.pageSize, data.total);
+            return `Showing ${from}–${to} of ${data.total} ticket${data.total === 1 ? "" : "s"}`;
+          })()}
+        </div>
+      )}
+      {loading && <div className="mb-4 text-sm text-muted">Loading...</div>}
       {selectedCount > 0 && (
         <div className="mb-4 flex items-center gap-3">
           <Button
@@ -424,27 +431,107 @@ export default function AdminTicketsPage() {
         )}
       </div>
 
-      {!loading && data.totalPages > 1 && (
-        <div className="mt-4 flex items-center justify-between">
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => setPage((prev) => Math.max(1, prev - 1))}
-            disabled={!canGoPrev}
-          >
-            Previous
-          </Button>
-          <p className="text-sm text-muted">
-            Page {data.page} of {data.totalPages}
-          </p>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => setPage((prev) => prev + 1)}
-            disabled={!canGoNext}
-          >
-            Next
-          </Button>
+      {!loading && data.total > 0 && (
+        <div className="mt-4 flex flex-col items-center gap-2">
+          {data.totalPages > 1 && (
+            <div className="flex items-center gap-1">
+              {/* First */}
+              <button
+                type="button"
+                onClick={() => setPage(1)}
+                disabled={!canGoPrev}
+                aria-label="First page"
+                className="flex h-8 w-8 items-center justify-center rounded-md border border-border bg-surface text-sm text-ink transition-colors hover:bg-page disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                «
+              </button>
+              {/* Previous */}
+              <button
+                type="button"
+                onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+                disabled={!canGoPrev}
+                aria-label="Previous page"
+                className="flex h-8 w-8 items-center justify-center rounded-md border border-border bg-surface text-sm text-ink transition-colors hover:bg-page disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                ‹
+              </button>
+
+              {/* Page numbers */}
+              {(() => {
+                const pages: (number | "...")[] = [];
+                const total = data.totalPages;
+                const current = data.page;
+
+                if (total <= 7) {
+                  for (let i = 1; i <= total; i++) pages.push(i);
+                } else {
+                  pages.push(1);
+                  if (current > 3) pages.push("...");
+                  const start = Math.max(2, current - 1);
+                  const end = Math.min(total - 1, current + 1);
+                  for (let i = start; i <= end; i++) pages.push(i);
+                  if (current < total - 2) pages.push("...");
+                  pages.push(total);
+                }
+
+                return pages.map((p, idx) =>
+                  p === "..." ? (
+                    <span
+                      key={`ellipsis-${idx}`}
+                      className="flex h-8 w-8 items-center justify-center text-sm text-muted"
+                    >
+                      …
+                    </span>
+                  ) : (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setPage(p as number)}
+                      aria-label={`Page ${p}`}
+                      aria-current={p === current ? "page" : undefined}
+                      className={`flex h-8 min-w-[2rem] items-center justify-center rounded-md border px-2 text-sm transition-colors ${
+                        p === current
+                          ? "border-primary bg-primary text-white"
+                          : "border-border bg-surface text-ink hover:bg-page"
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  )
+                );
+              })()}
+
+              {/* Next */}
+              <button
+                type="button"
+                onClick={() => setPage((prev) => prev + 1)}
+                disabled={!canGoNext}
+                aria-label="Next page"
+                className="flex h-8 w-8 items-center justify-center rounded-md border border-border bg-surface text-sm text-ink transition-colors hover:bg-page disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                ›
+              </button>
+              {/* Last */}
+              <button
+                type="button"
+                onClick={() => setPage(data.totalPages)}
+                disabled={!canGoNext}
+                aria-label="Last page"
+                className="flex h-8 w-8 items-center justify-center rounded-md border border-border bg-surface text-sm text-ink transition-colors hover:bg-page disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                »
+              </button>
+            </div>
+          )}
+          {data.total > 0 && (
+            <p className="text-sm text-muted">
+              {(() => {
+                const from = (data.page - 1) * data.pageSize + 1;
+                const to = Math.min(data.page * data.pageSize, data.total);
+                return `Showing ${from}–${to} of ${data.total} ticket${data.total === 1 ? "" : "s"}`;
+              })()}
+            </p>
+          )}
         </div>
       )}
     </div>
