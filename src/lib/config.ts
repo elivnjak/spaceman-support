@@ -60,6 +60,10 @@ export const INGESTION_CONFIG = {
   maxPagesForVision: 50,
   /** Enable numeric verification of vision output against deterministic text. */
   verifyNumerics: true,
+  /** Model used for LLM-based semantic chunking. */
+  llmChunkerModel: MANIFEST_DEFAULTS.models.visionModel,
+  /** Use LLM chunker for PDFs up to this many pages (0 = disabled). */
+  maxPagesForLlmChunker: 20,
 } as const;
 
 export const HTML_INGESTION_CONFIG = {

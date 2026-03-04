@@ -6,6 +6,7 @@ import { extractSpecsFromMarkdown } from "./extract-specs";
 import { openaiTextEmbedder } from "@/lib/embeddings/openai-text";
 import { chunkBySize, chunkMarkdownOrText, flattenTablesToKV } from "./chunker";
 import { extractPagesWithVision } from "./pdf-vision-extractor";
+import { chunkDocumentWithLlm } from "./llm-chunker";
 import {
   extractPdfPages,
   getFullTextFromPages,
@@ -151,6 +152,111 @@ export async function ingestDocument(documentId: string): Promise<void> {
     const pages = await extractPdfPages(buffer);
     const fullText = getFullTextFromPages(pages);
     const numPages = pages.length;
+    const fileName = doc.filePath.split(/[/\\]/).pop() ?? "document.pdf";
+
+    // --- LLM Chunker path: primary for PDFs within the page limit ---
+    const llmChunkerMaxPages = INGESTION_CONFIG.maxPagesForLlmChunker;
+    if (llmChunkerMaxPages > 0 && numPages <= llmChunkerMaxPages) {
+      let llmSuccess = false;
+      try {
+        const llmResult = await chunkDocumentWithLlm(buffer, fileName, numPages);
+
+        let verificationStatus: "verified" | "unverified" | "mismatch" = "unverified";
+        if (INGESTION_CONFIG.verifyNumerics) {
+          const verification = verifyNumerics(
+            llmResult.rawMarkdown,
+            pages,
+            pages.map((p) => p.pageNum)
+          );
+          verificationStatus = verification.status;
+        }
+
+        const chunks = llmResult.chunks.map((c) => ({
+          content: c.content,
+          metadata: {
+            ...c.metadata,
+            verification_status: verificationStatus,
+          } as Record<string, unknown>,
+        }));
+
+        const embeddings = await openaiTextEmbedder.embedBatch(
+          chunks.map((c) => c.content)
+        );
+
+        await db.delete(docChunks).where(eq(docChunks.documentId, documentId));
+        for (let i = 0; i < chunks.length; i++) {
+          await db.insert(docChunks).values({
+            documentId,
+            chunkIndex: i,
+            content: chunks[i].content,
+            metadata: chunks[i].metadata,
+            embedding: embeddings[i] ?? null,
+          });
+        }
+
+        const resolvedMachineModels = extractMachineModelFromText(
+          llmResult.rawMarkdown + "\n" + fullText
+        );
+        const resolvedMachineModelStr =
+          formatMachineModelsForStorage(resolvedMachineModels) ?? null;
+        const hasExistingModel =
+          doc.machineModel != null && String(doc.machineModel).trim() !== "";
+
+        if (resolvedMachineModels.length > 0 && llmResult.rawMarkdown) {
+          try {
+            const specs = extractSpecsFromMarkdown(llmResult.rawMarkdown);
+            for (const model of resolvedMachineModels) {
+              await db
+                .insert(machineSpecs)
+                .values({
+                  machineModel: model,
+                  documentId,
+                  specs,
+                  rawSource: "llm_chunker",
+                  verified: verificationStatus === "verified",
+                  updatedAt: new Date(),
+                })
+                .onConflictDoUpdate({
+                  target: machineSpecs.machineModel,
+                  set: {
+                    documentId,
+                    specs,
+                    rawSource: "llm_chunker",
+                    verified: verificationStatus === "verified",
+                    updatedAt: new Date(),
+                  },
+                });
+            }
+          } catch {
+            // non-fatal
+          }
+        }
+
+        await db
+          .update(documents)
+          .set({
+            status: "READY",
+            errorMessage: null,
+            machineModel: hasExistingModel
+              ? doc.machineModel
+              : (resolvedMachineModelStr ?? null),
+          })
+          .where(eq(documents.id, documentId));
+
+        llmSuccess = true;
+      } catch (llmErr) {
+        if (process.env.NODE_ENV !== "test") {
+          console.warn(
+            `[ingest] LLM chunker failed for doc ${documentId}, falling back to deterministic path:`,
+            llmErr instanceof Error ? llmErr.message : llmErr
+          );
+        }
+      }
+
+      if (llmSuccess) return;
+    }
+
+    // --- Fallback: deterministic + vision path (large PDFs or LLM failure) ---
 
     if (numPages > INGESTION_CONFIG.maxPagesForVision) {
       const chunks = chunkBySize(fullText).map((c) => ({
@@ -274,7 +380,7 @@ export async function ingestDocument(documentId: string): Promise<void> {
             });
         }
       } catch {
-        // non-fatal: ingestion still succeeded
+        // non-fatal
       }
     }
 
