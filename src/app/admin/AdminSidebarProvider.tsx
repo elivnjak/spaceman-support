@@ -33,7 +33,7 @@ export function AdminSidebarProvider({
         id="main-content"
         className={`transition-[padding] duration-200 ${collapsed ? "lg:pl-14" : "lg:pl-64"}`}
       >
-        <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6 sm:py-8">
+        <div className="px-4 py-6 sm:px-6 sm:py-8">
           {children}
         </div>
       </main>
