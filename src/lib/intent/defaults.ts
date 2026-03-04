@@ -119,6 +119,8 @@ export const MANIFEST_DEFAULTS: IntentManifest = {
     diagnosticPlannerModel: "gpt-4o",
     triageModel: "gpt-4o",
     visionModel: "gpt-4o",
+    /** Model for LLM-based PDF chunking at ingest. Separate from vision so it can be gpt-5.2 for testing. */
+    llmChunkerModel: "gpt-5.2",
   },
   frustrationHandling: {
     detectionPatterns: [
@@ -454,6 +456,12 @@ export const MANIFEST_META: IntentManifestMeta = {
       "Model used for vision extraction tasks in ingestion/nameplate workflows.",
       "Stronger vision models improve OCR and visual understanding but cost more.",
       d.models.visionModel
+    ),
+    llmChunkerModel: meta(
+      "LLM chunker model",
+      "Model used for semantic PDF chunking at document ingest. Separate from vision so you can test newer models (e.g. gpt-5.2).",
+      "Newer models may produce better chunk boundaries and tags; cost is per ingested document.",
+      d.models.llmChunkerModel
     ),
   },
   frustrationHandling: {

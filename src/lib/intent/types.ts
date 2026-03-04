@@ -59,6 +59,7 @@ export const intentManifestSchema = z.object({
     diagnosticPlannerModel: z.string().min(1),
     triageModel: z.string().min(1),
     visionModel: z.string().min(1),
+    llmChunkerModel: z.string().min(1),
   }),
   frustrationHandling: z.object({
     detectionPatterns: z

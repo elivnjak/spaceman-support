@@ -60,8 +60,8 @@ export const INGESTION_CONFIG = {
   maxPagesForVision: 50,
   /** Enable numeric verification of vision output against deterministic text. */
   verifyNumerics: true,
-  /** Model used for LLM-based semantic chunking. */
-  llmChunkerModel: MANIFEST_DEFAULTS.models.visionModel,
+  /** Model used for LLM-based semantic chunking (separate from vision; default gpt-5.2 for testing). */
+  llmChunkerModel: MANIFEST_DEFAULTS.models.llmChunkerModel,
   /** Use LLM chunker for PDFs up to this many pages (0 = disabled). */
   maxPagesForLlmChunker: 20,
 } as const;
@@ -93,6 +93,7 @@ export async function getLlmConfig() {
     diagnosticPlannerModel: manifest.models.diagnosticPlannerModel,
     triageModel: manifest.models.triageModel,
     visionModel: manifest.models.visionModel,
+    llmChunkerModel: manifest.models.llmChunkerModel,
   };
 }
 

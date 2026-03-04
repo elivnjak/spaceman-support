@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import { INGESTION_CONFIG } from "@/lib/config";
+import { getLlmConfig } from "@/lib/config";
 
 function getOpenAI(): OpenAI {
   const key = process.env.OPENAI_API_KEY;
@@ -117,6 +117,7 @@ export async function chunkDocumentWithLlm(
   numPages: number,
 ): Promise<LlmChunkerResult> {
   const openai = getOpenAI();
+  const { llmChunkerModel } = await getLlmConfig();
 
   const file = await openai.files.create({
     file: new File([new Uint8Array(buffer)], fileName, { type: "application/pdf" }),
@@ -125,7 +126,7 @@ export async function chunkDocumentWithLlm(
 
   try {
     const response = await openai.responses.create({
-      model: INGESTION_CONFIG.llmChunkerModel,
+      model: llmChunkerModel,
       input: [
         {
           role: "system",
