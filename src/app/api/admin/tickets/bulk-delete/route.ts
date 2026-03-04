@@ -4,7 +4,7 @@ import { requireAdminUiAuth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { diagnosticSessions } from "@/lib/db/schema";
 import { deleteDiagnosticSessionStorage } from "@/lib/storage";
-import { withApiRouteErrorLogging } from "@/lib/error-logs";
+import { logErrorEvent, withApiRouteErrorLogging } from "@/lib/error-logs";
 
 async function POSTHandler(request: Request) {
   const authError = await requireAdminUiAuth(request);
@@ -51,6 +51,16 @@ async function POSTHandler(request: Request) {
 
   if (failedSessionIds.length > 0) {
     console.error("Failed to delete ticket files for sessions:", failedSessionIds);
+    await logErrorEvent({
+      level: "error",
+      route: "/api/admin/tickets/bulk-delete",
+      sessionId: null,
+      message: "Failed to delete ticket files for one or more sessions.",
+      context: {
+        failedSessionIds,
+        attemptedSessionCount: existingIds.length,
+      },
+    }).catch(() => {});
     return NextResponse.json(
       {
         error: "Failed to delete files for one or more tickets.",

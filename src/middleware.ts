@@ -9,14 +9,8 @@ function getClientIp(request: NextRequest): string {
   );
 }
 
-/** Origin the client sees (use behind proxies e.g. Railway). */
+/** Origin inferred from incoming request (works behind proxies like Railway). */
 function getRequestOrigin(request: NextRequest): string {
-  if (
-    process.env.NEXT_PUBLIC_BASE_URL != null &&
-    process.env.NEXT_PUBLIC_BASE_URL !== ""
-  ) {
-    return new URL(process.env.NEXT_PUBLIC_BASE_URL).origin;
-  }
   const proto =
     request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim() ??
     request.nextUrl.protocol.replace(":", "");
@@ -28,6 +22,22 @@ function getRequestOrigin(request: NextRequest): string {
     return `${proto}://${host}`;
   }
   return request.nextUrl.origin;
+}
+
+function getAllowedOrigins(request: NextRequest): Set<string> {
+  const allowedOrigins = new Set<string>();
+  allowedOrigins.add(getRequestOrigin(request));
+
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL?.trim();
+  if (baseUrl) {
+    try {
+      allowedOrigins.add(new URL(baseUrl).origin);
+    } catch {
+      // Ignore malformed env value; request origin remains allowed.
+    }
+  }
+
+  return allowedOrigins;
 }
 
 export function middleware(request: NextRequest) {
@@ -65,12 +75,12 @@ export function middleware(request: NextRequest) {
   if (pathname.startsWith("/api/chat")) {
     // Reject cross-origin POSTs (only allow same-origin or configured base URL)
     if (request.method === "POST") {
-      const allowedOrigin = getRequestOrigin(request);
+      const allowedOrigins = getAllowedOrigins(request);
       const origin = request.headers.get("Origin");
       if (origin) {
         try {
           const requestOrigin = new URL(origin).origin;
-          if (requestOrigin !== allowedOrigin) {
+          if (!allowedOrigins.has(requestOrigin)) {
             return NextResponse.json(
               { error: "Forbidden" },
               { status: 403 }

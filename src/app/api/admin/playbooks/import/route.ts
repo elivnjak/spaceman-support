@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import ExcelJS from "exceljs";
 import { randomUUID } from "crypto";
 import { db } from "@/lib/db";
-import { actions, labels, playbooks } from "@/lib/db/schema";
+import { actions, labels, playbookProductTypes, playbooks, productTypes } from "@/lib/db/schema";
 import { eq, inArray } from "drizzle-orm";
 import { withApiRouteErrorLogging } from "@/lib/error-logs";
 
@@ -77,8 +77,22 @@ async function POSTHandler(request: Request) {
     }
     const title = overviewRows[0]?.title ?? "";
     const labelId = overviewRows[0]?.label_id ?? "";
+    const playbookId = overviewRows[0]?.playbook_id ?? "";
+    const productTypeIdsCsv = overviewRows[0]?.product_type_ids ?? "";
+    const productTypeNamesCsv =
+      overviewRows[0]?.product_type_names ?? overviewRows[0]?.product_types ?? "";
     if (!title) errors.push("Overview sheet: title is required.");
     if (!labelId) errors.push("Overview sheet: label_id is required.");
+    if (playbookId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(playbookId)) {
+      errors.push("Overview sheet: playbook_id must be a valid UUID when provided.");
+    }
+
+    const selectedProductTypeIds = new Set<string>();
+    const requestedProductTypeIds = productTypeIdsCsv
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean);
+    for (const id of requestedProductTypeIds) selectedProductTypeIds.add(id);
 
     if (labelId) {
       const [label] = await db
@@ -88,6 +102,56 @@ async function POSTHandler(request: Request) {
       if (!label) {
         errors.push(
           `Overview sheet: label_id "${labelId}" does not exist. Check Admin → Labels for valid IDs.`,
+        );
+      }
+    }
+
+    if (playbookId) {
+      const [existingPlaybook] = await db
+        .select({ id: playbooks.id })
+        .from(playbooks)
+        .where(eq(playbooks.id, playbookId));
+      if (!existingPlaybook) {
+        errors.push(`Overview sheet: playbook_id "${playbookId}" was not found.`);
+      }
+    }
+
+    const requestedProductTypeNames = productTypeNamesCsv
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean);
+
+    if (selectedProductTypeIds.size > 0 || requestedProductTypeNames.length > 0) {
+      const allProductTypes = await db
+        .select({ id: productTypes.id, name: productTypes.name })
+        .from(productTypes);
+
+      const productTypeNameToId = new Map(
+        allProductTypes.map((item) => [item.name.toLowerCase(), item.id])
+      );
+      const validProductTypeIds = new Set(allProductTypes.map((item) => item.id));
+
+      const unknownIds = Array.from(selectedProductTypeIds).filter((id) => !validProductTypeIds.has(id));
+      if (unknownIds.length > 0) {
+        errors.push(
+          `Overview sheet: unknown product_type_ids: ${unknownIds.join(", ")}. Check Admin -> Product Types for valid IDs.`
+        );
+      }
+
+      const unknownNames: string[] = [];
+      for (const rawName of requestedProductTypeNames) {
+        const normalized = rawName.toLowerCase();
+        if (normalized === "all" || normalized === "all product types") continue;
+        const mappedId = productTypeNameToId.get(normalized);
+        if (!mappedId) {
+          unknownNames.push(rawName);
+          continue;
+        }
+        selectedProductTypeIds.add(mappedId);
+      }
+      if (unknownNames.length > 0) {
+        errors.push(
+          `Overview sheet: unknown product_type_names: ${unknownNames.join(", ")}. Use exact names from Admin -> Product Types.`
         );
       }
     }
@@ -216,21 +280,75 @@ async function POSTHandler(request: Request) {
       return NextResponse.json({ error: errors.join("\n") }, { status: 400 });
     }
 
-    const [created] = await db
-      .insert(playbooks)
-      .values({
+    const saved = await db.transaction(async (tx) => {
+      const productTypeIds = Array.from(selectedProductTypeIds);
+      const values = {
         labelId,
         title,
         steps,
-        ...(symptomItems.length > 0 && { symptoms: symptomItems }),
-        ...(evidenceItems.length > 0 && { evidenceChecklist: evidenceItems }),
-        ...(causeItems.length > 0 && { candidateCauses: causeItems }),
-        ...(questionItems.length > 0 && { diagnosticQuestions: questionItems }),
-        ...(triggerItems.length > 0 && { escalationTriggers: triggerItems }),
-      })
-      .returning();
+        updatedAt: new Date(),
+        ...(symptomItems.length > 0 ? { symptoms: symptomItems } : { symptoms: null }),
+        ...(evidenceItems.length > 0 ? { evidenceChecklist: evidenceItems } : { evidenceChecklist: null }),
+        ...(causeItems.length > 0 ? { candidateCauses: causeItems } : { candidateCauses: null }),
+        ...(questionItems.length > 0 ? { diagnosticQuestions: questionItems } : { diagnosticQuestions: null }),
+        ...(triggerItems.length > 0 ? { escalationTriggers: triggerItems } : { escalationTriggers: null }),
+      };
 
-    return NextResponse.json(created);
+      if (playbookId) {
+        const [updatedPlaybook] = await tx
+          .update(playbooks)
+          .set(values)
+          .where(eq(playbooks.id, playbookId))
+          .returning();
+        if (!updatedPlaybook) return null;
+        await tx.delete(playbookProductTypes).where(eq(playbookProductTypes.playbookId, playbookId));
+        if (productTypeIds.length > 0) {
+          await tx.insert(playbookProductTypes).values(
+            productTypeIds.map((productTypeId) => ({
+              playbookId,
+              productTypeId,
+            }))
+          );
+        }
+        return {
+          ...updatedPlaybook,
+          productTypeIds,
+        };
+      }
+
+      const [createdPlaybook] = await tx
+        .insert(playbooks)
+        .values({
+          labelId,
+          title,
+          steps,
+          ...(symptomItems.length > 0 && { symptoms: symptomItems }),
+          ...(evidenceItems.length > 0 && { evidenceChecklist: evidenceItems }),
+          ...(causeItems.length > 0 && { candidateCauses: causeItems }),
+          ...(questionItems.length > 0 && { diagnosticQuestions: questionItems }),
+          ...(triggerItems.length > 0 && { escalationTriggers: triggerItems }),
+        })
+        .returning();
+
+      if (productTypeIds.length > 0) {
+        await tx.insert(playbookProductTypes).values(
+          productTypeIds.map((productTypeId) => ({
+            playbookId: createdPlaybook.id,
+            productTypeId,
+          }))
+        );
+      }
+
+      return {
+        ...createdPlaybook,
+        productTypeIds,
+      };
+    });
+    if (!saved) {
+      return NextResponse.json({ error: "Playbook not found" }, { status: 404 });
+    }
+
+    return NextResponse.json(saved);
   } catch (err: unknown) {
     const message =
       err instanceof Error ? err.message : "Failed to process file";

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { telegramConfig } from "@/lib/db/schema";
-import { withApiRouteErrorLogging } from "@/lib/error-logs";
+import { logErrorEvent, withApiRouteErrorLogging } from "@/lib/error-logs";
 
 type TelegramChat = {
   id: string;
@@ -29,6 +29,13 @@ async function GETHandler() {
     res = await fetch(apiUrl);
   } catch (err) {
     console.error("[telegram] getUpdates request failed:", err);
+    await logErrorEvent({
+      level: "error",
+      route: "/api/admin/telegram-config/fetch-chat-ids",
+      sessionId: null,
+      message: "Telegram getUpdates request failed.",
+      error: err,
+    }).catch(() => {});
     return NextResponse.json(
       { error: "Could not reach Telegram. Check your connection." },
       { status: 502 }
@@ -38,6 +45,16 @@ async function GETHandler() {
   if (!res.ok) {
     const text = await res.text();
     console.error("[telegram] getUpdates failed:", res.status, text);
+    await logErrorEvent({
+      level: "error",
+      route: "/api/admin/telegram-config/fetch-chat-ids",
+      sessionId: null,
+      message: `Telegram getUpdates failed with status ${res.status}.`,
+      context: {
+        status: res.status,
+        body: text.slice(0, 1000),
+      },
+    }).catch(() => {});
     return NextResponse.json(
       { error: "Telegram API error. Check that your bot token is correct." },
       { status: 400 }

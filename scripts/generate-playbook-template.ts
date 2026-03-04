@@ -78,12 +78,21 @@ async function main() {
   addSheet(
     wb,
     "Overview",
-    'Fill in the playbook title and the label ID it belongs to. You can find label IDs in Admin → Labels. Only one row needed — do not add extra rows.',
+    'Fill in playbook_id (blank=create new, set UUID=update existing), title and label_id. Optional: scope by product_type_ids (comma-separated UUIDs) or product_type_names (comma-separated names). Leave product type columns blank for all.',
     [
+      { header: "playbook_id", key: "playbook_id", width: 40 },
       { header: "title", key: "title", width: 40 },
       { header: "label_id", key: "label_id", width: 30 },
+      { header: "product_type_ids", key: "product_type_ids", width: 52 },
+      { header: "product_type_names", key: "product_type_names", width: 40 },
     ],
-    { title: "Fix too runny texture", label_id: "too_runny" },
+    {
+      playbook_id: "",
+      title: "Fix too runny texture",
+      label_id: "too_runny",
+      product_type_ids: "",
+      product_type_names: "Gelato base",
+    },
   );
 
   // --- Symptoms ---

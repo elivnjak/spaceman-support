@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { telegramConfig } from "@/lib/db/schema";
-import { withApiRouteErrorLogging } from "@/lib/error-logs";
+import { logErrorEvent, withApiRouteErrorLogging } from "@/lib/error-logs";
 
 async function sendTelegramTextMessage(opts: {
   token: string;
@@ -24,9 +24,21 @@ async function sendTelegramTextMessage(opts: {
       }
     );
     if (!res.ok) {
+      const responseText = await res.text();
       console.error(
-        `[telegram-config] sendMessage failed for ${opts.chatId}: ${res.status} ${await res.text()}`
+        `[telegram-config] sendMessage failed for ${opts.chatId}: ${res.status} ${responseText}`
       );
+      await logErrorEvent({
+        level: "error",
+        route: "/api/admin/telegram-config",
+        sessionId: null,
+        message: `Telegram sendMessage failed for chat ${opts.chatId}.`,
+        context: {
+          chatId: opts.chatId,
+          status: res.status,
+          body: responseText.slice(0, 1000),
+        },
+      }).catch(() => {});
       return false;
     }
     return true;
@@ -35,6 +47,16 @@ async function sendTelegramTextMessage(opts: {
       `[telegram-config] sendMessage failed for ${opts.chatId}:`,
       err instanceof Error ? err.message : err
     );
+    await logErrorEvent({
+      level: "error",
+      route: "/api/admin/telegram-config",
+      sessionId: null,
+      message: `Telegram sendMessage threw for chat ${opts.chatId}.`,
+      error: err,
+      context: {
+        chatId: opts.chatId,
+      },
+    }).catch(() => {});
     return false;
   }
 }

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { telegramConfig } from "@/lib/db/schema";
-import { withApiRouteErrorLogging } from "@/lib/error-logs";
+import { logErrorEvent, withApiRouteErrorLogging } from "@/lib/error-logs";
 
 function normalizeChatIds(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
@@ -30,9 +30,21 @@ async function sendTelegramTextMessage(opts: {
       }
     );
     if (!res.ok) {
+      const responseText = await res.text();
       console.error(
-        `[telegram-config] test sendMessage failed for ${opts.chatId}: ${res.status} ${await res.text()}`
+        `[telegram-config] test sendMessage failed for ${opts.chatId}: ${res.status} ${responseText}`
       );
+      await logErrorEvent({
+        level: "error",
+        route: "/api/admin/telegram-config/test",
+        sessionId: null,
+        message: `Telegram test sendMessage failed for chat ${opts.chatId}.`,
+        context: {
+          chatId: opts.chatId,
+          status: res.status,
+          body: responseText.slice(0, 1000),
+        },
+      }).catch(() => {});
       return false;
     }
     return true;
@@ -41,6 +53,16 @@ async function sendTelegramTextMessage(opts: {
       `[telegram-config] test sendMessage failed for ${opts.chatId}:`,
       err instanceof Error ? err.message : err
     );
+    await logErrorEvent({
+      level: "error",
+      route: "/api/admin/telegram-config/test",
+      sessionId: null,
+      message: `Telegram test sendMessage threw for chat ${opts.chatId}.`,
+      error: err,
+      context: {
+        chatId: opts.chatId,
+      },
+    }).catch(() => {});
     return false;
   }
 }

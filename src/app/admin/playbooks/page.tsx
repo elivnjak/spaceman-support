@@ -381,8 +381,22 @@ export default function AdminPlaybooksPage() {
         setImportMsg({ type: "error", text: data.error ?? "Import failed" });
         return;
       }
-      setPlaybooks((prev) => [...prev, data]);
-      setImportMsg({ type: "success", text: `Playbook "${data.title}" imported successfully.` });
+      setPlaybooks((prev) => {
+        const existingIndex = prev.findIndex((item) => item.id === data.id);
+        if (existingIndex >= 0) {
+          const next = [...prev];
+          next[existingIndex] = data;
+          return next;
+        }
+        return [...prev, data];
+      });
+      const wasExisting = playbooks.some((item) => item.id === data.id);
+      setImportMsg({
+        type: "success",
+        text: wasExisting
+          ? `Playbook "${data.title}" updated successfully from Excel.`
+          : `Playbook "${data.title}" imported successfully.`,
+      });
     } catch {
       setImportMsg({ type: "error", text: "Failed to upload file." });
     } finally {
@@ -420,6 +434,15 @@ export default function AdminPlaybooksPage() {
         title={dedicatedMode ? "Edit playbook" : "Playbooks"}
         actions={
           <div className="flex items-center gap-4">
+            {editing && (
+              <a
+                href={`/api/admin/playbooks/${editing.id}/export`}
+                download
+                className="rounded border border-border px-3 py-1 text-sm"
+              >
+                Export Excel
+              </a>
+            )}
             {dedicatedMode && (
               <Link href="/admin/playbooks" className="text-primary hover:underline">
                 ← Back to playbooks
@@ -433,37 +456,47 @@ export default function AdminPlaybooksPage() {
       />
 
       {!dedicatedMode && (
-        <div className="mb-4 flex flex-wrap items-center gap-2">
-          <button
-            onClick={startNew}
-            className="rounded bg-primary px-4 py-2 text-white hover:bg-primary-hover"
-          >
-            New playbook
-          </button>
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            disabled={importing}
-            className="rounded border border-primary px-4 py-2 text-primary hover:bg-aqua/30 disabled:opacity-50"
-          >
-            {importing ? "Importing…" : "Import from Excel"}
-          </button>
-          <a
-            href="/api/admin/playbooks/template"
-            download
-            className="rounded border border-border px-4 py-2 text-sm text-muted hover:bg-aqua/30"
-          >
-            Download template
-          </a>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".xlsx"
-            className="hidden"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) handleImport(file);
-            }}
-          />
+        <div className="mb-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={startNew}
+              className="rounded bg-primary px-4 py-2 text-white hover:bg-primary-hover"
+            >
+              New playbook
+            </button>
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={importing}
+              className="rounded border border-primary px-4 py-2 text-primary hover:bg-aqua/30 disabled:opacity-50"
+            >
+              {importing ? "Importing…" : "Import from Excel"}
+            </button>
+            <a
+              href="/api/admin/playbooks/template"
+              download
+              className="rounded border border-border px-4 py-2 text-sm text-muted hover:bg-aqua/30"
+            >
+              Download template
+            </a>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".xlsx"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) handleImport(file);
+              }}
+            />
+          </div>
+          <p className="mt-2 text-xs text-muted">
+            Export an existing playbook to get a prefilled workbook for edits/re-import.
+          </p>
+          <p className="mt-1 text-xs text-muted">
+            In the template Overview sheet, use <code>product_type_ids</code> for comma-separated IDs or{" "}
+            <code>product_type_names</code> for comma-separated names from the Reference tab. Leave both blank
+            to apply to all product types. Keep <code>playbook_id</code> populated to update on import.
+          </p>
         </div>
       )}
 
@@ -1192,6 +1225,13 @@ export default function AdminPlaybooksPage() {
                 </p>
               </div>
               <div className="flex gap-2">
+                <a
+                  href={`/api/admin/playbooks/${p.id}/export`}
+                  download
+                  className="rounded border border-border px-3 py-1 text-sm"
+                >
+                  Export Excel
+                </a>
                 <Link
                   href={`/admin/playbooks/${p.id}`}
                   className="rounded border border-border px-3 py-1 text-sm"

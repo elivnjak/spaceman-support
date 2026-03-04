@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { documents } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { deleteStorageFile, getStorageRelativePath } from "@/lib/storage";
-import { withApiRouteErrorLogging } from "@/lib/error-logs";
+import { logErrorEvent, withApiRouteErrorLogging } from "@/lib/error-logs";
 
 async function GETHandler(
   _request: Request,
@@ -112,6 +112,17 @@ async function DELETEHandler(
     } catch (err) {
       // Log but continue; DB row and chunks should still be removed
       console.error("Failed to delete storage file:", doc.filePath, err);
+      await logErrorEvent({
+        level: "error",
+        route: "/api/admin/docs/[id]",
+        sessionId: null,
+        message: "Failed to delete document storage file.",
+        error: err,
+        context: {
+          documentId: id,
+          filePath: doc.filePath,
+        },
+      }).catch(() => {});
     }
   }
 

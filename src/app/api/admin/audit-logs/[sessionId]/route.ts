@@ -4,7 +4,7 @@ import { requireAdminAuth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { auditLogs, diagnosticSessions } from "@/lib/db/schema";
 import { deleteDiagnosticSessionStorage } from "@/lib/storage";
-import { withApiRouteErrorLogging } from "@/lib/error-logs";
+import { logErrorEvent, withApiRouteErrorLogging } from "@/lib/error-logs";
 
 async function GETHandler(
   request: Request,
@@ -64,6 +64,16 @@ async function DELETEHandler(
     await deleteDiagnosticSessionStorage(sessionId);
   } catch (error) {
     console.error("Failed to delete diagnostic session files:", sessionId, error);
+    await logErrorEvent({
+      level: "error",
+      route: "/api/admin/audit-logs/[sessionId]",
+      sessionId,
+      message: "Failed to delete diagnostic session files.",
+      error,
+      context: {
+        targetSessionId: sessionId,
+      },
+    }).catch(() => {});
     return NextResponse.json(
       { error: "Failed to delete session files." },
       { status: 500 }

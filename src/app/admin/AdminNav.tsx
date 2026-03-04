@@ -28,6 +28,7 @@ const navGroups: NavGroup[] = [
   {
     section: "Content & knowledge",
     items: [
+      { href: "/admin/actions", label: "Actions" },
       { href: "/admin/labels", label: "Labels" },
       { href: "/admin/images", label: "Reference images" },
       { href: "/admin/docs", label: "Documents" },

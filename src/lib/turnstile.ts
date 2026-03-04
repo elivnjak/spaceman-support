@@ -12,12 +12,14 @@ export async function verifyTurnstileToken(
   input: VerifyTurnstileInput
 ): Promise<{ ok: boolean; errorCodes: string[] }> {
   const secret = process.env.TURNSTILE_SECRET_KEY?.trim();
+  const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim();
   const enforceInCurrentEnv =
     process.env.NODE_ENV === "production" ||
     process.env.TURNSTILE_ENFORCE?.trim().toLowerCase() === "true";
 
-  // Keep local development simple unless explicitly enforced.
-  if (!secret || !enforceInCurrentEnv) {
+  // Enforce only when both keys are configured in this environment.
+  // This prevents public chat from hard-failing if deployment vars are partial.
+  if (!secret || !siteKey || !enforceInCurrentEnv) {
     return { ok: true, errorCodes: [] };
   }
 
