@@ -121,6 +121,9 @@ export type ChatPageClientProps = {
   isAuthenticated?: boolean;
   /** Public fallback message shown if chat transport fails and escalation is required. */
   technicalDifficultiesMessage?: string;
+  /** Runtime Turnstile settings sourced from the server environment. */
+  turnstileEnabled?: boolean;
+  turnstileSiteKey?: string;
 };
 
 const INITIAL_ASSISTANT_MESSAGE =
@@ -141,13 +144,6 @@ const SESSION_STALE_MS = 2 * 60 * 60 * 1000;
 const CHAT_SESSION_STORAGE_KEY = "chatSessionId";
 const CHAT_USER_NAME_KEY = "chatUserName";
 const CHAT_USER_PHONE_KEY = "chatUserPhone";
-const TURNSTILE_ENABLED =
-  process.env.NODE_ENV === "production" ||
-  process.env.NEXT_PUBLIC_TURNSTILE_ENFORCE?.trim().toLowerCase() === "true";
-const TURNSTILE_SITE_KEY =
-  TURNSTILE_ENABLED
-    ? process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim() ?? ""
-    : "";
 
 /** Australian phone: 8 digits (local), or 10 with 02/03/04/07/08, or 9 digits with +61 (2/3/4/7/8). */
 function isValidAustralianPhone(value: string): boolean {
@@ -197,7 +193,10 @@ export function ChatPageClient({
   isHomePage,
   isAuthenticated = false,
   technicalDifficultiesMessage,
+  turnstileEnabled = false,
+  turnstileSiteKey = "",
 }: ChatPageClientProps) {
+  const activeTurnstileSiteKey = turnstileEnabled ? turnstileSiteKey.trim() : "";
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [userName, setUserName] = useState("");
   const [userPhone, setUserPhone] = useState("");
@@ -658,7 +657,7 @@ export function ChatPageClient({
   }, []);
 
   useEffect(() => {
-    if (sessionId || !TURNSTILE_SITE_KEY || !turnstileScriptLoaded) return;
+    if (sessionId || !activeTurnstileSiteKey || !turnstileScriptLoaded) return;
     const container = turnstileContainerRef.current;
     if (!container || typeof window === "undefined" || !window.turnstile) return;
 
@@ -669,20 +668,24 @@ export function ChatPageClient({
     }
 
     turnstileWidgetIdRef.current = window.turnstile.render(container, {
-      sitekey: TURNSTILE_SITE_KEY,
+      sitekey: activeTurnstileSiteKey,
       appearance: "interaction-only",
       callback: (token) => setTurnstileToken(token),
       "expired-callback": () => setTurnstileToken(null),
       "error-callback": () => setTurnstileToken(null),
     });
-  }, [sessionId, turnstileScriptLoaded]);
+  }, [sessionId, turnstileScriptLoaded, activeTurnstileSiteKey]);
 
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (loading || sendInFlightRef.current) return;
     const text = input.trim();
     if (!text && files.length === 0) return;
-    if (!sessionId && TURNSTILE_SITE_KEY && !turnstileToken) {
+    if (!sessionId && turnstileEnabled && !activeTurnstileSiteKey) {
+      setError("Verification is temporarily unavailable. Please refresh and try again.");
+      return;
+    }
+    if (!sessionId && activeTurnstileSiteKey && !turnstileToken) {
       setError("Please complete verification and try again.");
       return;
     }
@@ -1000,7 +1003,7 @@ export function ChatPageClient({
 
   return (
     <main className="flex h-dvh flex-col bg-page">
-      {TURNSTILE_SITE_KEY && (
+      {activeTurnstileSiteKey && (
         <Script
           src="https://challenges.cloudflare.com/turnstile/v0/api.js"
           strategy="afterInteractive"
@@ -1119,7 +1122,7 @@ export function ChatPageClient({
                   </p>
                 )}
               </div>
-              {TURNSTILE_SITE_KEY && (
+              {activeTurnstileSiteKey && (
                 <div
                   ref={turnstileContainerRef}
                   className="overflow-hidden"

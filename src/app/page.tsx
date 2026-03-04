@@ -20,6 +20,12 @@ export default async function HomePage() {
   let isAuthenticated = false;
   let technicalDifficultiesEscalationMessage =
     DEFAULT_TECHNICAL_DIFFICULTIES_ESCALATION_MESSAGE;
+  const turnstileEnforceOverride =
+    process.env.TURNSTILE_ENFORCE?.trim().toLowerCase() === "true";
+  const turnstileEnabled = process.env.NODE_ENV === "production" || turnstileEnforceOverride;
+  const turnstileSiteKey = turnstileEnabled
+    ? process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim() ?? ""
+    : "";
 
   try {
     const cookieStore = await cookies();
@@ -67,6 +73,8 @@ export default async function HomePage() {
           isHomePage
           isAuthenticated={isAuthenticated}
           technicalDifficultiesMessage={technicalDifficultiesEscalationMessage}
+          turnstileEnabled={turnstileEnabled}
+          turnstileSiteKey={turnstileSiteKey}
         />
       </div>
     </main>
