@@ -13,6 +13,14 @@ function parseDateParam(value: string | null): { value: Date | null; invalid: bo
   return { value: d, invalid: false };
 }
 
+const DIAGNOSIS_MODE_DISABLED_REASON_PREFIX =
+  "Diagnosis mode is disabled for public users; escalating after intake collection.";
+
+const DIAGNOSIS_MODE_DISABLED_FILTER = sql`(
+  COALESCE(${diagnosticSessions.escalationReason}, '') ILIKE ${`${DIAGNOSIS_MODE_DISABLED_REASON_PREFIX}%`}
+  OR COALESCE(${diagnosticSessions.escalationHandoff} ->> 'labelId', '') = 'diagnosis_mode_disabled'
+)`;
+
 async function GETHandler(request: Request) {
   const authError = await requireAdminUiAuth(request);
   if (authError) return authError;
@@ -46,6 +54,22 @@ async function GETHandler(request: Request) {
     dateFilters.push(lte(diagnosticSessions.createdAt, endOfDay));
   }
   const whereClause = dateFilters.length > 0 ? and(...dateFilters) : undefined;
+  const analyticsWhereClause = whereClause
+    ? and(whereClause, sql`NOT (${DIAGNOSIS_MODE_DISABLED_FILTER})`)
+    : sql`NOT (${DIAGNOSIS_MODE_DISABLED_FILTER})`;
+
+  const withAnalyticsWhere = (extraCondition?: SQL<unknown>): SQL<unknown> => {
+    if (extraCondition) return and(analyticsWhereClause, extraCondition);
+    return analyticsWhereClause;
+  };
+
+  const [excludedSessionsRow] = await db
+    .select({ total: count(diagnosticSessions.id) })
+    .from(diagnosticSessions)
+    .where(
+      whereClause ? and(whereClause, DIAGNOSIS_MODE_DISABLED_FILTER) : DIAGNOSIS_MODE_DISABLED_FILTER
+    );
+  const excludedDiagnosisModeDisabledSessions = Number(excludedSessionsRow?.total ?? 0);
 
   // ── Summary stats ─────────────────────────────────────────────────────────
   const [summaryRow] = await db
@@ -89,7 +113,7 @@ async function GETHandler(request: Request) {
       ),
     })
     .from(diagnosticSessions)
-    .where(whereClause);
+    .where(analyticsWhereClause);
 
   const total = Number(summaryRow?.total ?? 0);
   const resolved = Number(summaryRow?.resolved ?? 0);
@@ -138,11 +162,12 @@ async function GETHandler(request: Request) {
       ),
     })
     .from(diagnosticSessions)
-    .where(whereClause);
+    .where(analyticsWhereClause);
 
   // ── Escalation breakdown ───────────────────────────────────────────────────
   const escalationWhereFilters: SQL<unknown>[] = [
     sql`${diagnosticSessions.status} = 'escalated'`,
+    sql`NOT (${DIAGNOSIS_MODE_DISABLED_FILTER})`,
   ];
   if (dateFilters.length > 0) {
     escalationWhereFilters.push(...dateFilters);
@@ -244,11 +269,7 @@ async function GETHandler(request: Request) {
     })
     .from(diagnosticSessions)
     .leftJoin(playbooks, sql`${diagnosticSessions.playbookId} = ${playbooks.id}`)
-    .where(
-      whereClause
-        ? and(whereClause, sql`${diagnosticSessions.playbookId} IS NOT NULL`)
-        : sql`${diagnosticSessions.playbookId} IS NOT NULL`
-    )
+    .where(withAnalyticsWhere(sql`${diagnosticSessions.playbookId} IS NOT NULL`))
     .groupBy(diagnosticSessions.playbookId, playbooks.title)
     .orderBy(sql`count(${diagnosticSessions.id}) DESC`)
     .limit(10);
@@ -277,11 +298,7 @@ async function GETHandler(request: Request) {
       ),
     })
     .from(diagnosticSessions)
-    .where(
-      whereClause
-        ? and(whereClause, sql`${diagnosticSessions.machineModel} IS NOT NULL`)
-        : sql`${diagnosticSessions.machineModel} IS NOT NULL`
-    )
+    .where(withAnalyticsWhere(sql`${diagnosticSessions.machineModel} IS NOT NULL`))
     .groupBy(diagnosticSessions.machineModel)
     .orderBy(sql`count(${diagnosticSessions.id}) DESC`)
     .limit(10);
@@ -313,7 +330,7 @@ async function GETHandler(request: Request) {
       ),
     })
     .from(diagnosticSessions)
-    .where(whereClause)
+    .where(analyticsWhereClause)
     .groupBy(sql`DATE(${diagnosticSessions.createdAt} AT TIME ZONE 'UTC')`)
     .orderBy(sql`DATE(${diagnosticSessions.createdAt} AT TIME ZONE 'UTC')`);
 
@@ -332,6 +349,7 @@ async function GETHandler(request: Request) {
         resolved,
         escalated,
         active,
+        excludedDiagnosisModeDisabledSessions,
         resolutionRate,
         escalationRate,
         avgTurnCount,

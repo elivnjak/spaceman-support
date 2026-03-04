@@ -22,6 +22,7 @@ type AnalyticsSummary = {
   resolved: number;
   escalated: number;
   active: number;
+  excludedDiagnosisModeDisabledSessions: number;
   resolutionRate: number;
   escalationRate: number;
   avgTurnCount: number;
@@ -332,7 +333,19 @@ export function AdminDashboardClient() {
         <StatCard
           label="Total sessions"
           value={loading ? "—" : fmt(s?.total ?? 0)}
-          sub={s && s.avgTurnCount > 0 ? `Avg ${s.avgTurnCount} turns per session` : undefined}
+          sub={
+            s
+              ? s.avgTurnCount > 0
+                ? `Avg ${s.avgTurnCount} turns per session${
+                    s.excludedDiagnosisModeDisabledSessions > 0
+                      ? ` • Excludes ${fmt(s.excludedDiagnosisModeDisabledSessions)} intake-only escalations`
+                      : ""
+                  }`
+                : s.excludedDiagnosisModeDisabledSessions > 0
+                ? `Excludes ${fmt(s.excludedDiagnosisModeDisabledSessions)} intake-only escalations`
+                : undefined
+              : undefined
+          }
         />
         <StatCard
           label="Resolved by AI"

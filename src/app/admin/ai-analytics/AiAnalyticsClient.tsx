@@ -45,6 +45,7 @@ type AnalyticsPayload = {
     totalSessions: number;
     matchedSessions: number;
     unmatchedSessions: number;
+    excludedDiagnosisModeDisabledSessions: number;
     avgTriageRound: number;
     multiRoundSessions: number;
     multiRoundTriageRate: number;
@@ -530,7 +531,15 @@ export function AiAnalyticsClient() {
             {loading ? "—" : fmt(data?.summary.totalSessions ?? 0)}
           </p>
           <p className="mt-1 text-sm text-muted">
-            {loading ? "—" : `${fmt(data?.summary.matchedSessions ?? 0)} matched to playbooks`}
+            {loading
+              ? "—"
+              : `${fmt(data?.summary.matchedSessions ?? 0)} matched to playbooks${
+                  (data?.summary.excludedDiagnosisModeDisabledSessions ?? 0) > 0
+                    ? ` • excludes ${fmt(
+                        data?.summary.excludedDiagnosisModeDisabledSessions ?? 0
+                      )} intake-only escalations`
+                    : ""
+                }`}
           </p>
           {!loading && comparisonData && (
             <p className="mt-1 text-xs text-muted">

@@ -45,6 +45,14 @@ function round1(value: number): number {
   return Math.round(value * 10) / 10;
 }
 
+const DIAGNOSIS_MODE_DISABLED_REASON_PREFIX =
+  "Diagnosis mode is disabled for public users; escalating after intake collection.";
+
+const DIAGNOSIS_MODE_DISABLED_FILTER = sql`(
+  COALESCE(${diagnosticSessions.escalationReason}, '') ILIKE ${`${DIAGNOSIS_MODE_DISABLED_REASON_PREFIX}%`}
+  OR COALESCE(${diagnosticSessions.escalationHandoff} ->> 'labelId', '') = 'diagnosis_mode_disabled'
+)`;
+
 async function GETHandler(request: Request) {
   const authError = await requireAdminUiAuth(request);
   if (authError) return authError;
@@ -77,11 +85,22 @@ async function GETHandler(request: Request) {
     dateFilters.push(lte(diagnosticSessions.createdAt, endOfDay));
   }
   const whereClause = dateFilters.length > 0 ? and(...dateFilters) : undefined;
+  const analyticsWhereClause = whereClause
+    ? and(whereClause, sql`NOT (${DIAGNOSIS_MODE_DISABLED_FILTER})`)
+    : sql`NOT (${DIAGNOSIS_MODE_DISABLED_FILTER})`;
 
   const withWhere = (extraCondition?: SQL<unknown>): SQL<unknown> | undefined => {
-    if (whereClause && extraCondition) return and(whereClause, extraCondition);
-    return whereClause ?? extraCondition;
+    if (analyticsWhereClause && extraCondition) return and(analyticsWhereClause, extraCondition);
+    return analyticsWhereClause ?? extraCondition;
   };
+
+  const [excludedSessionsRow] = await db
+    .select({ total: count(diagnosticSessions.id) })
+    .from(diagnosticSessions)
+    .where(
+      whereClause ? and(whereClause, DIAGNOSIS_MODE_DISABLED_FILTER) : DIAGNOSIS_MODE_DISABLED_FILTER
+    );
+  const excludedDiagnosisModeDisabledSessions = Number(excludedSessionsRow?.total ?? 0);
 
   const [summaryRow] = await db
     .select({
@@ -98,7 +117,7 @@ async function GETHandler(request: Request) {
       ),
     })
     .from(diagnosticSessions)
-    .where(whereClause);
+    .where(analyticsWhereClause);
 
   const totalSessions = Number(summaryRow?.totalSessions ?? 0);
   const matchedSessions = Number(summaryRow?.matchedSessions ?? 0);
@@ -304,6 +323,7 @@ async function GETHandler(request: Request) {
         totalSessions,
         matchedSessions,
         unmatchedSessions,
+        excludedDiagnosisModeDisabledSessions,
         avgTriageRound,
         multiRoundSessions,
         multiRoundTriageRate,
