@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import type { AdminUiRole } from "@/lib/auth";
@@ -134,11 +135,15 @@ export function AdminNav({ role }: { role: AdminUiRole | null }) {
   const sidebarContent = (
     <>
       <div className="flex items-center gap-3 border-b border-border px-4 py-4">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-sm font-bold text-white">
-          R
-        </div>
+        <Image
+          src="/kuhlberg-logo-icon-web.webp"
+          alt="Kuhlberg logo"
+          width={32}
+          height={32}
+          className="h-8 w-8 rounded-lg"
+        />
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-ink">RAG Support</p>
+          <p className="text-sm font-semibold text-ink">Kuhlberg Support</p>
           <p className="text-xs text-muted">{roleLabel}</p>
         </div>
         <ThemeToggle />
@@ -187,7 +192,16 @@ export function AdminNav({ role }: { role: AdminUiRole | null }) {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
             </svg>
           </button>
-          <span className="text-sm font-semibold text-ink">RAG Support</span>
+          <span className="flex items-center gap-2 text-sm font-semibold text-ink">
+            <Image
+              src="/kuhlberg-logo-icon-web.webp"
+              alt="Kuhlberg logo"
+              width={18}
+              height={18}
+              className="h-[18px] w-[18px] rounded-sm"
+            />
+            <span>AG Support</span>
+          </span>
           <span className="text-xs text-muted">({roleLabel})</span>
           <div className="ml-auto flex items-center gap-1">
             <ThemeToggle />

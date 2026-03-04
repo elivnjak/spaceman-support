@@ -20,10 +20,15 @@ export const metadata: Metadata = {
   title: "Kuhlberg Support",
   description: "Support agent for Spaceman machines",
   manifest: "/manifest.json",
+  icons: {
+    icon: "/favicon.ico",
+    shortcut: "/favicon.ico",
+    apple: "/kuhlberg-logo.png",
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "RAG Support",
+    title: "Kuhlberg Support",
   },
 };
 

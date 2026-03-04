@@ -1081,7 +1081,7 @@ export function ChatPageClient({
               width={180}
               height={48}
               priority
-              className="h-12 w-auto"
+              style={{ height: "48px", width: "auto" }}
             />
             <p className="text-center text-muted">
               Welcome to Kuhlberg support chat. Please enter your details to get started.
