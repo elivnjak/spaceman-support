@@ -107,6 +107,10 @@ export default async function AdminDashboardPage({ searchParams }: Props) {
     { label: "Clearance Config", value: counts.clearanceConfigured ? "Configured" : "Not configured", href: "/admin/clearance" },
   ];
 
+  if (showLogin) {
+    return <AdminLoginForm next={params.next} />;
+  }
+
   return (
     <div>
       <PageHeader title="Dashboard" />
@@ -114,9 +118,6 @@ export default async function AdminDashboardPage({ searchParams }: Props) {
         <div className="mb-4 rounded-lg border border-accent/30 bg-accent/10 px-4 py-3 text-sm text-ink">
           This page is restricted to admin users.
         </div>
-      )}
-      {showLogin && (
-        <AdminLoginForm next={params.next} />
       )}
       {isAuthenticated && (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

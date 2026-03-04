@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Card } from "@/components/ui/Card";
@@ -35,43 +36,53 @@ export function AdminLoginForm({ next }: { next?: string }) {
   };
 
   return (
-    <Card className="mb-8 border-accent/30 bg-accent/5">
-      <h2 className="mb-2 text-lg font-medium text-ink">
-        Staff sign in required
-      </h2>
-      <p className="mb-4 text-sm text-muted">
-        Enter your admin or editor credentials to access the admin tools.
-      </p>
-      <form onSubmit={handleSubmit} className="flex flex-wrap items-end gap-3">
-        <label className="min-w-[200px] flex-1">
-          <span className="sr-only">Admin email</span>
-          <Input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="you@company.com"
-            autoComplete="username"
+    <div className="flex min-h-screen items-center justify-center px-4">
+      <div className="w-full max-w-sm">
+        <div className="mb-8 flex flex-col items-center gap-4">
+          <Image
+            src="/kuhlberg-logo.webp"
+            alt="Kuhlberg logo"
+            width={160}
+            height={48}
+            className="h-12 w-auto"
+            priority
           />
-        </label>
-        <label className="min-w-[200px] flex-1">
-          <span className="sr-only">Admin password</span>
-          <Input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="Password"
-            autoComplete="current-password"
-          />
-        </label>
-        <Button type="submit" disabled={loading} variant="accent">
-          {loading ? "Checking..." : "Login"}
-        </Button>
-      </form>
-      {error && (
-        <p className="mt-2 text-sm text-red-600" role="alert">
-          {error}
-        </p>
-      )}
-    </Card>
+        </div>
+        <Card>
+          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+            <label className="flex flex-col gap-1.5">
+              <span className="text-sm font-medium text-ink">Email</span>
+              <Input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@company.com"
+                autoComplete="username"
+                required
+              />
+            </label>
+            <label className="flex flex-col gap-1.5">
+              <span className="text-sm font-medium text-ink">Password</span>
+              <Input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                autoComplete="current-password"
+                required
+              />
+            </label>
+            {error && (
+              <p className="text-sm text-red-600 dark:text-red-400" role="alert">
+                {error}
+              </p>
+            )}
+            <Button type="submit" disabled={loading} variant="accent" className="w-full">
+              {loading ? "Signing in..." : "Sign in"}
+            </Button>
+          </form>
+        </Card>
+      </div>
+    </div>
   );
 }

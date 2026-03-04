@@ -22,6 +22,14 @@ export default async function AdminLayout({
     role = null;
   }
 
+  if (!role) {
+    return (
+      <div className="min-h-screen bg-page">
+        {children}
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-page">
       <AdminNav role={role} />
