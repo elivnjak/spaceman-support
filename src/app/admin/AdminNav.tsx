@@ -117,7 +117,15 @@ function NavLinks({
   );
 }
 
-export function AdminNav({ role }: { role: AdminUiRole | null }) {
+export function AdminNav({
+  role,
+  collapsed = false,
+  onToggle,
+}: {
+  role: AdminUiRole | null;
+  collapsed?: boolean;
+  onToggle?: () => void;
+}) {
   const [open, setOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const roleLabel = role === "editor" ? "Editor" : "Admin";
@@ -134,19 +142,29 @@ export function AdminNav({ role }: { role: AdminUiRole | null }) {
 
   const sidebarContent = (
     <>
-      <div className="flex items-center gap-3 border-b border-border px-4 py-4">
+      <div className="flex items-center gap-2 border-b border-border px-3 py-4">
         <Image
           src="/kuhlberg-logo-icon-web.webp"
           alt="Kuhlberg logo"
           width={32}
           height={32}
-          className="h-8 w-8 rounded-lg"
+          className="h-8 w-8 shrink-0 rounded-lg"
         />
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-ink">Kuhlberg Support</p>
           <p className="text-xs text-muted">{roleLabel}</p>
         </div>
         <ThemeToggle />
+        <button
+          type="button"
+          onClick={onToggle}
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:bg-aqua/30 hover:text-ink"
+          aria-label="Collapse sidebar"
+        >
+          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7M18 19l-7-7 7-7" />
+          </svg>
+        </button>
       </div>
 
       <nav className="flex-1 overflow-y-auto">
@@ -172,11 +190,35 @@ export function AdminNav({ role }: { role: AdminUiRole | null }) {
     </>
   );
 
+  const collapsedSidebar = (
+    <div className="flex flex-col items-center py-3 gap-2">
+      <Image
+        src="/kuhlberg-logo-icon-web.webp"
+        alt="Kuhlberg logo"
+        width={32}
+        height={32}
+        className="h-8 w-8 rounded-lg"
+      />
+      <button
+        type="button"
+        onClick={onToggle}
+        className="mt-1 flex h-8 w-8 items-center justify-center rounded-lg text-muted transition-colors hover:bg-aqua/30 hover:text-ink"
+        aria-label="Expand sidebar"
+      >
+        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M6 5l7 7-7 7" />
+        </svg>
+      </button>
+    </div>
+  );
+
   return (
     <>
       {/* Desktop persistent sidebar */}
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r border-border bg-surface lg:flex">
-        {sidebarContent}
+      <aside
+        className={`fixed inset-y-0 left-0 z-30 hidden flex-col border-r border-border bg-surface transition-all duration-200 lg:flex ${collapsed ? "w-14" : "w-64"}`}
+      >
+        {collapsed ? collapsedSidebar : sidebarContent}
       </aside>
 
       {/* Mobile top bar */}
