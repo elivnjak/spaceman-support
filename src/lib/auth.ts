@@ -4,7 +4,10 @@ import { and, eq, gt } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { sessions, users, type User } from "@/lib/db/schema";
 
-const SESSION_COOKIE_NAME = "__Host-session_token";
+const SESSION_COOKIE_NAME =
+  process.env.NODE_ENV === "production"
+    ? "__Host-session_token"
+    : "session_token";
 const SESSION_DURATION_MS = 1000 * 60 * 60 * 24; // 24 hours
 export const ADMIN_ROLE = "admin";
 export const EDITOR_ROLE = "editor";

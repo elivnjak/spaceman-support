@@ -42,8 +42,11 @@ function getAllowedOrigins(request: NextRequest): Set<string> {
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  // Support both production (__Host-session_token) and local/dev (session_token) cookies.
   const sessionToken =
-    request.cookies.get("__Host-session_token")?.value?.trim() ?? "";
+    request.cookies.get("__Host-session_token")?.value?.trim() ??
+    request.cookies.get("session_token")?.value?.trim() ??
+    "";
 
   // Allow admin root to render login form when unauthenticated.
   if (pathname === "/admin") {
