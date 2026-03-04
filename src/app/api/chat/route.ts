@@ -666,6 +666,18 @@ export async function POST(request: Request) {
       remoteIp: getClientIp(request),
     });
     if (!verification.ok) {
+      await logErrorEvent({
+        level: "warn",
+        route: "/api/chat",
+        sessionId: null,
+        message: "Turnstile verification failed for new public chat session.",
+        context: {
+          hasToken: Boolean(turnstileToken),
+          errorCodes: verification.errorCodes,
+          isAuthenticated,
+          isAdmin,
+        },
+      }).catch(() => {});
       return NextResponse.json(
         { error: "Verification failed. Please refresh and try again." },
         { status: 403 }
