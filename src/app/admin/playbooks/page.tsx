@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -129,6 +129,8 @@ export default function AdminPlaybooksPage() {
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 20;
 
   useEffect(() => {
     Promise.all([
@@ -157,6 +159,20 @@ export default function AdminPlaybooksPage() {
       setLoading(false);
     });
   }, [focusPlaybookId]);
+
+  useEffect(() => {
+    const maxPage = Math.max(1, Math.ceil(playbooks.length / PAGE_SIZE));
+    setPage((prev) => Math.min(prev, maxPage));
+  }, [playbooks.length]);
+
+  const totalPlaybooks = playbooks.length;
+  const totalPages = Math.ceil(totalPlaybooks / PAGE_SIZE);
+  const paginatedPlaybooks = useMemo(
+    () => playbooks.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+    [playbooks, page]
+  );
+  const canGoPrev = page > 1;
+  const canGoNext = page < totalPages;
 
   const addStep = () => {
     setForm((f) => ({
@@ -1206,49 +1222,157 @@ export default function AdminPlaybooksPage() {
       )}
 
       {!dedicatedMode && (
-        <ul className="space-y-2">
-          {playbooks.map((p) => (
-            <li
-              key={p.id}
-              className="flex items-center justify-between rounded border border-border bg-surface p-4"
-            >
-              <div>
-                <span className="font-medium">{p.title}</span>
-                <span className="ml-2 text-sm text-gray-500">
-                  ({labels.find((l) => l.id === p.labelId)?.displayName ?? p.labelId})
-                </span>
-                <p className="text-sm text-gray-500">
-                  {Array.isArray(p.steps) ? p.steps.length : 0} steps
-                  {Array.isArray(p.symptoms) && p.symptoms.length > 0 && `, ${p.symptoms.length} symptoms`}
-                  {Array.isArray(p.evidenceChecklist) && p.evidenceChecklist.length > 0 &&
-                    `, ${p.evidenceChecklist.length} evidence`}
-                </p>
-              </div>
-              <div className="flex gap-2">
-                <a
-                  href={`/api/admin/playbooks/${p.id}/export`}
-                  download
-                  className="rounded border border-border px-3 py-1 text-sm"
-                >
-                  Export Excel
-                </a>
-                <Link
-                  href={`/admin/playbooks/${p.id}`}
-                  className="rounded border border-border px-3 py-1 text-sm"
-                >
-                  Edit
-                </Link>
-                <button
-                  onClick={() => handleDelete(p)}
-                  disabled={deletingId === p.id}
-                  className="rounded border border-red-300 px-3 py-1 text-sm text-red-600 hover:bg-red-50 disabled:opacity-50"
-                >
-                  {deletingId === p.id ? "Deleting…" : "Delete"}
-                </button>
-              </div>
-            </li>
-          ))}
-        </ul>
+        <>
+          {totalPlaybooks > 0 && (
+            <div className="mb-4 text-right text-sm text-muted">
+              {(() => {
+                const from = (page - 1) * PAGE_SIZE + 1;
+                const to = Math.min(page * PAGE_SIZE, totalPlaybooks);
+                return `Showing ${from}-${to} of ${totalPlaybooks} playbook${totalPlaybooks === 1 ? "" : "s"}`;
+              })()}
+            </div>
+          )}
+
+          <ul className="space-y-2">
+            {paginatedPlaybooks.map((p) => (
+              <li
+                key={p.id}
+                className="flex items-center justify-between rounded border border-border bg-surface p-4"
+              >
+                <div>
+                  <span className="font-medium">{p.title}</span>
+                  <span className="ml-2 text-sm text-gray-500">
+                    ({labels.find((l) => l.id === p.labelId)?.displayName ?? p.labelId})
+                  </span>
+                  <p className="text-sm text-gray-500">
+                    {Array.isArray(p.steps) ? p.steps.length : 0} steps
+                    {Array.isArray(p.symptoms) && p.symptoms.length > 0 && `, ${p.symptoms.length} symptoms`}
+                    {Array.isArray(p.evidenceChecklist) && p.evidenceChecklist.length > 0 &&
+                      `, ${p.evidenceChecklist.length} evidence`}
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <a
+                    href={`/api/admin/playbooks/${p.id}/export`}
+                    download
+                    className="rounded border border-border px-3 py-1 text-sm"
+                  >
+                    Export Excel
+                  </a>
+                  <Link
+                    href={`/admin/playbooks/${p.id}`}
+                    className="rounded border border-border px-3 py-1 text-sm"
+                  >
+                    Edit
+                  </Link>
+                  <button
+                    onClick={() => handleDelete(p)}
+                    disabled={deletingId === p.id}
+                    className="rounded border border-red-300 px-3 py-1 text-sm text-red-600 hover:bg-red-50 disabled:opacity-50"
+                  >
+                    {deletingId === p.id ? "Deleting…" : "Delete"}
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+
+          {totalPlaybooks === 0 && (
+            <p className="py-6 text-center text-sm text-muted">No playbooks yet.</p>
+          )}
+
+          {totalPlaybooks > 0 && (
+            <div className="mt-4 flex flex-col items-center gap-2">
+              {totalPages > 1 && (
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setPage(1)}
+                    disabled={!canGoPrev}
+                    aria-label="First page"
+                    className="flex h-8 w-8 items-center justify-center rounded-md border border-border bg-surface text-sm text-ink transition-colors hover:bg-page disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    «
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+                    disabled={!canGoPrev}
+                    aria-label="Previous page"
+                    className="flex h-8 w-8 items-center justify-center rounded-md border border-border bg-surface text-sm text-ink transition-colors hover:bg-page disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    ‹
+                  </button>
+
+                  {(() => {
+                    const pages: (number | "...")[] = [];
+                    const total = totalPages;
+                    const current = page;
+                    if (total <= 7) {
+                      for (let i = 1; i <= total; i++) pages.push(i);
+                    } else {
+                      pages.push(1);
+                      if (current > 3) pages.push("...");
+                      const start = Math.max(2, current - 1);
+                      const end = Math.min(total - 1, current + 1);
+                      for (let i = start; i <= end; i++) pages.push(i);
+                      if (current < total - 2) pages.push("...");
+                      pages.push(total);
+                    }
+                    return pages.map((p, idx) =>
+                      p === "..." ? (
+                        <span key={`ellipsis-${idx}`} className="flex h-8 w-8 items-center justify-center text-sm text-muted">
+                          ...
+                        </span>
+                      ) : (
+                        <button
+                          key={p}
+                          type="button"
+                          onClick={() => setPage(p as number)}
+                          aria-label={`Page ${p}`}
+                          aria-current={p === current ? "page" : undefined}
+                          className={`flex h-8 min-w-[2rem] items-center justify-center rounded-md border px-2 text-sm transition-colors ${
+                            p === current
+                              ? "border-primary bg-primary text-white"
+                              : "border-border bg-surface text-ink hover:bg-page"
+                          }`}
+                        >
+                          {p}
+                        </button>
+                      )
+                    );
+                  })()}
+
+                  <button
+                    type="button"
+                    onClick={() => setPage((prev) => prev + 1)}
+                    disabled={!canGoNext}
+                    aria-label="Next page"
+                    className="flex h-8 w-8 items-center justify-center rounded-md border border-border bg-surface text-sm text-ink transition-colors hover:bg-page disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    ›
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPage(totalPages)}
+                    disabled={!canGoNext}
+                    aria-label="Last page"
+                    className="flex h-8 w-8 items-center justify-center rounded-md border border-border bg-surface text-sm text-ink transition-colors hover:bg-page disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    »
+                  </button>
+                </div>
+              )}
+              <p className="text-sm text-muted">
+                {(() => {
+                  const from = (page - 1) * PAGE_SIZE + 1;
+                  const to = Math.min(page * PAGE_SIZE, totalPlaybooks);
+                  return `Showing ${from}-${to} of ${totalPlaybooks} playbook${totalPlaybooks === 1 ? "" : "s"}`;
+                })()}
+              </p>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
