@@ -23,6 +23,7 @@ const navGroups: NavGroup[] = [
     section: "Overview & workflow",
     items: [
       { href: "/admin", label: "Dashboard" },
+      { href: "/admin/ai-analytics", label: "Insights" },
       { href: "/admin/tickets", label: "Tickets" },
     ],
   },

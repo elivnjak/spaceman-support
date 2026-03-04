@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
@@ -76,9 +77,17 @@ function ticketStatusBadgeVariant(status: string | null): "warning" | "danger" |
 }
 
 export default function AdminTicketsPage() {
+  const searchParams = useSearchParams();
+  const initialisedFromUrl = useRef(false);
+
   const [query, setQuery] = useState("");
   const [ticketStatus, setTicketStatus] = useState<"all" | TicketStatus>("all");
   const [sessionStatus, setSessionStatus] = useState<"all" | SessionStatus>("all");
+  // analytics drill-through filters (not shown in the main filter controls)
+  const [playbookId, setPlaybookId] = useState<string | null>(null);
+  const [playbookLabel, setPlaybookLabel] = useState<string | null>(null);
+  const [productType, setProductType] = useState<string | null>(null);
+  const [machineModelFilter, setMachineModelFilter] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [data, setData] = useState<TicketListResponse>({
     items: [],
@@ -94,15 +103,68 @@ export default function AdminTicketsPage() {
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [refreshNonce, setRefreshNonce] = useState(0);
 
+  // Seed state from URL params on first render (e.g. drill-through from Insights)
+  useEffect(() => {
+    if (initialisedFromUrl.current) return;
+    initialisedFromUrl.current = true;
+    const urlQ = searchParams.get("q")?.trim() ?? "";
+    const urlSessionStatus = searchParams.get("sessionStatus")?.trim() ?? "";
+    const urlTicketStatus = searchParams.get("ticketStatus")?.trim() ?? "";
+    const urlPlaybookId = searchParams.get("playbookId")?.trim() ?? "";
+    const urlPlaybookLabel = searchParams.get("playbookLabel")?.trim() ?? "";
+    const urlProductType = searchParams.get("productType")?.trim() ?? "";
+    const urlMachineModel = searchParams.get("machineModel")?.trim() ?? "";
+    if (urlQ) setQuery(urlQ);
+    if (urlSessionStatus && urlSessionStatus !== "all") {
+      setSessionStatus(urlSessionStatus as SessionStatus);
+    }
+    if (urlTicketStatus && urlTicketStatus !== "all") {
+      setTicketStatus(urlTicketStatus as TicketStatus);
+    }
+    if (urlPlaybookId) {
+      setPlaybookId(urlPlaybookId);
+      setPlaybookLabel(urlPlaybookLabel || urlPlaybookId);
+    }
+    if (urlProductType) setProductType(urlProductType);
+    if (urlMachineModel) setMachineModelFilter(urlMachineModel);
+  }, [searchParams]);
+
   const params = useMemo(() => {
     const next = new URLSearchParams();
-    if (query.trim()) next.set("q", query.trim());
+    const effectiveQ = machineModelFilter ?? (query.trim() || null);
+    if (effectiveQ) next.set("q", effectiveQ);
     if (ticketStatus !== "all") next.set("ticketStatus", ticketStatus);
     if (sessionStatus !== "all") next.set("sessionStatus", sessionStatus);
+    if (playbookId) next.set("playbookId", playbookId);
+    if (productType) next.set("productType", productType);
     next.set("page", String(page));
     next.set("pageSize", String(PAGE_SIZE));
     return next;
-  }, [query, ticketStatus, sessionStatus, page]);
+  }, [query, ticketStatus, sessionStatus, playbookId, productType, machineModelFilter, page]);
+
+  const analyticsContext: string | null = useMemo(() => {
+    if (playbookId && playbookLabel) {
+      return `Showing sessions for playbook: ${playbookLabel}`;
+    }
+    if (playbookId === "none") {
+      return "Showing sessions with no matched playbook";
+    }
+    if (productType) {
+      return `Showing sessions for product type: ${productType}`;
+    }
+    if (machineModelFilter) {
+      return `Showing sessions for machine model: ${machineModelFilter}`;
+    }
+    return null;
+  }, [playbookId, playbookLabel, productType, machineModelFilter]);
+
+  const clearAnalyticsFilter = () => {
+    setPlaybookId(null);
+    setPlaybookLabel(null);
+    setProductType(null);
+    setMachineModelFilter(null);
+    setPage(1);
+  };
 
   useEffect(() => {
     const controller = new AbortController();
@@ -197,10 +259,33 @@ export default function AdminTicketsPage() {
         description="Browse diagnostic sessions as support tickets."
       />
 
+      {analyticsContext && (
+        <div className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 text-sm">
+          <div className="flex items-center gap-2">
+            <Link
+              href="/admin/ai-analytics"
+              className="font-medium text-primary hover:underline"
+            >
+              Insights
+            </Link>
+            <span className="text-muted">/</span>
+            <span className="text-ink">{analyticsContext}</span>
+          </div>
+          <button
+            type="button"
+            onClick={clearAnalyticsFilter}
+            className="text-xs text-muted hover:underline"
+          >
+            Clear filter
+          </button>
+        </div>
+      )}
+
       <section className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-3">
         <Input
           type="text"
-          value={query}
+          value={machineModelFilter ?? query}
+          disabled={!!machineModelFilter}
           onChange={(e) => {
             setQuery(e.target.value);
             setPage(1);

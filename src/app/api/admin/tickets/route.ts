@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { and, count, desc, eq, ilike, or, type SQL } from "drizzle-orm";
+import { and, count, desc, eq, ilike, isNull, or, type SQL } from "drizzle-orm";
 import { requireAdminUiAuth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { diagnosticSessions } from "@/lib/db/schema";
@@ -58,6 +58,9 @@ async function GETHandler(request: Request) {
   const q = searchParams.get("q")?.trim() ?? "";
   const ticketStatus = parseTicketStatusFilter(searchParams.get("ticketStatus"));
   const sessionStatus = parseSessionStatusFilter(searchParams.get("sessionStatus"));
+  const playbookId = searchParams.get("playbookId")?.trim() || null;
+  // "none" is a sentinel meaning filter to sessions with no playbook matched
+  const productType = searchParams.get("productType")?.trim() || null;
   const page = parsePositiveInt(searchParams.get("page"), DEFAULT_PAGE, 1, 1_000_000);
   const pageSize = parsePositiveInt(
     searchParams.get("pageSize"),
@@ -85,6 +88,14 @@ async function GETHandler(request: Request) {
   }
   if (sessionStatus) {
     filters.push(eq(diagnosticSessions.status, sessionStatus));
+  }
+  if (playbookId === "none") {
+    filters.push(isNull(diagnosticSessions.playbookId));
+  } else if (playbookId) {
+    filters.push(eq(diagnosticSessions.playbookId, playbookId));
+  }
+  if (productType) {
+    filters.push(eq(diagnosticSessions.productType, productType));
   }
   if (q) {
     const pattern = `%${q}%`;

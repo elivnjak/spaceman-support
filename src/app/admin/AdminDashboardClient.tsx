@@ -27,6 +27,14 @@ type AnalyticsSummary = {
   avgTurnCount: number;
   frustrationCount: number;
   frustrationRate: number;
+  avgTurnsResolved: number | null;
+  avgTurnsEscalated: number | null;
+  avgResolutionMinutes: number | null;
+  verificationRequestedCount: number;
+  verificationRespondedCount: number;
+  verificationResponseRate: number | null;
+  openEscalatedTickets: number;
+  closedTickets: number;
 };
 
 type ResolutionOutcomes = {
@@ -37,6 +45,14 @@ type ResolutionOutcomes = {
 };
 
 type EscalationItem = { label: string; count: number };
+
+type BreakdownItem = {
+  label: string;
+  total: number;
+  resolved: number;
+  escalated: number;
+  resolutionRate: number;
+};
 
 type DailyPoint = {
   date: string;
@@ -50,6 +66,8 @@ type AnalyticsData = {
   summary: AnalyticsSummary;
   resolutionOutcomes: ResolutionOutcomes;
   escalationBreakdown: EscalationItem[];
+  playbookBreakdown: BreakdownItem[];
+  machineModelBreakdown: BreakdownItem[];
   dailySeries: DailyPoint[];
 };
 
@@ -348,6 +366,74 @@ export function AdminDashboardClient() {
         />
       </div>
 
+      {/* ── Secondary stat cards ── */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard
+          label="Avg turns to resolve"
+          value={loading ? "—" : s?.avgTurnsResolved != null ? s.avgTurnsResolved : "—"}
+          sub={
+            s?.avgTurnsEscalated != null
+              ? `${s.avgTurnsEscalated} avg turns when escalated`
+              : undefined
+          }
+        />
+        <StatCard
+          label="Avg resolution time"
+          value={
+            loading
+              ? "—"
+              : s?.avgResolutionMinutes != null
+              ? s.avgResolutionMinutes >= 60
+                ? `${Math.round(s.avgResolutionMinutes / 60 * 10) / 10}h`
+                : `${s.avgResolutionMinutes}m`
+              : "—"
+          }
+          sub="For resolved sessions"
+        />
+        <StatCard
+          label="Verification response rate"
+          value={
+            loading
+              ? "—"
+              : s?.verificationResponseRate != null
+              ? `${s.verificationResponseRate}%`
+              : "—"
+          }
+          sub={
+            s?.verificationRequestedCount
+              ? `${s.verificationRespondedCount} of ${s.verificationRequestedCount} responded`
+              : "No verification prompts sent"
+          }
+          accent={
+            s?.verificationResponseRate != null
+              ? s.verificationResponseRate >= 60
+                ? "green"
+                : s.verificationResponseRate >= 30
+                ? "amber"
+                : "red"
+              : undefined
+          }
+        />
+        <StatCard
+          label="Open escalated tickets"
+          value={loading ? "—" : fmt(s?.openEscalatedTickets ?? 0)}
+          sub={
+            s
+              ? `${s.closedTickets} closed ticket${s.closedTickets !== 1 ? "s" : ""} in period`
+              : undefined
+          }
+          accent={
+            s?.openEscalatedTickets != null
+              ? s.openEscalatedTickets === 0
+                ? "green"
+                : s.openEscalatedTickets <= 5
+                ? "amber"
+                : "red"
+              : undefined
+          }
+        />
+      </div>
+
       {/* ── Charts row ── */}
       {!loading && data && (
         <div className="grid gap-4 lg:grid-cols-5">
@@ -519,6 +605,82 @@ export function AdminDashboardClient() {
             </div>
           )}
         </Card>
+      )}
+
+      {/* ── Playbook & machine model breakdowns ── */}
+      {!loading && data && (data.playbookBreakdown.length > 0 || data.machineModelBreakdown.length > 0) && (
+        <div className="grid gap-4 lg:grid-cols-2">
+          {data.playbookBreakdown.length > 0 && (
+            <Card>
+              <h2 className="mb-1 text-sm font-semibold text-ink">Top issue types</h2>
+              <p className="mb-4 text-xs text-muted">Sessions per playbook, by outcome.</p>
+              <ResponsiveContainer width="100%" height={Math.max(160, data.playbookBreakdown.length * 44)}>
+                <BarChart
+                  data={data.playbookBreakdown}
+                  layout="vertical"
+                  margin={{ top: 0, right: 16, left: 8, bottom: 0 }}
+                  barSize={14}
+                >
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="var(--color-border, #e2e8f0)" />
+                  <XAxis
+                    type="number"
+                    tick={{ fontSize: 11, fill: "var(--color-muted, #94a3b8)" }}
+                    tickLine={false}
+                    axisLine={false}
+                    allowDecimals={false}
+                  />
+                  <YAxis
+                    type="category"
+                    dataKey="label"
+                    width={130}
+                    tick={{ fontSize: 11, fill: "var(--color-ink, #1e293b)" }}
+                    tickLine={false}
+                    axisLine={false}
+                  />
+                  <Tooltip content={<ChartTooltip />} />
+                  <Bar dataKey="resolved" name="Resolved" stackId="a" fill={COLOURS.resolved} />
+                  <Bar dataKey="escalated" name="Escalated" stackId="a" fill={COLOURS.escalated} />
+                  <Bar dataKey="active" name="Active" stackId="a" fill={COLOURS.active} radius={[0, 3, 3, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </Card>
+          )}
+          {data.machineModelBreakdown.length > 0 && (
+            <Card>
+              <h2 className="mb-1 text-sm font-semibold text-ink">Top machine models</h2>
+              <p className="mb-4 text-xs text-muted">Sessions per model, by outcome.</p>
+              <ResponsiveContainer width="100%" height={Math.max(160, data.machineModelBreakdown.length * 44)}>
+                <BarChart
+                  data={data.machineModelBreakdown}
+                  layout="vertical"
+                  margin={{ top: 0, right: 16, left: 8, bottom: 0 }}
+                  barSize={14}
+                >
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="var(--color-border, #e2e8f0)" />
+                  <XAxis
+                    type="number"
+                    tick={{ fontSize: 11, fill: "var(--color-muted, #94a3b8)" }}
+                    tickLine={false}
+                    axisLine={false}
+                    allowDecimals={false}
+                  />
+                  <YAxis
+                    type="category"
+                    dataKey="label"
+                    width={130}
+                    tick={{ fontSize: 11, fill: "var(--color-ink, #1e293b)" }}
+                    tickLine={false}
+                    axisLine={false}
+                  />
+                  <Tooltip content={<ChartTooltip />} />
+                  <Bar dataKey="resolved" name="Resolved" stackId="a" fill={COLOURS.resolved} />
+                  <Bar dataKey="escalated" name="Escalated" stackId="a" fill={COLOURS.escalated} />
+                  <Bar dataKey="active" name="Active" stackId="a" fill={COLOURS.active} radius={[0, 3, 3, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </Card>
+          )}
+        </div>
       )}
 
       {/* ── Empty state when no sessions yet ── */}

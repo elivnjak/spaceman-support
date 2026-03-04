@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { and, avg, count, gte, lte, sql, type SQL } from "drizzle-orm";
 import { requireAdminUiAuth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { diagnosticSessions } from "@/lib/db/schema";
+import { diagnosticSessions, playbooks } from "@/lib/db/schema";
 import { withApiRouteErrorLogging } from "@/lib/error-logs";
 
 function parseDateParam(value: string | null): Date | null {
@@ -48,6 +48,29 @@ async function GETHandler(request: Request) {
         sql`CASE WHEN ${diagnosticSessions.frustrationTurnCount} > 0 THEN 1 END`
       ),
       avgTurnCount: avg(diagnosticSessions.turnCount),
+      avgTurnsResolved: avg(
+        sql`CASE WHEN ${diagnosticSessions.status} = 'resolved' THEN ${diagnosticSessions.turnCount} END`
+      ),
+      avgTurnsEscalated: avg(
+        sql`CASE WHEN ${diagnosticSessions.status} = 'escalated' THEN ${diagnosticSessions.turnCount} END`
+      ),
+      avgResolutionMinutes: avg(
+        sql`CASE WHEN ${diagnosticSessions.status} = 'resolved'
+          THEN EXTRACT(EPOCH FROM (${diagnosticSessions.updatedAt} - ${diagnosticSessions.createdAt})) / 60
+        END`
+      ),
+      verificationRequestedCount: count(
+        sql`CASE WHEN ${diagnosticSessions.verificationRequestedAt} IS NOT NULL THEN 1 END`
+      ),
+      verificationRespondedCount: count(
+        sql`CASE WHEN ${diagnosticSessions.verificationRespondedAt} IS NOT NULL THEN 1 END`
+      ),
+      openEscalatedTickets: count(
+        sql`CASE WHEN ${diagnosticSessions.status} = 'escalated' AND ${diagnosticSessions.ticketStatus} = 'open' THEN 1 END`
+      ),
+      closedTickets: count(
+        sql`CASE WHEN ${diagnosticSessions.ticketStatus} = 'closed' THEN 1 END`
+      ),
     })
     .from(diagnosticSessions)
     .where(whereClause);
@@ -60,6 +83,23 @@ async function GETHandler(request: Request) {
   const avgTurnCount = summaryRow?.avgTurnCount
     ? Math.round(Number(summaryRow.avgTurnCount) * 10) / 10
     : 0;
+  const avgTurnsResolved = summaryRow?.avgTurnsResolved
+    ? Math.round(Number(summaryRow.avgTurnsResolved) * 10) / 10
+    : null;
+  const avgTurnsEscalated = summaryRow?.avgTurnsEscalated
+    ? Math.round(Number(summaryRow.avgTurnsEscalated) * 10) / 10
+    : null;
+  const avgResolutionMinutes = summaryRow?.avgResolutionMinutes
+    ? Math.round(Number(summaryRow.avgResolutionMinutes))
+    : null;
+  const verificationRequestedCount = Number(summaryRow?.verificationRequestedCount ?? 0);
+  const verificationRespondedCount = Number(summaryRow?.verificationRespondedCount ?? 0);
+  const verificationResponseRate =
+    verificationRequestedCount > 0
+      ? Math.round((verificationRespondedCount / verificationRequestedCount) * 1000) / 10
+      : null;
+  const openEscalatedTickets = Number(summaryRow?.openEscalatedTickets ?? 0);
+  const closedTickets = Number(summaryRow?.closedTickets ?? 0);
 
   const resolutionRate = total > 0 ? Math.round((resolved / total) * 1000) / 10 : 0;
   const escalationRate = total > 0 ? Math.round((escalated / total) * 1000) / 10 : 0;
@@ -173,6 +213,74 @@ async function GETHandler(request: Request) {
     { label: "Other", count: otherEsc },
   ].filter((item) => item.count > 0);
 
+  // ── Playbook breakdown ─────────────────────────────────────────────────────
+  const playbookRows = await db
+    .select({
+      playbookId: diagnosticSessions.playbookId,
+      title: playbooks.title,
+      total: count(diagnosticSessions.id),
+      resolved: count(
+        sql`CASE WHEN ${diagnosticSessions.status} = 'resolved' THEN 1 END`
+      ),
+      escalated: count(
+        sql`CASE WHEN ${diagnosticSessions.status} = 'escalated' THEN 1 END`
+      ),
+    })
+    .from(diagnosticSessions)
+    .leftJoin(playbooks, sql`${diagnosticSessions.playbookId} = ${playbooks.id}`)
+    .where(
+      whereClause
+        ? and(whereClause, sql`${diagnosticSessions.playbookId} IS NOT NULL`)
+        : sql`${diagnosticSessions.playbookId} IS NOT NULL`
+    )
+    .groupBy(diagnosticSessions.playbookId, playbooks.title)
+    .orderBy(sql`count(${diagnosticSessions.id}) DESC`)
+    .limit(10);
+
+  const playbookBreakdown = playbookRows.map((row) => ({
+    label: row.title ?? row.playbookId ?? "Unknown",
+    total: Number(row.total),
+    resolved: Number(row.resolved),
+    escalated: Number(row.escalated),
+    resolutionRate:
+      Number(row.total) > 0
+        ? Math.round((Number(row.resolved) / Number(row.total)) * 1000) / 10
+        : 0,
+  }));
+
+  // ── Machine model breakdown ────────────────────────────────────────────────
+  const machineModelRows = await db
+    .select({
+      machineModel: diagnosticSessions.machineModel,
+      total: count(diagnosticSessions.id),
+      resolved: count(
+        sql`CASE WHEN ${diagnosticSessions.status} = 'resolved' THEN 1 END`
+      ),
+      escalated: count(
+        sql`CASE WHEN ${diagnosticSessions.status} = 'escalated' THEN 1 END`
+      ),
+    })
+    .from(diagnosticSessions)
+    .where(
+      whereClause
+        ? and(whereClause, sql`${diagnosticSessions.machineModel} IS NOT NULL`)
+        : sql`${diagnosticSessions.machineModel} IS NOT NULL`
+    )
+    .groupBy(diagnosticSessions.machineModel)
+    .orderBy(sql`count(${diagnosticSessions.id}) DESC`)
+    .limit(10);
+
+  const machineModelBreakdown = machineModelRows.map((row) => ({
+    label: row.machineModel ?? "Unknown",
+    total: Number(row.total),
+    resolved: Number(row.resolved),
+    escalated: Number(row.escalated),
+    resolutionRate:
+      Number(row.total) > 0
+        ? Math.round((Number(row.resolved) / Number(row.total)) * 1000) / 10
+        : 0,
+  }));
+
   // ── Daily time series ──────────────────────────────────────────────────────
   const dailyRows = await db
     .select({
@@ -212,6 +320,14 @@ async function GETHandler(request: Request) {
       avgTurnCount,
       frustrationCount,
       frustrationRate,
+      avgTurnsResolved,
+      avgTurnsEscalated,
+      avgResolutionMinutes,
+      verificationRequestedCount,
+      verificationRespondedCount,
+      verificationResponseRate,
+      openEscalatedTickets,
+      closedTickets,
     },
     resolutionOutcomes: {
       confirmed: Number(outcomesRow?.confirmed ?? 0),
@@ -220,6 +336,8 @@ async function GETHandler(request: Request) {
       noResponse: Number(outcomesRow?.noResponse ?? 0),
     },
     escalationBreakdown,
+    playbookBreakdown,
+    machineModelBreakdown,
     dailySeries,
   });
 }
