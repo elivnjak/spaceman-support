@@ -62,6 +62,7 @@ type AuditDetailResponse = {
     status?: string | null;
     phase?: string | null;
     playbookId?: string | null;
+    playbookTitle?: string | null;
     turnCount?: number | null;
     createdAt?: string | null;
     updatedAt?: string | null;
@@ -200,7 +201,19 @@ export default function AdminAuditDetailPage() {
           <div><strong className="text-ink">Machine model:</strong> {session.machineModel ?? "-"}</div>
           <div><strong className="text-ink">Serial number:</strong> {session.serialNumber ?? "-"}</div>
           <div><strong className="text-ink">Product type:</strong> {session.productType ?? "-"}</div>
-          <div><strong className="text-ink">Playbook ID:</strong> {session.playbookId ?? "-"}</div>
+          <div>
+            <strong className="text-ink">Playbook:</strong>{" "}
+            {session.playbookId ? (
+              <Link
+                href={`/admin/playbooks/${session.playbookId}`}
+                className="text-blue-600 underline underline-offset-2 hover:text-blue-700"
+              >
+                {session.playbookTitle ?? session.playbookId}
+              </Link>
+            ) : (
+              "-"
+            )}
+          </div>
           <div><strong className="text-ink">Created:</strong> {formatDate(session.createdAt)}</div>
           <div><strong className="text-ink">Updated:</strong> {formatDate(session.updatedAt)}</div>
         </div>

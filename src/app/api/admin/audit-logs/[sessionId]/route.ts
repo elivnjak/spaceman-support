@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { asc, eq } from "drizzle-orm";
 import { requireAdminAuth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { auditLogs, diagnosticSessions } from "@/lib/db/schema";
+import { auditLogs, diagnosticSessions, playbooks } from "@/lib/db/schema";
 import { deleteDiagnosticSessionStorage } from "@/lib/storage";
 import { logErrorEvent, withApiRouteErrorLogging } from "@/lib/error-logs";
 
@@ -15,8 +15,21 @@ async function GETHandler(
 
   const { sessionId } = await params;
   const [session] = await db
-    .select()
+    .select({
+      id: diagnosticSessions.id,
+      machineModel: diagnosticSessions.machineModel,
+      serialNumber: diagnosticSessions.serialNumber,
+      productType: diagnosticSessions.productType,
+      status: diagnosticSessions.status,
+      phase: diagnosticSessions.phase,
+      playbookId: diagnosticSessions.playbookId,
+      playbookTitle: playbooks.title,
+      turnCount: diagnosticSessions.turnCount,
+      createdAt: diagnosticSessions.createdAt,
+      updatedAt: diagnosticSessions.updatedAt,
+    })
     .from(diagnosticSessions)
+    .leftJoin(playbooks, eq(diagnosticSessions.playbookId, playbooks.id))
     .where(eq(diagnosticSessions.id, sessionId))
     .limit(1);
 
