@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { Input } from "@/components/ui/Input";
 
 type Doc = {
   id: string;
@@ -24,6 +25,12 @@ type Doc = {
 type Label = {
   id: string;
   displayName: string;
+};
+
+type SupportedModel = {
+  id: string;
+  modelNumber: string;
+  displayName: string | null;
 };
 
 type DocType = "pdf" | "txt" | "md" | "pasted" | "html";
@@ -101,22 +108,9 @@ function formatDate(iso: string): string {
 export default function AdminDocsPage() {
   const [docs, setDocs] = useState<Doc[]>([]);
   const [labels, setLabels] = useState<Label[]>([]);
+  const [supportedModels, setSupportedModels] = useState<SupportedModel[]>([]);
   const [loading, setLoading] = useState(true);
-  const [title, setTitle] = useState("");
-  const [machineModel, setMachineModel] = useState("");
-  const [files, setFiles] = useState<File[]>([]);
-  const [pastedText, setPastedText] = useState("");
-  const [uploadMode, setUploadMode] = useState<"file" | "paste" | "url">("file");
-  const [urlsText, setUrlsText] = useState("");
-  const [cssSelector, setCssSelector] = useState('.KbDetailLtContainer__articleContent');
-  const [renderJs, setRenderJs] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [selectedLabelIds, setSelectedLabelIds] = useState<string[]>([]);
   const [ingestingId, setIngestingId] = useState<string | null>(null);
-  type BulkItemStatus = "pending" | "uploading" | "ingesting" | "done" | "failed";
-  const [bulkProgress, setBulkProgress] = useState<
-    { label: string; status: BulkItemStatus; doc?: Doc; error?: string | null }[] | null
-  >(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editPastedContent, setEditPastedContent] = useState("");
@@ -126,6 +120,38 @@ export default function AdminDocsPage() {
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
+  // Filter & pagination
+  const [filterQuery, setFilterQuery] = useState("");
+  const [filterModel, setFilterModel] = useState("all");
+  const [filterLabelId, setFilterLabelId] = useState("all");
+  const [filterType, setFilterType] = useState<"all" | DocType>("all");
+  const [filterStatus, setFilterStatus] = useState("all");
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 20;
+
+  // Reset to page 1 whenever filters change
+  useEffect(() => { setPage(1); }, [filterQuery, filterModel, filterLabelId, filterType, filterStatus]);
+
+  const filteredDocs = useMemo(() => {
+    const q = filterQuery.trim().toLowerCase();
+    return docs.filter((d) => {
+      if (q && !d.title.toLowerCase().includes(q) && !(d.machineModel ?? "").toLowerCase().includes(q)) return false;
+      if (filterModel !== "all") {
+        const docModels = (d.machineModel ?? "").split(",").map((m) => m.trim()).filter(Boolean);
+        if (!docModels.includes(filterModel)) return false;
+      }
+      if (filterLabelId !== "all" && !(d.labelIds ?? []).includes(filterLabelId)) return false;
+      if (filterType !== "all" && getDocType(d.filePath) !== filterType) return false;
+      if (filterStatus !== "all" && d.status !== filterStatus) return false;
+      return true;
+    });
+  }, [docs, filterQuery, filterModel, filterLabelId, filterType, filterStatus]);
+
+  const totalPages = Math.ceil(filteredDocs.length / PAGE_SIZE);
+  const paginatedDocs = filteredDocs.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const canGoPrev = page > 1;
+  const canGoNext = page < totalPages;
+
   const refreshDocs = async () => {
     const docsRes = await fetchJsonSafe("/api/admin/docs");
     setDocs(toArray<Doc>(docsRes.data));
@@ -134,12 +160,18 @@ export default function AdminDocsPage() {
   useEffect(() => {
     const load = async () => {
       try {
-        const [docsRes, labelsRes] = await Promise.all([
+        const [docsRes, labelsRes, modelsRes] = await Promise.all([
           fetchJsonSafe("/api/admin/docs"),
           fetchJsonSafe("/api/admin/labels"),
+          fetchJsonSafe("/api/admin/supported-models"),
         ]);
         setDocs(toArray<Doc>(docsRes.data));
         setLabels(toArray<Label>(labelsRes.data));
+        setSupportedModels(
+          toArray<SupportedModel>(modelsRes.data).sort((a, b) =>
+            a.modelNumber.localeCompare(b.modelNumber)
+          )
+        );
       } catch {
         setDocs([]);
         setLabels([]);
@@ -149,236 +181,6 @@ export default function AdminDocsPage() {
     };
     void load();
   }, []);
-
-  const handleUpload = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (uploadMode === "url") {
-      const urls = urlsText
-        .split(/\n/)
-        .map((s) => s.trim())
-        .filter(Boolean);
-      if (urls.length === 0) return;
-      setUploading(true);
-      setBulkProgress(urls.map((url) => ({ label: url, status: "pending" as const })));
-      const successful: Doc[] = [];
-      const failed: { url: string; error: string }[] = [];
-      for (let i = 0; i < urls.length; i++) {
-        setBulkProgress((prev) =>
-          prev
-            ? prev.map((p, j) =>
-                j === i ? { ...p, status: "ingesting" as const } : p
-              )
-            : null
-        );
-        try {
-          const res = await fetch("/api/admin/docs/ingest-url", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              url: urls[i],
-              cssSelector: cssSelector.trim() || undefined,
-              renderJs,
-              machineModel: machineModel.trim() || undefined,
-              labelIds: selectedLabelIds.length > 0 ? selectedLabelIds : undefined,
-            }),
-          });
-          const data = await res.json();
-          if (!res.ok) {
-            failed.push({ url: urls[i], error: data.error ?? "Request failed" });
-            setBulkProgress((prev) =>
-              prev
-                ? prev.map((p, j) =>
-                    j === i
-                      ? { ...p, status: "failed" as const, error: data.error }
-                      : p
-                  )
-                : null
-            );
-          } else {
-            const doc = { ...data, chunkCount: data.chunkCount ?? 0 };
-            successful.push(doc);
-            setDocs((prev) => [...prev, doc]);
-            setBulkProgress((prev) =>
-              prev
-                ? prev.map((p, j) =>
-                    j === i
-                      ? {
-                          ...p,
-                          status: data.status === "READY" ? ("done" as const) : ("failed" as const),
-                          doc,
-                          error: data.errorMessage,
-                        }
-                      : p
-                  )
-                : null
-            );
-          }
-        } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
-          failed.push({ url: urls[i], error: message });
-          setBulkProgress((prev) =>
-            prev
-              ? prev.map((p, j) =>
-                  j === i
-                    ? { ...p, status: "failed" as const, error: message }
-                    : p
-                )
-              : null
-          );
-        }
-      }
-      setUploading(false);
-      setBulkProgress(null);
-      setUrlsText("");
-      setMachineModel("");
-      setSelectedLabelIds([]);
-      if (failed.length > 0) {
-        const summary = failed.map((f) => `${f.url}: ${f.error}`).join("\n");
-        alert(`${failed.length} URL(s) failed:\n\n${summary}`);
-      }
-      return;
-    }
-    if (uploadMode === "paste") {
-      if (!title.trim()) return;
-      setUploading(true);
-      try {
-        const form = new FormData();
-        form.set("title", title);
-        form.set("pastedText", pastedText);
-        if (machineModel.trim()) form.set("machineModel", machineModel.trim());
-        if (selectedLabelIds.length > 0) {
-          form.set("labelIds", JSON.stringify(selectedLabelIds));
-        }
-        const res = await fetch("/api/admin/docs", {
-          method: "POST",
-          body: form,
-        });
-        if (res.ok) {
-          const doc = await res.json();
-          setDocs((prev) => [...prev, { ...doc, chunkCount: 0 }]);
-          setTitle("");
-          setPastedText("");
-          setMachineModel("");
-          setSelectedLabelIds([]);
-        }
-      } finally {
-        setUploading(false);
-      }
-      return;
-    }
-    if (uploadMode === "file") {
-      if (files.length === 0) return;
-      setUploading(true);
-      setBulkProgress(
-        files.map((f) => ({ label: f.name, status: "pending" as const }))
-      );
-      const failed: { label: string; error: string }[] = [];
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        setBulkProgress((prev) =>
-          prev
-            ? prev.map((p, j) =>
-                j === i ? { ...p, status: "uploading" as const } : p
-              )
-            : null
-        );
-        try {
-          const form = new FormData();
-          if (title.trim()) form.set("title", title.trim());
-          form.set("file", file);
-          if (machineModel.trim()) form.set("machineModel", machineModel.trim());
-          if (selectedLabelIds.length > 0) {
-            form.set("labelIds", JSON.stringify(selectedLabelIds));
-          }
-          const uploadRes = await fetch("/api/admin/docs", {
-            method: "POST",
-            body: form,
-          });
-          if (!uploadRes.ok) {
-            const err = await uploadRes.json();
-            const msg = err.error ?? "Upload failed";
-            failed.push({ label: file.name, error: msg });
-            setBulkProgress((prev) =>
-              prev
-                ? prev.map((p, j) =>
-                    j === i
-                      ? { ...p, status: "failed" as const, error: msg }
-                      : p
-                  )
-                : null
-            );
-            continue;
-          }
-          const doc = (await uploadRes.json()) as Doc;
-          setBulkProgress((prev) =>
-            prev
-              ? prev.map((p, j) =>
-                  j === i ? { ...p, status: "ingesting" as const } : p
-                )
-              : null
-          );
-          const ingestRes = await fetch(`/api/admin/docs/${doc.id}/ingest`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: "{}",
-          });
-          if (ingestRes.ok) {
-            const listRes = await fetchJsonSafe("/api/admin/docs");
-            const list = toArray<Doc>(listRes.data);
-            setDocs(list);
-            setBulkProgress((prev) =>
-              prev
-                ? prev.map((p, j) =>
-                    j === i
-                      ? {
-                          ...p,
-                          status: "done" as const,
-                          doc: list.find((d: Doc) => d.id === doc.id) ?? doc,
-                        }
-                      : p
-                  )
-                : null
-            );
-          } else {
-            const err = await ingestRes.json();
-            const msg = err.error ?? "Ingestion failed";
-            failed.push({ label: file.name, error: msg });
-            setBulkProgress((prev) =>
-              prev
-                ? prev.map((p, j) =>
-                    j === i
-                      ? { ...p, status: "failed" as const, error: msg }
-                      : p
-                  )
-                : null
-            );
-          }
-        } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
-          failed.push({ label: file.name, error: message });
-          setBulkProgress((prev) =>
-            prev
-              ? prev.map((p, j) =>
-                  j === i
-                    ? { ...p, status: "failed" as const, error: message }
-                    : p
-                )
-              : null
-          );
-        }
-      }
-      setUploading(false);
-      setBulkProgress(null);
-      setTitle("");
-      setFiles([]);
-      setMachineModel("");
-      setSelectedLabelIds([]);
-      if (failed.length > 0) {
-        const summary = failed.map((f) => `${f.label}: ${f.error}`).join("\n");
-        alert(`${failed.length} file(s) failed:\n\n${summary}`);
-      }
-    }
-  };
 
   const ingest = async (id: string, pasted?: string) => {
     setIngestingId(id);
@@ -477,182 +279,78 @@ export default function AdminDocsPage() {
   return (
     <div>
       <PageHeader title="Documents" />
-
-      <form onSubmit={handleUpload} className="mb-8 rounded-lg border border-border bg-surface p-6">
-        <h2 className="mb-4 font-medium">Add document</h2>
-        <div className="mb-4 flex gap-4">
-          <label>
-            <input
-              type="radio"
-              checked={uploadMode === "file"}
-              onChange={() => setUploadMode("file")}
-            />
-            <span className="ml-2">Upload file</span>
-          </label>
-          <label>
-            <input
-              type="radio"
-              checked={uploadMode === "paste"}
-              onChange={() => setUploadMode("paste")}
-            />
-            <span className="ml-2">Paste text</span>
-          </label>
-          <label>
-            <input
-              type="radio"
-              checked={uploadMode === "url"}
-              onChange={() => setUploadMode("url")}
-            />
-            <span className="ml-2">URL</span>
-          </label>
-        </div>
-        {uploadMode !== "url" && (
-          <input
-            type="text"
-            placeholder={uploadMode === "file" ? "Title (optional; filename used if blank)" : "Title"}
-            className="mb-4 mr-4 rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-ink"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            required={uploadMode === "paste"}
-          />
-        )}
-        <input
-          type="text"
-          placeholder="Machine model (optional)"
-          className="mb-4 mr-4 rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-ink"
-          value={machineModel}
-          onChange={(e) => setMachineModel(e.target.value)}
-        />
-        <div className="mb-4 rounded border border-border bg-page p-3">
-          <p className="mb-2 text-sm font-medium text-ink">
-            Labels for retrieval scope (optional)
-          </p>
-          <p className="mb-2 text-xs text-muted">
-            Tag this document with one or more labels so retrieval prefers it when diagnosing that issue.
-          </p>
-          {labels.length === 0 ? (
-            <p className="text-sm text-amber-600">
-              No labels yet. Add labels in Admin → Labels first.
-            </p>
-          ) : (
-            <div className="flex flex-wrap gap-3">
-              {labels.map((l) => (
-                <label key={l.id} className="flex cursor-pointer items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={selectedLabelIds.includes(l.id)}
-                    onChange={(e) =>
-                      setSelectedLabelIds((prev) =>
-                        e.target.checked
-                          ? [...prev, l.id]
-                          : prev.filter((id) => id !== l.id)
-                      )
-                    }
-                    className="rounded border-border"
-                  />
-                  <span className="text-sm text-ink">
-                    {l.displayName} ({l.id})
-                  </span>
-                </label>
-              ))}
-            </div>
-          )}
-        </div>
-        {uploadMode === "file" && (
-          <input
-            type="file"
-            accept=".pdf,.txt,.md"
-            multiple
-            onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
-            className="mb-4 block"
-          />
-        )}
-        {uploadMode === "paste" && (
-          <textarea
-            placeholder="Paste document content here"
-            className="mb-4 w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-ink"
-            rows={6}
-            value={pastedText}
-            onChange={(e) => setPastedText(e.target.value)}
-          />
-        )}
-        {uploadMode === "url" && (
-          <>
-            <textarea
-              placeholder="One URL per line (e.g. https://example.com/page)"
-              className="mb-2 w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-ink"
-              rows={5}
-              value={urlsText}
-              onChange={(e) => setUrlsText(e.target.value)}
-            />
-            <input
-              type="text"
-              placeholder="Optional CSS selector (e.g. .articleDetail, #main-content, article)"
-              className="mb-2 w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-ink"
-              value={cssSelector}
-              onChange={(e) => setCssSelector(e.target.value)}
-            />
-            <label className="mb-4 flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={renderJs}
-                onChange={(e) => setRenderJs(e.target.checked)}
-              />
-              <span>Render JavaScript</span>
-            </label>
-            <p className="mb-4 text-xs text-muted">
-              Enable for pages that load content with JavaScript (slower).
-            </p>
-          </>
-        )}
-        <button
-          type="submit"
-          disabled={uploading}
-          className="rounded bg-primary px-4 py-2 text-white hover:bg-primary-hover disabled:opacity-50"
+      <div className="mb-4 flex justify-end">
+        <Link
+          href="/admin/docs/new"
+          className="rounded bg-primary px-3 py-2 text-sm font-medium text-white hover:bg-primary-hover"
         >
-          {uploading ? "Adding…" : "Add"}
-        </button>
-        {bulkProgress && (
-          <div className="mt-4 rounded border border-border bg-page p-4">
-            <p className="mb-2 font-medium">
-              Processing {bulkProgress.filter((p) => p.status !== "pending").length} of{" "}
-              {bulkProgress.length}…
-            </p>
-            <ul className="max-h-48 list-inside list-disc space-y-1 overflow-y-auto text-sm text-muted">
-              {bulkProgress.map((p, i) => (
-                <li key={i}>
-                  <span className="truncate" title={p.label}>
-                    {p.label}
-                  </span>{" "}
-                  <span
-                    className={
-                      p.status === "done"
-                        ? "text-emerald-600"
-                        : p.status === "failed"
-                          ? "text-red-600"
-                          : p.status === "ingesting"
-                            ? "text-amber-600"
-                            : p.status === "uploading"
-                              ? "text-primary"
-                              : ""
-                    }
-                  >
-                    {p.status === "pending"
-                      ? "pending"
-                      : p.status === "uploading"
-                        ? "uploading…"
-                        : p.status === "ingesting"
-                          ? "ingesting…"
-                          : p.status === "done"
-                            ? "done"
-                            : `failed: ${p.error ?? "unknown"}`}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </form>
+          Add document
+        </Link>
+      </div>
+
+      <section className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <Input
+          type="text"
+          value={filterQuery}
+          onChange={(e) => setFilterQuery(e.target.value)}
+          placeholder="Search title or model..."
+        />
+        <select
+          value={filterModel}
+          onChange={(e) => setFilterModel(e.target.value)}
+          className="rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-ink min-h-[44px]"
+        >
+          <option value="all">All models</option>
+          {supportedModels.map((m) => (
+            <option key={m.id} value={m.modelNumber}>
+              {m.displayName ? `${m.modelNumber} — ${m.displayName}` : m.modelNumber}
+            </option>
+          ))}
+        </select>
+        <select
+          value={filterLabelId}
+          onChange={(e) => setFilterLabelId(e.target.value)}
+          className="rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-ink min-h-[44px]"
+        >
+          <option value="all">All labels</option>
+          {labels.map((l) => (
+            <option key={l.id} value={l.id}>{l.displayName}</option>
+          ))}
+        </select>
+        <select
+          value={filterType}
+          onChange={(e) => setFilterType(e.target.value as "all" | DocType)}
+          className="rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-ink min-h-[44px]"
+        >
+          <option value="all">All types</option>
+          <option value="pdf">PDF</option>
+          <option value="txt">Text</option>
+          <option value="md">Markdown</option>
+          <option value="pasted">Pasted</option>
+          <option value="html">HTML</option>
+        </select>
+        <select
+          value={filterStatus}
+          onChange={(e) => setFilterStatus(e.target.value)}
+          className="rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-ink min-h-[44px]"
+        >
+          <option value="all">All statuses</option>
+          <option value="READY">Ready</option>
+          <option value="INGESTING">Ingesting</option>
+          <option value="PENDING">Pending</option>
+          <option value="ERROR">Error</option>
+        </select>
+      </section>
+
+      {!loading && (
+        <div className="mb-4 text-right text-sm text-muted">
+          {(() => {
+            const from = filteredDocs.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
+            const to = Math.min(page * PAGE_SIZE, filteredDocs.length);
+            return `Showing ${from}–${to} of ${filteredDocs.length} document${filteredDocs.length === 1 ? "" : "s"}`;
+          })()}
+        </div>
+      )}
 
       <div className="overflow-hidden rounded-lg border border-border bg-surface">
         <div className="overflow-x-auto">
@@ -686,7 +384,7 @@ export default function AdminDocsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {docs.map((d) => {
+              {paginatedDocs.map((d) => {
                 const docType = getDocType(d.filePath);
                 const isEditing = editingId === d.id;
                 return (
@@ -879,12 +577,101 @@ export default function AdminDocsPage() {
           </div>
         )}
 
-        {docs.length === 0 && (
+        {!loading && filteredDocs.length === 0 && (
           <p className="px-4 py-8 text-center text-muted">
-            No documents yet. Add one above.
+            {docs.length === 0 ? "No documents yet. Add one above." : "No documents match your filters."}
           </p>
         )}
       </div>
+      {!loading && filteredDocs.length > 0 && (
+        <div className="mt-4 flex flex-col items-center gap-2">
+          {totalPages > 1 && (
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setPage(1)}
+                disabled={!canGoPrev}
+                aria-label="First page"
+                className="flex h-8 w-8 items-center justify-center rounded-md border border-border bg-surface text-sm text-ink transition-colors hover:bg-page disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                «
+              </button>
+              <button
+                type="button"
+                onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+                disabled={!canGoPrev}
+                aria-label="Previous page"
+                className="flex h-8 w-8 items-center justify-center rounded-md border border-border bg-surface text-sm text-ink transition-colors hover:bg-page disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                ‹
+              </button>
+
+              {(() => {
+                const pages: (number | "...")[] = [];
+                const total = totalPages;
+                const current = page;
+                if (total <= 7) {
+                  for (let i = 1; i <= total; i++) pages.push(i);
+                } else {
+                  pages.push(1);
+                  if (current > 3) pages.push("...");
+                  const start = Math.max(2, current - 1);
+                  const end = Math.min(total - 1, current + 1);
+                  for (let i = start; i <= end; i++) pages.push(i);
+                  if (current < total - 2) pages.push("...");
+                  pages.push(total);
+                }
+                return pages.map((p, idx) =>
+                  p === "..." ? (
+                    <span key={`ellipsis-${idx}`} className="flex h-8 w-8 items-center justify-center text-sm text-muted">…</span>
+                  ) : (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setPage(p as number)}
+                      aria-label={`Page ${p}`}
+                      aria-current={p === current ? "page" : undefined}
+                      className={`flex h-8 min-w-[2rem] items-center justify-center rounded-md border px-2 text-sm transition-colors ${
+                        p === current
+                          ? "border-primary bg-primary text-white"
+                          : "border-border bg-surface text-ink hover:bg-page"
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  )
+                );
+              })()}
+
+              <button
+                type="button"
+                onClick={() => setPage((prev) => prev + 1)}
+                disabled={!canGoNext}
+                aria-label="Next page"
+                className="flex h-8 w-8 items-center justify-center rounded-md border border-border bg-surface text-sm text-ink transition-colors hover:bg-page disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                ›
+              </button>
+              <button
+                type="button"
+                onClick={() => setPage(totalPages)}
+                disabled={!canGoNext}
+                aria-label="Last page"
+                className="flex h-8 w-8 items-center justify-center rounded-md border border-border bg-surface text-sm text-ink transition-colors hover:bg-page disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                »
+              </button>
+            </div>
+          )}
+          <p className="text-sm text-muted">
+            {(() => {
+              const from = (page - 1) * PAGE_SIZE + 1;
+              const to = Math.min(page * PAGE_SIZE, filteredDocs.length);
+              return `Showing ${from}–${to} of ${filteredDocs.length} document${filteredDocs.length === 1 ? "" : "s"}`;
+            })()}
+          </p>
+        </div>
+      )}
     </div>
   );
 }
