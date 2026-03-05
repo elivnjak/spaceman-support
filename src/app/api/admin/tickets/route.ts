@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { and, count, desc, eq, ilike, isNull, or, type SQL } from "drizzle-orm";
+import { and, count, desc, eq, ilike, isNull, or, sql, type SQL } from "drizzle-orm";
 import { requireAdminUiAuth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { diagnosticSessions } from "@/lib/db/schema";
@@ -7,6 +7,7 @@ import { withApiRouteErrorLogging } from "@/lib/error-logs";
 
 type TicketStatus = "open" | "in_progress" | "waiting" | "closed";
 type SessionStatus = "active" | "resolved" | "escalated";
+type DiagnosisModeFilter = "enabled_only" | "disabled_only";
 
 const TICKET_STATUSES = new Set<TicketStatus>([
   "open",
@@ -19,9 +20,16 @@ const SESSION_STATUSES = new Set<SessionStatus>([
   "resolved",
   "escalated",
 ]);
+const DIAGNOSIS_MODE_FILTERS = new Set<DiagnosisModeFilter>(["enabled_only", "disabled_only"]);
 const DEFAULT_PAGE = 1;
 const DEFAULT_PAGE_SIZE = 20;
 const MAX_PAGE_SIZE = 100;
+const DIAGNOSIS_MODE_DISABLED_REASON_PREFIX =
+  "Diagnosis mode is disabled for public users; escalating after intake collection.";
+const DIAGNOSIS_MODE_DISABLED_FILTER = sql`(
+  COALESCE(${diagnosticSessions.escalationReason}, '') ILIKE ${`${DIAGNOSIS_MODE_DISABLED_REASON_PREFIX}%`}
+  OR COALESCE(${diagnosticSessions.escalationHandoff} ->> 'labelId', '') = 'diagnosis_mode_disabled'
+)`;
 
 function parsePositiveInt(
   value: string | null,
@@ -50,6 +58,14 @@ function parseSessionStatusFilter(value: string | null): SessionStatus | undefin
   return normalized as SessionStatus;
 }
 
+function parseDiagnosisModeFilter(value: string | null): DiagnosisModeFilter | undefined | null {
+  if (!value || value === "all") return undefined;
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return undefined;
+  if (!DIAGNOSIS_MODE_FILTERS.has(normalized as DiagnosisModeFilter)) return null;
+  return normalized as DiagnosisModeFilter;
+}
+
 async function GETHandler(request: Request) {
   const authError = await requireAdminUiAuth(request);
   if (authError) return authError;
@@ -58,6 +74,7 @@ async function GETHandler(request: Request) {
   const q = searchParams.get("q")?.trim() ?? "";
   const ticketStatus = parseTicketStatusFilter(searchParams.get("ticketStatus"));
   const sessionStatus = parseSessionStatusFilter(searchParams.get("sessionStatus"));
+  const diagnosisMode = parseDiagnosisModeFilter(searchParams.get("diagnosisMode"));
   const playbookId = searchParams.get("playbookId")?.trim() || null;
   // "none" is a sentinel meaning filter to sessions with no playbook matched
   const productType = searchParams.get("productType")?.trim() || null;
@@ -81,6 +98,12 @@ async function GETHandler(request: Request) {
       { status: 400 }
     );
   }
+  if (diagnosisMode === null) {
+    return NextResponse.json(
+      { error: "Invalid diagnosisMode filter." },
+      { status: 400 }
+    );
+  }
 
   const filters: SQL<unknown>[] = [];
   if (ticketStatus) {
@@ -96,6 +119,11 @@ async function GETHandler(request: Request) {
   }
   if (productType) {
     filters.push(eq(diagnosticSessions.productType, productType));
+  }
+  if (diagnosisMode === "enabled_only") {
+    filters.push(sql`NOT (${DIAGNOSIS_MODE_DISABLED_FILTER})`);
+  } else if (diagnosisMode === "disabled_only") {
+    filters.push(DIAGNOSIS_MODE_DISABLED_FILTER);
   }
   if (q) {
     const pattern = `%${q}%`;

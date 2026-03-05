@@ -11,6 +11,7 @@ import { formatDateTimeAu } from "@/lib/date-format";
 
 type TicketStatus = "open" | "in_progress" | "waiting" | "closed";
 type SessionStatus = "active" | "resolved" | "escalated";
+type DiagnosisModeFilter = "all" | "enabled_only" | "disabled_only";
 
 type TicketListItem = {
   id: string;
@@ -49,6 +50,11 @@ const SESSION_STATUS_OPTIONS: Array<{ value: "all" | SessionStatus; label: strin
   { value: "resolved", label: "Resolved" },
   { value: "escalated", label: "Escalated" },
 ];
+const DIAGNOSIS_MODE_OPTIONS: Array<{ value: DiagnosisModeFilter; label: string }> = [
+  { value: "all", label: "All diagnosis modes" },
+  { value: "enabled_only", label: "Diagnosis mode enabled" },
+  { value: "disabled_only", label: "Diagnosis mode disabled (auto-escalated)" },
+];
 
 function formatDate(value: string | null | undefined): string {
   if (!value) return "-";
@@ -81,6 +87,7 @@ export default function AdminTicketsPage() {
   const [query, setQuery] = useState("");
   const [ticketStatus, setTicketStatus] = useState<"all" | TicketStatus>("all");
   const [sessionStatus, setSessionStatus] = useState<"all" | SessionStatus>("all");
+  const [diagnosisMode, setDiagnosisMode] = useState<DiagnosisModeFilter>("all");
   // analytics drill-through filters (not shown in the main filter controls)
   const [playbookId, setPlaybookId] = useState<string | null>(null);
   const [playbookLabel, setPlaybookLabel] = useState<string | null>(null);
@@ -108,6 +115,7 @@ export default function AdminTicketsPage() {
     const urlQ = searchParams.get("q")?.trim() ?? "";
     const urlSessionStatus = searchParams.get("sessionStatus")?.trim() ?? "";
     const urlTicketStatus = searchParams.get("ticketStatus")?.trim() ?? "";
+    const urlDiagnosisMode = searchParams.get("diagnosisMode")?.trim() ?? "";
     const urlPlaybookId = searchParams.get("playbookId")?.trim() ?? "";
     const urlPlaybookLabel = searchParams.get("playbookLabel")?.trim() ?? "";
     const urlProductType = searchParams.get("productType")?.trim() ?? "";
@@ -118,6 +126,13 @@ export default function AdminTicketsPage() {
     }
     if (urlTicketStatus && urlTicketStatus !== "all") {
       setTicketStatus(urlTicketStatus as TicketStatus);
+    }
+    if (
+      urlDiagnosisMode === "enabled_only" ||
+      urlDiagnosisMode === "disabled_only" ||
+      urlDiagnosisMode === "all"
+    ) {
+      setDiagnosisMode(urlDiagnosisMode);
     }
     if (urlPlaybookId) {
       setPlaybookId(urlPlaybookId);
@@ -133,12 +148,22 @@ export default function AdminTicketsPage() {
     if (effectiveQ) next.set("q", effectiveQ);
     if (ticketStatus !== "all") next.set("ticketStatus", ticketStatus);
     if (sessionStatus !== "all") next.set("sessionStatus", sessionStatus);
+    if (diagnosisMode !== "all") next.set("diagnosisMode", diagnosisMode);
     if (playbookId) next.set("playbookId", playbookId);
     if (productType) next.set("productType", productType);
     next.set("page", String(page));
     next.set("pageSize", String(PAGE_SIZE));
     return next;
-  }, [query, ticketStatus, sessionStatus, playbookId, productType, machineModelFilter, page]);
+  }, [
+    query,
+    ticketStatus,
+    sessionStatus,
+    diagnosisMode,
+    playbookId,
+    productType,
+    machineModelFilter,
+    page,
+  ]);
 
   const analyticsContext: string | null = useMemo(() => {
     if (playbookId && playbookLabel) {
@@ -279,7 +304,7 @@ export default function AdminTicketsPage() {
         </div>
       )}
 
-      <section className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-3">
+      <section className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
         <Input
           type="text"
           value={machineModelFilter ?? query}
@@ -313,6 +338,20 @@ export default function AdminTicketsPage() {
           className="rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-ink min-h-[44px]"
         >
           {SESSION_STATUS_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        <select
+          value={diagnosisMode}
+          onChange={(e) => {
+            setDiagnosisMode(e.target.value as DiagnosisModeFilter);
+            setPage(1);
+          }}
+          className="rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-ink min-h-[44px]"
+        >
+          {DIAGNOSIS_MODE_OPTIONS.map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}
             </option>
