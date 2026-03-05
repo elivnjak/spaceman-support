@@ -36,6 +36,7 @@ export default function AdminTelegramPage() {
   const [addingChatId, setAddingChatId] = useState<string | null>(null);
   const [removingChatId, setRemovingChatId] = useState<string | null>(null);
   const [testing, setTesting] = useState(false);
+  const [testingEmailFallback, setTestingEmailFallback] = useState(false);
   const [enabled, setEnabled] = useState(false);
   const [botToken, setBotToken] = useState("");
   const [chatIds, setChatIds] = useState<string[]>([]);
@@ -142,6 +143,34 @@ export default function AdminTelegramPage() {
       }, 5000);
     } finally {
       setTesting(false);
+    }
+  }
+
+  async function sendTestEmailFallback() {
+    setTestingEmailFallback(true);
+    setTestMessage(null);
+    setTestDetail(null);
+    try {
+      const res = await fetch("/api/admin/telegram-config/test-email-fallback", {
+        method: "POST",
+      });
+      const data = (await res.json()) as {
+        error?: string;
+        sent?: boolean;
+      };
+      if (!res.ok) {
+        setTestMessage("error");
+        setTestDetail(data.error ?? "Failed to send fallback email test.");
+        return;
+      }
+      setTestMessage("success");
+      setTestDetail("Fallback email test sent successfully.");
+      setTimeout(() => {
+        setTestMessage(null);
+        setTestDetail(null);
+      }, 5000);
+    } finally {
+      setTestingEmailFallback(false);
     }
   }
 
@@ -358,9 +387,17 @@ export default function AdminTelegramPage() {
         <Button
           variant="secondary"
           onClick={sendTestNotification}
-          disabled={testing || saving}
+          disabled={testing || testingEmailFallback || saving}
         >
           {testing ? "Sending test..." : "Send test notification"}
+        </Button>
+        <Button
+          variant="secondary"
+          onClick={sendTestEmailFallback}
+          disabled={testing || testingEmailFallback || saving}
+          className="ml-2"
+        >
+          {testingEmailFallback ? "Sending email test..." : "Send fallback email test"}
         </Button>
         {testMessage === "success" && testDetail && (
           <p className="mt-3 rounded border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-700">

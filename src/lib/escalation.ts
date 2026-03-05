@@ -206,6 +206,96 @@ function getTelegramChatIds(storedConfig: { chatIds?: unknown; chatId?: string |
   return legacy ? [legacy] : [];
 }
 
+function getFallbackEmailRecipients(): string[] {
+  const raw = process.env.ESCALATION_EMAIL_TO?.trim();
+  if (!raw) return [];
+  return raw
+    .split(/[;,]/g)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+export async function sendEscalationEmailFallback(
+  handoff: EscalationHandoff,
+  reason: string
+): Promise<{ sent: boolean; error?: string }> {
+  const apiKey = process.env.RESEND_API_KEY?.trim();
+  const to = getFallbackEmailRecipients();
+  const from = process.env.ESCALATION_EMAIL_FROM?.trim() || "onboarding@resend.dev";
+  const replyTo = process.env.ESCALATION_EMAIL_REPLY_TO?.trim();
+  if (!apiKey || to.length === 0) {
+    if (process.env.NODE_ENV !== "test") {
+      console.log("[escalation] Email fallback not configured; skipping");
+    }
+    return {
+      sent: false,
+      error: "Email fallback not configured. Set RESEND_API_KEY and ESCALATION_EMAIL_TO.",
+    };
+  }
+
+  const customer = handoff.userName?.trim() || "Unknown customer";
+  const machine = handoff.machineModel?.trim() || "Unknown model";
+  const serial = handoff.serialNumber?.trim() || "Unknown";
+  const productType = handoff.productType?.trim() || "Unknown";
+  const ticketRef = handoff.ticketUrl || handoff.sessionId;
+  const evidenceLines = Object.entries(handoff.evidenceCollected)
+    .slice(0, 10)
+    .map(([key, rec]) => `- ${key}: ${String(rec.value ?? "unknown")} (${rec.confidence})`);
+  const recentMessages = handoff.recentUserMessages
+    .slice(-5)
+    .map((line) => `- ${line}`);
+  const subject = `[Escalation Fallback] ${machine} (${handoff.sessionId.slice(0, 8)})`;
+  const text = [
+    "Telegram delivery failed. Sending escalation via email fallback.",
+    `Failure reason: ${reason}`,
+    "",
+    `Session: ${handoff.sessionId}`,
+    `Customer: ${customer}`,
+    `Phone: ${handoff.userPhone ?? "Unknown"}`,
+    `Machine: ${machine}`,
+    `Serial: ${serial}`,
+    `Product: ${productType}`,
+    `Escalation reason: ${handoff.escalationReason}`,
+    `Ticket: ${ticketRef}`,
+    "",
+    "Evidence collected:",
+    evidenceLines.length > 0 ? evidenceLines.join("\n") : "- None",
+    "",
+    "Recent user messages:",
+    recentMessages.length > 0 ? recentMessages.join("\n") : "- None",
+  ].join("\n");
+
+  try {
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        from,
+        to,
+        subject,
+        text,
+        ...(replyTo ? { reply_to: replyTo } : {}),
+      }),
+    });
+    if (!res.ok) {
+      const detail = `${res.status} ${await res.text()}`.trim();
+      console.error(`[escalation] Email fallback failed: ${detail}`);
+      return { sent: false, error: detail };
+    }
+    if (process.env.NODE_ENV !== "test") {
+      console.log(`[escalation] Email fallback sent for session ${handoff.sessionId}`);
+    }
+    return { sent: true };
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    console.error("[escalation] Email fallback request failed:", detail);
+    return { sent: false, error: detail };
+  }
+}
+
 export async function sendEscalationTelegram(handoff: EscalationHandoff): Promise<boolean> {
   const [storedConfig] = await db.select().from(telegramConfig).limit(1);
   const token = storedConfig?.botToken?.trim() || process.env.TELEGRAM_BOT_TOKEN?.trim() || "";
@@ -294,8 +384,11 @@ export async function sendEscalationTelegram(handoff: EscalationHandoff): Promis
 
   const apiBase = `https://api.telegram.org/bot${encodeURIComponent(token)}`;
   let anySent = false;
+  let attemptedTelegramText = false;
+  let telegramFailureReason: string | null = null;
   for (const chatId of allChatIds) {
     try {
+      attemptedTelegramText = true;
       const messageResponse = await postTelegramJson(token, "sendMessage", {
         chat_id: chatId,
         text: summary,
@@ -309,12 +402,22 @@ export async function sendEscalationTelegram(handoff: EscalationHandoff): Promis
         console.error(
           `[escalation] Telegram sendMessage to ${chatId} failed (${messageResponse.transport ?? "unknown"}): ${detail}`
         );
+        if (!telegramFailureReason) telegramFailureReason = detail || "unknown telegram send failure";
         continue;
       }
       anySent = true;
     } catch (err) {
-      console.error(`[escalation] Telegram sendMessage to ${chatId} failed:`, err instanceof Error ? err.message : err);
+      const detail = err instanceof Error ? err.message : String(err);
+      console.error(`[escalation] Telegram sendMessage to ${chatId} failed:`, detail);
+      if (!telegramFailureReason) telegramFailureReason = detail;
     }
+  }
+  if (!anySent && attemptedTelegramText) {
+    await sendEscalationEmailFallback(
+      handoff,
+      telegramFailureReason ?? "telegram sendMessage failed"
+    );
+    return false;
   }
 
   const allImagePaths = Array.from(
