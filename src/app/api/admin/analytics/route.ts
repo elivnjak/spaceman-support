@@ -54,12 +54,13 @@ async function GETHandler(request: Request) {
     dateFilters.push(lte(diagnosticSessions.createdAt, endOfDay));
   }
   const whereClause = dateFilters.length > 0 ? and(...dateFilters) : undefined;
-  const analyticsWhereClause = whereClause
-    ? and(whereClause, sql`NOT (${DIAGNOSIS_MODE_DISABLED_FILTER})`)
-    : sql`NOT (${DIAGNOSIS_MODE_DISABLED_FILTER})`;
+  const diagnosisModeEnabledClause = sql`NOT (${DIAGNOSIS_MODE_DISABLED_FILTER})`;
+  const analyticsWhereClause: SQL<unknown> = (
+    whereClause ? and(whereClause, diagnosisModeEnabledClause) : diagnosisModeEnabledClause
+  ) ?? diagnosisModeEnabledClause;
 
   const withAnalyticsWhere = (extraCondition?: SQL<unknown>): SQL<unknown> => {
-    if (extraCondition) return and(analyticsWhereClause, extraCondition);
+    if (extraCondition) return and(analyticsWhereClause, extraCondition) ?? analyticsWhereClause;
     return analyticsWhereClause;
   };
 
