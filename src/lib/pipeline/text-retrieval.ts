@@ -32,6 +32,17 @@ export async function searchDocChunks(
   const normalizedKeyword = keywordQuery?.trim().replace(/\s+/g, " ") ?? "";
   const keywordPattern =
     normalizedKeyword.length > 0 ? `%${normalizedKeyword.toLowerCase()}%` : null;
+  const titleTextExpr = sql`COALESCE(dc.metadata->>'title', '')`;
+  const tagsTextExpr = sql`COALESCE((
+    SELECT string_agg(tag, ' ')
+    FROM jsonb_array_elements_text(
+      CASE
+        WHEN jsonb_typeof(dc.metadata->'tags') = 'array' THEN dc.metadata->'tags'
+        ELSE '[]'::jsonb
+      END
+    ) AS tag
+  ), '')`;
+  const searchableTextExpr = sql`concat_ws(' ', coalesce(dc.content, ''), ${titleTextExpr}, ${tagsTextExpr})`;
   // Document machine_model can be comma-separated (e.g. "6210-C, 6220, 6228"). Match if list contains canonical or SM- prefix form.
   const listNorm = sql`(',' || replace(replace(coalesce(d.machine_model, ''), ' ', ''), ', ', ',') || ',')`;
   const likeCanonical = canonical ? sql`${listNorm} LIKE ${"%," + canonical + ",%"}` : sql`false`;
@@ -42,18 +53,28 @@ export async function searchDocChunks(
   const similarityExpr = sql`1 - (dc.embedding <=> ${vectorStr}::vector)`;
   const buildFtsRankExpr = (useIndexedSearchVector: boolean) =>
     normalizedKeyword.length > 0
-      ? useIndexedSearchVector
-        ? sql`ts_rank_cd(
-            dc.search_vector,
-            plainto_tsquery('english', ${normalizedKeyword})
-          )`
-        : sql`ts_rank_cd(
-            to_tsvector('english', coalesce(dc.content, '')),
-            plainto_tsquery('english', ${normalizedKeyword})
+      ? sql`(
+            ${
+              useIndexedSearchVector
+                ? sql`ts_rank_cd(
+                    dc.search_vector,
+                    plainto_tsquery('english', ${normalizedKeyword})
+                  )`
+                : sql`ts_rank_cd(
+                    to_tsvector('english', coalesce(dc.content, '')),
+                    plainto_tsquery('english', ${normalizedKeyword})
+                  )`
+            }
+            + (
+              ts_rank_cd(
+                to_tsvector('english', concat_ws(' ', ${titleTextExpr}, ${tagsTextExpr})),
+                plainto_tsquery('english', ${normalizedKeyword})
+              ) * 0.7
+            )
           )`
       : sql`0`;
   const literalBoostExpr = keywordPattern
-    ? sql`CASE WHEN LOWER(dc.content) LIKE ${keywordPattern} THEN ${sql.raw(String(retrievalConfig.textExactMatchBoost))} ELSE 0 END`
+    ? sql`CASE WHEN LOWER(${searchableTextExpr}) LIKE ${keywordPattern} THEN ${sql.raw(String(retrievalConfig.textExactMatchBoost))} ELSE 0 END`
     : sql`0`;
 
   const runHybridQuery = async (

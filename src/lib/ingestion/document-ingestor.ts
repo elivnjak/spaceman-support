@@ -22,6 +22,35 @@ import {
 
 const PREVIEW_LENGTH = 1000;
 
+function toStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((v) => (typeof v === "string" ? v.trim() : ""))
+    .filter((v) => v.length > 0);
+}
+
+/**
+ * Build embedding text that incorporates chunk metadata (title/tags) plus content.
+ * This improves retrieval when user queries match labels/tags more than body text wording.
+ */
+function buildChunkEmbeddingText(chunk: {
+  content: string;
+  metadata?: Record<string, unknown>;
+}): string {
+  const metadata = chunk.metadata ?? {};
+  const title = typeof metadata.title === "string" ? metadata.title.trim() : "";
+  const tags = toStringArray(metadata.tags);
+  const kvContent =
+    typeof metadata.kv_content === "string" ? metadata.kv_content.trim() : "";
+  const baseContent = kvContent || chunk.content;
+
+  const parts: string[] = [];
+  if (title) parts.push(`Title: ${title}`);
+  if (tags.length > 0) parts.push(`Tags: ${tags.join(", ")}`);
+  parts.push(baseContent);
+  return parts.join("\n");
+}
+
 /** Split vision markdown by <!-- page N --> into a map pageNum -> content. */
 function splitVisionMarkdownByPage(markdown: string): Map<number, string> {
   const map = new Map<number, string>();
@@ -119,9 +148,7 @@ export async function ingestDocument(documentId: string): Promise<void> {
         fullText,
         doc.filePath.toLowerCase().endsWith(".md") ? "md" : "txt"
       );
-      const textsToEmbed = chunks.map((c) =>
-        (c.metadata?.kv_content as string) ?? c.content
-      );
+      const textsToEmbed = chunks.map(buildChunkEmbeddingText);
       const embeddings = await openaiTextEmbedder.embedBatch(textsToEmbed);
       await db.delete(docChunks).where(eq(docChunks.documentId, documentId));
       for (let i = 0; i < chunks.length; i++) {
@@ -180,7 +207,7 @@ export async function ingestDocument(documentId: string): Promise<void> {
         }));
 
         const embeddings = await openaiTextEmbedder.embedBatch(
-          chunks.map((c) => c.content)
+          chunks.map(buildChunkEmbeddingText)
         );
 
         await db.delete(docChunks).where(eq(docChunks.documentId, documentId));
@@ -263,7 +290,9 @@ export async function ingestDocument(documentId: string): Promise<void> {
         content: c.content,
         metadata: {} as Record<string, unknown>,
       }));
-      const embeddings = await openaiTextEmbedder.embedBatch(chunks.map((c) => c.content));
+      const embeddings = await openaiTextEmbedder.embedBatch(
+        chunks.map(buildChunkEmbeddingText)
+      );
       await db.delete(docChunks).where(eq(docChunks.documentId, documentId));
       for (let i = 0; i < chunks.length; i++) {
         await db.insert(docChunks).values({
@@ -332,9 +361,7 @@ export async function ingestDocument(documentId: string): Promise<void> {
       return { content: c.content, metadata: meta };
     });
 
-    const textsToEmbed = chunks.map((c) =>
-      (c.metadata.kv_content as string) ?? c.content
-    );
+    const textsToEmbed = chunks.map(buildChunkEmbeddingText);
     const embeddings = await openaiTextEmbedder.embedBatch(textsToEmbed);
 
     await db.delete(docChunks).where(eq(docChunks.documentId, documentId));
@@ -447,9 +474,7 @@ export async function ingestUrlContent(documentId: string): Promise<void> {
       source_url: sourceUrl,
     } as Record<string, unknown>,
   }));
-  const textsToEmbed = withMeta.map((c) =>
-    (c.metadata?.kv_content as string) ?? c.content
-  );
+  const textsToEmbed = withMeta.map(buildChunkEmbeddingText);
   const embeddings = await openaiTextEmbedder.embedBatch(textsToEmbed);
 
   await db.delete(docChunks).where(eq(docChunks.documentId, documentId));
@@ -524,7 +549,7 @@ export async function ingestPastedText(
   try {
     const chunks = chunkMarkdownOrText(text, "txt");
     const embeddings = await openaiTextEmbedder.embedBatch(
-      chunks.map((c) => c.content)
+      chunks.map(buildChunkEmbeddingText)
     );
 
     await db.delete(docChunks).where(eq(docChunks.documentId, documentId));

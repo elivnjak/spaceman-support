@@ -166,6 +166,27 @@ function getChunkPromptContent(chunk: { content: string; metadata?: unknown }): 
   return chunk.content;
 }
 
+function formatChunkForPrompt(chunk: {
+  id: string;
+  content: string;
+  metadata?: unknown;
+}): string {
+  const lines: string[] = [`[${chunk.id}]`];
+  if (chunk.metadata && typeof chunk.metadata === "object") {
+    const meta = chunk.metadata as Record<string, unknown>;
+    const title = typeof meta.title === "string" ? meta.title.trim() : "";
+    const tags = Array.isArray(meta.tags)
+      ? meta.tags
+          .map((t) => (typeof t === "string" ? t.trim() : ""))
+          .filter((t) => t.length > 0)
+      : [];
+    if (title) lines.push(`Title: ${title}`);
+    if (tags.length > 0) lines.push(`Tags: ${tags.join(", ")}`);
+  }
+  lines.push(getChunkPromptContent(chunk).slice(0, 2000));
+  return lines.join("\n");
+}
+
 function buildStateSummary(input: DiagnosticPlannerInput): string {
   const lines: string[] = [];
   lines.push("## Evidence collected so far");
@@ -282,7 +303,7 @@ export async function runDiagnosticPlanner(
     .map((m) => `${m.role}: ${m.content}`)
     .join("\n");
   const chunksText = input.docChunks
-    .map((c) => `[${c.id}]\n${getChunkPromptContent(c).slice(0, 2000)}`)
+    .map((c) => formatChunkForPrompt(c))
     .join("\n\n") || "(No documentation available)";
 
   const systemPrompt = `You are a diagnostic support assistant. You help users troubleshoot issues by gathering evidence and narrowing down root causes. Use the diagnostic playbook to know what evidence to collect and what causes to consider. Output structured JSON every turn.
@@ -443,7 +464,7 @@ Why: ${input.resolution.why}
     .join("\n");
 
   const chunksText = input.docChunks
-    .map((c) => `[${c.id}]\n${getChunkPromptContent(c).slice(0, 2000)}`)
+    .map((c) => formatChunkForPrompt(c))
     .join("\n\n") || "(No documentation available)";
 
   const userPrompt = `${resolutionBlock ?? ""}

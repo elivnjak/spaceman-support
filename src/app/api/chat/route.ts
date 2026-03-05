@@ -2871,7 +2871,7 @@ export async function POST(request: Request) {
           // Either already have outcome or ambiguous message — answer as follow-up
           sendEvent("stage", JSON.stringify({ message: STAGE_MESSAGES.searching_manuals }));
           const queryText = message;
-          const keywordQuery = `${playbook.labelId} troubleshooting steps causes`;
+          const keywordQuery = `${message} ${playbook.labelId}`.trim();
           const queryEmbedding = await openaiTextEmbedder.embed(queryText);
           const chunks = await searchDocChunks(
             queryEmbedding,
@@ -3003,7 +3003,7 @@ export async function POST(request: Request) {
                   })
                 : Promise.resolve(null);
 
-            const queryTextForRag = `${plannerUserMessage} ${playbook.labelId} troubleshooting steps causes`;
+            const queryTextForRag = `${plannerUserMessage}\nLabel context: ${playbook.labelId}`;
             const queryEmbedding = await openaiTextEmbedder.embed(queryTextForRag);
             const chunks = await searchDocChunks(
               queryEmbedding,
