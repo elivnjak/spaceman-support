@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { telegramConfig } from "@/lib/db/schema";
 import { logErrorEvent, withApiRouteErrorLogging } from "@/lib/error-logs";
+import { postTelegramJson } from "@/lib/telegram";
 
 async function sendTelegramTextMessage(opts: {
   token: string;
@@ -10,21 +11,14 @@ async function sendTelegramTextMessage(opts: {
   text: string;
 }): Promise<boolean> {
   try {
-    const res = await fetch(
-      `https://api.telegram.org/bot${encodeURIComponent(opts.token)}/sendMessage`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          chat_id: opts.chatId,
-          text: opts.text,
-          parse_mode: "HTML",
-          disable_web_page_preview: true,
-        }),
-      }
-    );
+    const res = await postTelegramJson(opts.token, "sendMessage", {
+      chat_id: opts.chatId,
+      text: opts.text,
+      parse_mode: "HTML",
+      disable_web_page_preview: true,
+    });
     if (!res.ok) {
-      const responseText = await res.text();
+      const responseText = res.error ?? `${res.status ?? "unknown"} ${res.body ?? ""}`.trim();
       console.error(
         `[telegram-config] sendMessage failed for ${opts.chatId}: ${res.status} ${responseText}`
       );

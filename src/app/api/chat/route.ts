@@ -378,13 +378,135 @@ function countConsecutiveSkipTurns(messages: ChatMessage[]): number {
   for (let i = messages.length - 1; i >= 0; i--) {
     const msg = messages[i];
     if (msg.role !== "user") continue;
-    if (isSkipSignal(msg.content)) {
+    const isExplicitIdk =
+      msg.content.trim().length > 0 && isIdontKnowMessage(msg.content);
+    if (isSkipSignal(msg.content) || isExplicitIdk) {
       count += 1;
       continue;
     }
     break;
   }
   return count;
+}
+
+function mapChecklistTypeToPlannerRequestType(
+  type: "photo" | "reading" | "observation" | "action" | "confirmation"
+): PlannerOutput["requests"][number]["type"] {
+  if (type === "photo") return "photo";
+  if (type === "reading") return "reading";
+  if (type === "action") return "action";
+  return "question";
+}
+
+function preventRepeatedChecklistRequests(input: {
+  requests: PlannerOutput["requests"];
+  playbook: DiagnosticPlaybook;
+  evidence: Record<string, EvidenceRecord>;
+  evidenceExtracted: PlannerOutput["evidence_extracted"];
+  actionsById: Map<string, ActionRecord>;
+}): {
+  requests: PlannerOutput["requests"];
+  removedRequestIds: string[];
+  fallbackEvidenceId?: string;
+} {
+  const checklist = input.playbook.evidenceChecklist ?? [];
+  if (!checklist.length || input.requests.length === 0) {
+    return { requests: input.requests, removedRequestIds: [] };
+  }
+
+  const requestIdToEvidenceId = new Map<string, string>();
+  for (const item of checklist) {
+    requestIdToEvidenceId.set(item.id, item.id);
+    if (item.actionId) requestIdToEvidenceId.set(item.actionId, item.id);
+  }
+
+  const effectiveEvidenceIds = new Set<string>(Object.keys(input.evidence));
+  for (const extracted of input.evidenceExtracted) {
+    if (extracted?.evidenceId) effectiveEvidenceIds.add(extracted.evidenceId);
+  }
+
+  const removedRequestIds: string[] = [];
+  const filtered = input.requests.filter((req) => {
+    const evidenceId = requestIdToEvidenceId.get(req.id);
+    if (!evidenceId) {
+      if (effectiveEvidenceIds.has(req.id)) {
+        removedRequestIds.push(req.id);
+        return false;
+      }
+      return true;
+    }
+    if (!effectiveEvidenceIds.has(evidenceId)) return true;
+    removedRequestIds.push(req.id);
+    return false;
+  });
+
+  if (filtered.length > 0) {
+    return { requests: filtered, removedRequestIds };
+  }
+
+  const fallbackItem = checklist.find((item) => !effectiveEvidenceIds.has(item.id));
+  if (!fallbackItem) {
+    return { requests: filtered, removedRequestIds };
+  }
+
+  const mappedType = mapChecklistTypeToPlannerRequestType(fallbackItem.type);
+  const linkedAction = fallbackItem.actionId
+    ? input.actionsById.get(fallbackItem.actionId)
+    : undefined;
+  const actionExpectedInput =
+    linkedAction?.expectedInput &&
+    typeof linkedAction.expectedInput === "object"
+      ? (linkedAction.expectedInput as PlannerOutput["requests"][number]["expectedInput"])
+      : undefined;
+  const expectedInput =
+    fallbackItem.type === "confirmation"
+      ? ({ type: "boolean", options: ["Yes", "No"] } as PlannerOutput["requests"][number]["expectedInput"])
+      : actionExpectedInput;
+  const photoSuffix =
+    mappedType === "photo"
+      ? " Please upload a clear, close-up photo with good lighting from 2 angles."
+      : "";
+  const fallbackRequest: PlannerOutput["requests"][number] = {
+    type: mappedType,
+    id: fallbackItem.actionId ?? fallbackItem.id,
+    prompt: `${fallbackItem.description}${photoSuffix}`,
+    ...(expectedInput ? { expectedInput } : {}),
+  };
+
+  return {
+    requests: [fallbackRequest],
+    removedRequestIds,
+    fallbackEvidenceId: fallbackItem.id,
+  };
+}
+
+function inferEvidenceFromOutstandingRequest(input: {
+  message: string;
+  outstandingRequestIds: string[];
+  playbook: DiagnosticPlaybook;
+}): PlannerOutput["evidence_extracted"] {
+  if (input.outstandingRequestIds.length !== 1) return [];
+  const requestId = input.outstandingRequestIds[0];
+  if (!requestId) return [];
+
+  const checklistItem = (input.playbook.evidenceChecklist ?? []).find(
+    (item) => item.id === requestId || item.actionId === requestId
+  );
+  if (!checklistItem) return [];
+
+  if (checklistItem.type === "confirmation") {
+    const parsed = parseYesNoMessage(input.message);
+    if (parsed === null) return [];
+    return [
+      {
+        evidenceId: checklistItem.id,
+        value: parsed,
+        confidence: "exact",
+      },
+    ];
+  }
+
+  return [];
 }
 
 /** Pattern IDs that mean the user explicitly asked to speak to a human (not just frustration). */
@@ -2697,10 +2819,19 @@ export async function POST(request: Request) {
           (lastAssistantMessage as { requests?: { id: string }[] } | undefined)?.requests?.map(
             (r) => r.id
           ) ?? [];
-        const lastUserWasSkip = inputSource === "skip" || isSkipSignal(message);
+        const explicitIdkMessage =
+          message.trim().length > 0 && isIdontKnowMessage(message);
+        const lastUserWasSkip =
+          inputSource === "skip" ||
+          isSkipSignal(message) ||
+          explicitIdkMessage;
         const skipEvidenceIds = (playbook.evidenceChecklist ?? [])
-          .map((item) => item.id)
-          .filter((id) => outstandingRequestIds.includes(id));
+          .filter(
+            (item) =>
+              outstandingRequestIds.includes(item.id) ||
+              (item.actionId ? outstandingRequestIds.includes(item.actionId) : false)
+          )
+          .map((item) => item.id);
         const escalationOfferOutstanding = outstandingRequestIds.includes(ESCALATION_OFFER_REQUEST_ID);
         const regexEscalationIntent = messageContainsEscalationIntent(
           message,
@@ -3139,6 +3270,22 @@ export async function POST(request: Request) {
               }, audit)
             );
 
+            const inferredEvidence = inferEvidenceFromOutstandingRequest({
+              message,
+              outstandingRequestIds,
+              playbook,
+            });
+            if (inferredEvidence.length > 0) {
+              const existing = new Set(
+                plannerOutput.evidence_extracted.map((item) => item.evidenceId)
+              );
+              for (const item of inferredEvidence) {
+                if (!existing.has(item.evidenceId)) {
+                  plannerOutput.evidence_extracted.push(item);
+                }
+              }
+            }
+
             const { output: sanitized, errors: sanitizeErrors } = validateAndSanitizePlannerOutput(
               plannerOutput,
               playbook,
@@ -3146,6 +3293,45 @@ export async function POST(request: Request) {
               true,
               { maxRequestsPerTurn: diagnosticConfig.maxRequestsPerTurn }
             );
+            const requestsBeforeDedup = [...sanitized.requests];
+            const dedupedRequests = preventRepeatedChecklistRequests({
+              requests: sanitized.requests,
+              playbook,
+              evidence,
+              evidenceExtracted: sanitized.evidence_extracted,
+              actionsById,
+            });
+            if (dedupedRequests.removedRequestIds.length > 0) {
+              sanitizeErrors.push(
+                `Removed repeated requests for already-collected evidence: ${dedupedRequests.removedRequestIds.join(", ")}`
+              );
+            }
+            if (dedupedRequests.fallbackEvidenceId) {
+              sanitizeErrors.push(
+                `Inserted fallback request for missing evidence: ${dedupedRequests.fallbackEvidenceId}`
+              );
+            }
+            sanitized.requests = dedupedRequests.requests;
+            const requestsChanged =
+              requestsBeforeDedup.length !== sanitized.requests.length ||
+              requestsBeforeDedup.some((req, idx) => {
+                const next = sanitized.requests[idx];
+                return !next || req.id !== next.id || req.prompt !== next.prompt;
+              });
+            if (requestsChanged) {
+              if (sanitized.requests.length > 0) {
+                sanitized.message = `Thanks for the update. Next, please: ${sanitized.requests[0].prompt}`;
+              } else if (
+                sanitized.phase === "gathering_info" ||
+                sanitized.phase === "diagnosing"
+              ) {
+                sanitized.message =
+                  "Thanks for the update. I have enough from this step and will continue with the next analysis.";
+              }
+              if ("message_html" in sanitized) {
+                delete (sanitized as { message_html?: string }).message_html;
+              }
+            }
             audit.logPlannerOutput(plannerOutput, sanitized, sanitizeErrors);
             plannerLogged = true;
             plannerOutput = sanitized;
@@ -3286,13 +3472,20 @@ export async function POST(request: Request) {
           } as ChatMessage & { requests?: PlannerOutput["requests"] };
         }
 
-        // If planner left us in "diagnosing" with no requests and we have substantial evidence, force escalation so the user gets a clear outcome instead of being stuck
+        // If planner leaves a non-terminal phase with no requests and required evidence is already covered,
+        // force escalation so the user gets a clear outcome instead of a dead-end turn.
         const evidenceCount = Object.keys(evidence).length;
-        const diagnosingWithNoNextStep =
-          phase === "diagnosing" &&
+        const requiredChecklistIds = (playbook.evidenceChecklist ?? [])
+          .filter((item) => item.required)
+          .map((item) => item.id);
+        const requiredEvidenceComplete = requiredChecklistIds.every((id) => id in evidence);
+        const nonTerminalWithNoNextStep =
+          (phase === "diagnosing" || phase === "gathering_info") &&
           plannerOutput.requests.length === 0 &&
-          evidenceCount >= 5;
-        if (diagnosingWithNoNextStep && status === "active") {
+          !plannerOutput.resolution &&
+          requiredEvidenceComplete &&
+          evidenceCount >= Math.max(3, requiredChecklistIds.length);
+        if (nonTerminalWithNoNextStep && status === "active") {
           phase = "escalated";
           status = "escalated";
           escalationReason =

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { telegramConfig } from "@/lib/db/schema";
 import { logErrorEvent, withApiRouteErrorLogging } from "@/lib/error-logs";
+import { postTelegramJson } from "@/lib/telegram";
 
 function normalizeChatIds(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
@@ -14,23 +15,16 @@ async function sendTelegramTextMessage(opts: {
   token: string;
   chatId: string;
   text: string;
-}): Promise<boolean> {
+}): Promise<{ sent: boolean; error?: string }> {
   try {
-    const res = await fetch(
-      `https://api.telegram.org/bot${encodeURIComponent(opts.token)}/sendMessage`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          chat_id: opts.chatId,
-          text: opts.text,
-          parse_mode: "HTML",
-          disable_web_page_preview: true,
-        }),
-      }
-    );
+    const res = await postTelegramJson(opts.token, "sendMessage", {
+      chat_id: opts.chatId,
+      text: opts.text,
+      parse_mode: "HTML",
+      disable_web_page_preview: true,
+    });
     if (!res.ok) {
-      const responseText = await res.text();
+      const responseText = res.error ?? `${res.status ?? "unknown"} ${res.body ?? ""}`.trim();
       console.error(
         `[telegram-config] test sendMessage failed for ${opts.chatId}: ${res.status} ${responseText}`
       );
@@ -45,13 +39,14 @@ async function sendTelegramTextMessage(opts: {
           body: responseText.slice(0, 1000),
         },
       }).catch(() => {});
-      return false;
+      return { sent: false, error: responseText };
     }
-    return true;
+    return { sent: true };
   } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
     console.error(
       `[telegram-config] test sendMessage failed for ${opts.chatId}:`,
-      err instanceof Error ? err.message : err
+      errorMessage
     );
     await logErrorEvent({
       level: "error",
@@ -63,7 +58,7 @@ async function sendTelegramTextMessage(opts: {
         chatId: opts.chatId,
       },
     }).catch(() => {});
-    return false;
+    return { sent: false, error: errorMessage };
   }
 }
 
@@ -103,11 +98,12 @@ async function POSTHandler() {
     `Time: ${now}`,
   ].join("\n");
 
-  const results: Array<{ chatId: string; sent: boolean }> = [];
+  const results: Array<{ chatId: string; sent: boolean; error?: string }> = [];
   let sentCount = 0;
   for (const chatId of chatIds) {
-    const sent = await sendTelegramTextMessage({ token, chatId, text });
-    results.push({ chatId, sent });
+    const result = await sendTelegramTextMessage({ token, chatId, text });
+    results.push({ chatId, sent: result.sent, ...(result.error ? { error: result.error } : {}) });
+    const sent = result.sent;
     if (sent) sentCount += 1;
   }
 

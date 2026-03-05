@@ -4,6 +4,7 @@ import { telegramConfig } from "@/lib/db/schema";
 import { getIntentManifest } from "@/lib/intent/loader";
 import { readStorageFile } from "@/lib/storage";
 import { sanitizeRichTextHtml } from "@/lib/rich-text";
+import { postTelegramJson } from "@/lib/telegram";
 
 function getBaseUrl(): string | null {
   const raw = process.env.NEXT_PUBLIC_BASE_URL?.trim();
@@ -295,18 +296,19 @@ export async function sendEscalationTelegram(handoff: EscalationHandoff): Promis
   let anySent = false;
   for (const chatId of allChatIds) {
     try {
-      const messageResponse = await fetch(`${apiBase}/sendMessage`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          chat_id: chatId,
-          text: summary,
-          parse_mode: "HTML",
-          disable_web_page_preview: true,
-        }),
+      const messageResponse = await postTelegramJson(token, "sendMessage", {
+        chat_id: chatId,
+        text: summary,
+        parse_mode: "HTML",
+        disable_web_page_preview: true,
       });
       if (!messageResponse.ok) {
-        console.error(`[escalation] Telegram sendMessage to ${chatId} failed: ${messageResponse.status} ${await messageResponse.text()}`);
+        const detail = messageResponse.error
+          ? messageResponse.error
+          : `${messageResponse.status ?? "unknown"} ${messageResponse.body ?? ""}`.trim();
+        console.error(
+          `[escalation] Telegram sendMessage to ${chatId} failed (${messageResponse.transport ?? "unknown"}): ${detail}`
+        );
         continue;
       }
       anySent = true;
