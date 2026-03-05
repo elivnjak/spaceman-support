@@ -25,6 +25,7 @@ const navGroups: NavGroup[] = [
       { href: "/admin", label: "Dashboard" },
       { href: "/admin/ai-analytics", label: "Insights" },
       { href: "/admin/tickets", label: "Tickets" },
+      { href: "/admin/rag-chat", label: "RAG test chat" },
     ],
   },
   {

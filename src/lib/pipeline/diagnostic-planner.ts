@@ -427,7 +427,7 @@ export async function runFollowUpAnswer(input: {
   recentMessages: ChatMessage[];
   docChunks: { id: string; content: string; metadata?: unknown }[];
   lastUserMessage: string;
-  resolution: PlannerOutput["resolution"];
+  resolution?: PlannerOutput["resolution"];
   machineModel?: string | null;
   imageBuffers?: Buffer[];
 }, audit?: AuditLogger): Promise<string> {
