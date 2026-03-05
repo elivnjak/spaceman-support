@@ -57,13 +57,13 @@ export const INGESTION_CONFIG = {
   /** Min score from page heuristic (0–1) to trigger vision extraction for that page. */
   tablePageThreshold: 0.6,
   /** Skip vision entirely for PDFs exceeding this page count. */
-  maxPagesForVision: 50,
+  maxPagesForVision: 100,
   /** Enable numeric verification of vision output against deterministic text. */
   verifyNumerics: true,
   /** Model used for LLM-based semantic chunking (separate from vision; default gpt-5.2 for testing). */
   llmChunkerModel: MANIFEST_DEFAULTS.models.llmChunkerModel,
   /** Use LLM chunker for PDFs up to this many pages (0 = disabled). */
-  maxPagesForLlmChunker: 20,
+  maxPagesForLlmChunker: 60,
 } as const;
 
 export const HTML_INGESTION_CONFIG = {
