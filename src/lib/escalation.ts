@@ -74,11 +74,39 @@ export type EscalationHandoff = {
   }[];
   /** Last N user messages for context */
   recentUserMessages: string[];
+  /** Last N user answers paired with the assistant question they responded to */
+  recentQuestionAnswers: { question: string | null; answer: string }[];
   /** Steps already attempted (from prior resolution, if any) */
   stepsAttempted: { stepId: string; instruction: string }[];
   /** Timestamp of escalation */
   escalatedAt: string;
 };
+
+function buildRecentQuestionAnswers(
+  messages: ChatMessage[],
+  maxItems = 5
+): { question: string | null; answer: string }[] {
+  const pairs: { question: string | null; answer: string }[] = [];
+  for (let i = 0; i < messages.length; i++) {
+    const current = messages[i];
+    if (current.role !== "user") continue;
+    const answer = current.content?.trim();
+    if (!answer) continue;
+
+    let question: string | null = null;
+    for (let j = i - 1; j >= 0; j--) {
+      const prev = messages[j];
+      if (prev.role !== "assistant") continue;
+      const candidate = prev.content?.trim();
+      if (candidate) {
+        question = candidate;
+        break;
+      }
+    }
+    pairs.push({ question, answer });
+  }
+  return pairs.slice(-maxItems);
+}
 
 export function buildEscalationHandoff(opts: {
   sessionId: string;
@@ -105,6 +133,7 @@ export function buildEscalationHandoff(opts: {
     .filter((m) => m.role === "user")
     .slice(-5)
     .map((m) => m.content);
+  const recentQuestionAnswers = buildRecentQuestionAnswers(opts.messages, 5);
 
   const userImagePaths = Array.from(
     new Set(
@@ -154,6 +183,7 @@ export function buildEscalationHandoff(opts: {
       reasoning: h.reasoning,
     })),
     recentUserMessages,
+    recentQuestionAnswers,
     stepsAttempted,
     escalatedAt: new Date().toISOString(),
   };
@@ -244,6 +274,12 @@ export async function sendEscalationEmailFallback(
   const recentMessages = handoff.recentUserMessages
     .slice(-5)
     .map((line) => `- ${line}`);
+  const recentQAPairs = handoff.recentQuestionAnswers
+    .slice(-5)
+    .map((entry, idx) => {
+      const question = (entry.question ?? "").trim() || "(no captured assistant question)";
+      return `${idx + 1}. Q: ${question}\n   A: ${entry.answer}`;
+    });
   const subject = `[Escalation Fallback] ${machine} (${handoff.sessionId.slice(0, 8)})`;
   const text = [
     "Telegram delivery failed. Sending escalation via email fallback.",
@@ -261,8 +297,12 @@ export async function sendEscalationEmailFallback(
     "Evidence collected:",
     evidenceLines.length > 0 ? evidenceLines.join("\n") : "- None",
     "",
-    "Recent user messages:",
-    recentMessages.length > 0 ? recentMessages.join("\n") : "- None",
+    "Recent Q&A context:",
+    recentQAPairs.length > 0
+      ? recentQAPairs.join("\n")
+      : recentMessages.length > 0
+        ? recentMessages.join("\n")
+        : "- None",
   ].join("\n");
 
   try {
@@ -352,6 +392,15 @@ export async function sendEscalationTelegram(handoff: EscalationHandoff): Promis
   const messageLines = handoff.recentUserMessages
     .slice(-3)
     .map((entry) => `- ${escapeTelegramHtml(entry)}`);
+  const qaLines = handoff.recentQuestionAnswers
+    .slice(-3)
+    .map((entry, idx) => {
+      const question = (entry.question ?? "").trim() || "(no captured assistant question)";
+      return (
+        `${idx + 1}) <b>Q:</b> ${escapeTelegramHtml(question)}\n` +
+        `   <b>A:</b> ${escapeTelegramHtml(entry.answer)}`
+      );
+    });
   const attemptedLines = handoff.stepsAttempted
     .slice(0, 5)
     .map((step) => `- ${escapeTelegramHtml(step.instruction)}`);
@@ -371,8 +420,12 @@ export async function sendEscalationTelegram(handoff: EscalationHandoff): Promis
     "<b>Evidence collected:</b>",
     evidenceLines.length > 0 ? evidenceLines.join("\n") : "- None",
     "",
-    "<b>Recent messages:</b>",
-    messageLines.length > 0 ? messageLines.join("\n") : "- None",
+    "<b>Recent Q&A:</b>",
+    qaLines.length > 0
+      ? qaLines.join("\n")
+      : messageLines.length > 0
+        ? messageLines.join("\n")
+        : "- None",
     "",
     "<b>Steps attempted:</b>",
     attemptedLines.length > 0 ? attemptedLines.join("\n") : "- None",

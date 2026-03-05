@@ -28,6 +28,12 @@ async function POSTHandler() {
     },
     hypotheses: [],
     recentUserMessages: ["This is a test escalation payload."],
+    recentQuestionAnswers: [
+      {
+        question: "Can you check whether the machine is showing any error code?",
+        answer: "Yes, it shows E12 after about 2 minutes.",
+      },
+    ],
     stepsAttempted: [],
     escalatedAt: now,
   };
