@@ -24,25 +24,6 @@ export type CandidateCause = {
   cause: string;
   likelihood: "high" | "medium" | "low";
   rulingEvidence: string[];
-  supportRules?: {
-    evidenceId: string;
-    operator: "=" | "!=" | ">" | ">=" | "<" | "<=" | "in" | "not_in" | "contains" | "not_contains";
-    value: unknown;
-    weight?: number;
-  }[];
-  contradictionRules?: {
-    evidenceId: string;
-    operator: "=" | "!=" | ">" | ">=" | "<" | "<=" | "in" | "not_in" | "contains" | "not_contains";
-    value: unknown;
-    weight?: number;
-  }[];
-};
-export type DiagnosticQuestionItem = {
-  id: string;
-  question: string;
-  purpose: string;
-  whenToAsk?: string;
-  actionId?: string;
 };
 export type EscalationTriggerItem = { trigger: string; reason: string };
 
@@ -54,7 +35,6 @@ export type DiagnosticPlaybook = {
   symptoms?: SymptomItem[] | null;
   evidenceChecklist?: EvidenceChecklistItem[] | null;
   candidateCauses?: CandidateCause[] | null;
-  diagnosticQuestions?: DiagnosticQuestionItem[] | null;
   escalationTriggers?: EscalationTriggerItem[] | null;
 };
 

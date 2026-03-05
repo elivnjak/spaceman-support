@@ -5,8 +5,6 @@ export type PlaybookStep = {
   title?: string;
   instruction?: string;
   check?: string;
-  if_failed?: string;
-  safetyLevel?: "safe" | "caution" | "technician_only";
 };
 
 export type LLMStep = {

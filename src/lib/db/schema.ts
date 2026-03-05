@@ -135,7 +135,6 @@ export const playbooks = pgTable("playbooks", {
   symptoms: jsonb("symptoms"),
   evidenceChecklist: jsonb("evidence_checklist"),
   candidateCauses: jsonb("candidate_causes"),
-  diagnosticQuestions: jsonb("diagnostic_questions"),
   escalationTriggers: jsonb("escalation_triggers"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });

@@ -313,66 +313,42 @@ const TOO_RUNNY_CAUSES = [
     cause: "Hopper temperature too high (product not cold enough to set properly)",
     likelihood: "high" as const,
     rulingEvidence: ["hopper_temp"],
-    supportRules: [{ evidenceId: "hopper_temp", operator: ">", value: -4, weight: 2 }],
-    contradictionRules: [{ evidenceId: "hopper_temp", operator: "<=", value: -4, weight: 2 }],
   },
   {
     id: "poor_airflow",
     cause: "Insufficient air circulation around machine",
     likelihood: "high" as const,
     rulingEvidence: ["clearance_ok"],
-    supportRules: [{ evidenceId: "clearance_ok", operator: "=", value: false, weight: 2 }],
-    contradictionRules: [{ evidenceId: "clearance_ok", operator: "=", value: true, weight: 2 }],
   },
   {
     id: "worn_scrapers",
     cause: "Worn or damaged scraper blades",
     likelihood: "medium" as const,
     rulingEvidence: ["scraper_condition"],
-    supportRules: [
-      {
-        evidenceId: "scraper_condition",
-        operator: "in",
-        value: ["some wear visible", "clearly damaged/worn"],
-        weight: 1.5,
-      },
-    ],
-    contradictionRules: [{ evidenceId: "scraper_condition", operator: "=", value: "good condition", weight: 1.5 }],
   },
   {
     id: "over_beaten",
     cause: "Product over-beaten from sitting too long",
     likelihood: "medium" as const,
     rulingEvidence: ["pulls_per_hour"],
-    supportRules: [{ evidenceId: "pulls_per_hour", operator: "<", value: 15, weight: 1 }],
   },
   {
     id: "blocked_air_tubes",
     cause: "Blocked air tubes or pump",
     likelihood: "medium" as const,
     rulingEvidence: ["last_clean"],
-    supportRules: [
-      { evidenceId: "last_clean", operator: "contains", value: "week", weight: 0.8 },
-      { evidenceId: "last_clean", operator: "contains", value: "month", weight: 0.8 },
-    ],
   },
   {
     id: "over_pulling",
     cause: "Over-pulling beyond machine capacity",
     likelihood: "medium" as const,
     rulingEvidence: ["pulls_per_hour"],
-    supportRules: [{ evidenceId: "pulls_per_hour", operator: ">", value: 80, weight: 1.5 }],
-    contradictionRules: [{ evidenceId: "pulls_per_hour", operator: "<=", value: 50, weight: 1 }],
   },
   {
     id: "wrong_mix_ratio",
     cause: "Incorrect mix-to-water ratio",
     likelihood: "low" as const,
     rulingEvidence: ["mix_ratio"],
-    supportRules: [
-      { evidenceId: "mix_ratio", operator: "contains", value: "too concentrated", weight: 1 },
-      { evidenceId: "mix_ratio", operator: "contains", value: "too much mix", weight: 1 },
-    ],
   },
 ];
 
@@ -384,12 +360,12 @@ const TOO_RUNNY_TRIGGERS = [
 ];
 
 const TOO_RUNNY_STEPS = [
-  { step_id: "cool-hopper", title: "Cool hopper to operating range", instruction: "Allow the machine time to cool. Hopper should be in the -8°C to -4°C range for proper texture. Check that the machine has adequate clearance for airflow and that ambient temperature is not too high.", check: "Hopper display shows temperature within -8°C to -4°C.", if_failed: "If temperature does not drop after 30+ minutes, escalate to technician (possible refrigeration issue)." },
-  { step_id: "clear-space", title: "Clear space", instruction: "Ensure minimum 6\" clearance on all sides of the machine for air flow.", check: "Verify clearance with a ruler.", if_failed: "Check for obstructions or relocated equipment." },
-  { step_id: "check-scraper", title: "Check scraper", instruction: "Inspect scraper blades for wear; replace if they don't scrape the cylinder properly.", check: "Blades contact cylinder evenly; no visible wear.", if_failed: "Order replacement blades; reduce pull rate until replaced." },
-  { step_id: "flush-old", title: "Flush old product", instruction: "Pull product out several times so fresh mix from the hopper enters the cylinder.", check: "Dispensed product is from fresh batch.", if_failed: "Extend wait time between pulls." },
-  { step_id: "clean-air", title: "Clean air system", instruction: "Clean air tube and air tube inlet holes thoroughly as per cleaning procedure.", check: "No blockages; air flows.", if_failed: "Repeat cleaning; check pump if still blocked." },
-  { step_id: "pace-pulls", title: "Pace pulls", instruction: "Time your pulls and leave a delay between each so the machine can freeze new product.", check: "Servings per hour within model limit.", if_failed: "Reduce serving rate or upgrade model." },
+  { step_id: "cool-hopper", title: "Cool hopper to operating range", instruction: "Allow the machine time to cool. Hopper should be in the -8°C to -4°C range for proper texture. Check that the machine has adequate clearance for airflow and that ambient temperature is not too high.", check: "Hopper display shows temperature within -8°C to -4°C." },
+  { step_id: "clear-space", title: "Clear space", instruction: "Ensure minimum 6\" clearance on all sides of the machine for air flow.", check: "Verify clearance with a ruler." },
+  { step_id: "check-scraper", title: "Check scraper", instruction: "Inspect scraper blades for wear; replace if they don't scrape the cylinder properly.", check: "Blades contact cylinder evenly; no visible wear." },
+  { step_id: "flush-old", title: "Flush old product", instruction: "Pull product out several times so fresh mix from the hopper enters the cylinder.", check: "Dispensed product is from fresh batch." },
+  { step_id: "clean-air", title: "Clean air system", instruction: "Clean air tube and air tube inlet holes thoroughly as per cleaning procedure.", check: "No blockages; air flows." },
+  { step_id: "pace-pulls", title: "Pace pulls", instruction: "Time your pulls and leave a delay between each so the machine can freeze new product.", check: "Servings per hour within model limit." },
 ];
 
 export async function seedTooRunnyPlaybook(): Promise<void> {

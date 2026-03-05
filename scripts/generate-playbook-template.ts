@@ -152,27 +152,6 @@ async function main() {
     { likelihood: ["high", "medium", "low"] },
   );
 
-  // --- Questions ---
-  addSheet(
-    wb,
-    "Questions",
-    'Diagnostic questions the assistant can ask the user. "when_to_ask" and "action_id" are optional. If set, "action_id" must match an ID in Admin -> Actions.',
-    [
-      { header: "id", key: "id", width: 25 },
-      { header: "question", key: "question", width: 50 },
-      { header: "purpose", key: "purpose", width: 40 },
-      { header: "when_to_ask", key: "when_to_ask", width: 30 },
-      { header: "action_id", key: "action_id", width: 25 },
-    ],
-    {
-      id: "ask_temp",
-      question: "What temperature does the hopper display show?",
-      purpose: "Determine if hopper is within operating range",
-      when_to_ask: "When user reports runny product",
-      action_id: "read_hopper_temp",
-    },
-  );
-
   // --- Triggers ---
   addSheet(
     wb,
@@ -192,18 +171,16 @@ async function main() {
   addSheet(
     wb,
     "Steps",
-    'Resolution steps the user should follow once a cause is identified. Row order = step order. "check" and "if_failed" are optional.',
+    'Resolution steps the user should follow once a cause is identified. Row order = step order. "check" is optional.',
     [
       { header: "title", key: "title", width: 30 },
       { header: "instruction", key: "instruction", width: 55 },
       { header: "check", key: "check", width: 35 },
-      { header: "if_failed", key: "if_failed", width: 35 },
     ],
     {
       title: "Lower hopper temperature",
       instruction: "Set the hopper temperature to -8°C using the control panel.",
       check: "Confirm display shows -8°C after 30 seconds",
-      if_failed: "If temperature does not drop, power-cycle the machine",
     },
   );
 

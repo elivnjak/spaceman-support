@@ -162,44 +162,37 @@ async function main() {
       { header: "title", key: "title", width: 30 },
       { header: "instruction", key: "instruction", width: 55 },
       { header: "check", key: "check", width: 35 },
-      { header: "if_failed", key: "if_failed", width: 35 },
     ],
     [
       {
         title: "Raise hopper temperature",
         instruction: "Adjust the hopper thermostat up so the operating range is -8°C to -4°C. The product may be over-freezing if the setting is too low.",
         check: "Hopper display shows temperature within -8°C to -4°C after 15 minutes.",
-        if_failed: "If temperature does not rise, check thermostat and escalate to technician.",
       },
       {
         title: "Correct mix ratio",
         instruction: "Verify the mix-to-water ratio matches the manufacturer's recommendation. Reduce concentrate if the ratio is too high.",
         check: "Mix ratio matches label instructions.",
-        if_failed: "Discard current batch and prepare a new one with correct ratio.",
       },
       {
         title: "Defrost the machine",
         instruction: "Run a full defrost cycle according to the machine manual to clear any ice buildup on the cylinder walls.",
         check: "Defrost cycle completes and no ice visible inside cylinder.",
-        if_failed: "If ice persists, escalate to technician — possible refrigeration valve issue.",
       },
       {
         title: "Check and adjust overrun",
         instruction: "Inspect the air pump and overrun setting. Increase aeration if the setting is below the recommended level for your mix type.",
         check: "Product dispensed with visible aeration and lighter texture.",
-        if_failed: "If air pump is not working, escalate for pump inspection or replacement.",
       },
       {
         title: "Inspect scraper blades",
         instruction: "Remove and inspect scraper blades for wear. Replace if blades are worn, cracked, or no longer make full contact with the cylinder.",
         check: "New or intact blades installed, even contact with cylinder wall.",
-        if_failed: "Order replacement blades; reduce usage until replaced.",
       },
       {
         title: "Pull product to refresh",
         instruction: "Dispense several servings to cycle fresh product through the cylinder. This clears over-frozen product that has been sitting.",
         check: "Dispensed product has improved texture and consistency.",
-        if_failed: "Allow machine 20 minutes to re-freeze and try again.",
       },
     ],
   );

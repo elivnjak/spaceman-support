@@ -207,16 +207,6 @@ async function POSTHandler(request: Request) {
       };
     });
 
-    // --- Questions ---
-    const questionRows = readRows(wb.getWorksheet("Questions"));
-    const questionItems = questionRows.map((r, i) => ({
-      id: r.id || `question_${i + 1}`,
-      question: r.question ?? "",
-      purpose: r.purpose ?? "",
-      ...(r.when_to_ask ? { whenToAsk: r.when_to_ask } : {}),
-      ...(r.action_id ? { actionId: r.action_id } : {}),
-    }));
-
     // --- Triggers ---
     const triggerRows = readRows(wb.getWorksheet("Triggers"));
     const triggerItems = triggerRows.map((r) => ({
@@ -234,14 +224,12 @@ async function POSTHandler(request: Request) {
       title: r.title ?? "",
       instruction: r.instruction ?? "",
       ...(r.check ? { check: r.check } : {}),
-      ...(r.if_failed ? { if_failed: r.if_failed } : {}),
     }));
 
     const referencedActionIds = Array.from(
       new Set(
         [
           ...evidenceItems.map((item) => item.actionId).filter(Boolean),
-          ...questionItems.map((item) => item.actionId).filter(Boolean),
         ] as string[],
       ),
     );
@@ -290,7 +278,6 @@ async function POSTHandler(request: Request) {
         ...(symptomItems.length > 0 ? { symptoms: symptomItems } : { symptoms: null }),
         ...(evidenceItems.length > 0 ? { evidenceChecklist: evidenceItems } : { evidenceChecklist: null }),
         ...(causeItems.length > 0 ? { candidateCauses: causeItems } : { candidateCauses: null }),
-        ...(questionItems.length > 0 ? { diagnosticQuestions: questionItems } : { diagnosticQuestions: null }),
         ...(triggerItems.length > 0 ? { escalationTriggers: triggerItems } : { escalationTriggers: null }),
       };
 
@@ -325,7 +312,6 @@ async function POSTHandler(request: Request) {
           ...(symptomItems.length > 0 && { symptoms: symptomItems }),
           ...(evidenceItems.length > 0 && { evidenceChecklist: evidenceItems }),
           ...(causeItems.length > 0 && { candidateCauses: causeItems }),
-          ...(questionItems.length > 0 && { diagnosticQuestions: questionItems }),
           ...(triggerItems.length > 0 && { escalationTriggers: triggerItems }),
         })
         .returning();

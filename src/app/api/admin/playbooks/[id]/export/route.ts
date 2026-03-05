@@ -147,14 +147,9 @@ async function GETHandler(
   const candidateCauses = (
     playbook.candidateCauses as { id?: string; cause?: string; likelihood?: string; rulingEvidence?: unknown }[] | null
   ) ?? [];
-  const diagnosticQuestions = (
-    playbook.diagnosticQuestions as
-      | { id?: string; question?: string; purpose?: string; whenToAsk?: string; actionId?: string }[]
-      | null
-  ) ?? [];
   const escalationTriggers = (playbook.escalationTriggers as { trigger?: string; reason?: string }[] | null) ?? [];
   const steps = (
-    playbook.steps as { title?: string; instruction?: string; check?: string; if_failed?: string }[]
+    playbook.steps as { title?: string; instruction?: string; check?: string }[]
   ) ?? [];
 
   const wb = new ExcelJS.Workbook();
@@ -235,25 +230,6 @@ async function GETHandler(
   );
   addSheet(
     wb,
-    "Questions",
-    'Diagnostic questions. "when_to_ask" and "action_id" are optional.',
-    [
-      { header: "id", key: "id", width: 25 },
-      { header: "question", key: "question", width: 52 },
-      { header: "purpose", key: "purpose", width: 42 },
-      { header: "when_to_ask", key: "when_to_ask", width: 30 },
-      { header: "action_id", key: "action_id", width: 30 },
-    ],
-    diagnosticQuestions.map((item) => ({
-      id: item.id ?? "",
-      question: item.question ?? "",
-      purpose: item.purpose ?? "",
-      when_to_ask: item.whenToAsk ?? "",
-      action_id: item.actionId ?? "",
-    }))
-  );
-  addSheet(
-    wb,
     "Triggers",
     "Escalation triggers. If user mentions this, assistant escalates.",
     [
@@ -273,13 +249,11 @@ async function GETHandler(
       { header: "title", key: "title", width: 30 },
       { header: "instruction", key: "instruction", width: 56 },
       { header: "check", key: "check", width: 36 },
-      { header: "if_failed", key: "if_failed", width: 36 },
     ],
     steps.map((item) => ({
       title: item.title ?? "",
       instruction: item.instruction ?? "",
       check: item.check ?? "",
-      if_failed: item.if_failed ?? "",
     }))
   );
   addReferenceSheet(wb, labelRows, productTypeRows, actionRows);

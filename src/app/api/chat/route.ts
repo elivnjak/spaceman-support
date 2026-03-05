@@ -2798,7 +2798,6 @@ export async function POST(request: Request) {
           symptoms: playbookRow.symptoms as DiagnosticPlaybook["symptoms"],
           evidenceChecklist: playbookRow.evidenceChecklist as DiagnosticPlaybook["evidenceChecklist"],
           candidateCauses: playbookRow.candidateCauses as DiagnosticPlaybook["candidateCauses"],
-          diagnosticQuestions: playbookRow.diagnosticQuestions as DiagnosticPlaybook["diagnosticQuestions"],
           escalationTriggers: playbookRow.escalationTriggers as DiagnosticPlaybook["escalationTriggers"],
         };
 

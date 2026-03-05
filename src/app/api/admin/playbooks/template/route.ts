@@ -208,25 +208,6 @@ async function GETHandler() {
   );
   addSheet(
     wb,
-    "Questions",
-    'Diagnostic questions. "when_to_ask" and "action_id" are optional.',
-    [
-      { header: "id", key: "id", width: 25 },
-      { header: "question", key: "question", width: 52 },
-      { header: "purpose", key: "purpose", width: 42 },
-      { header: "when_to_ask", key: "when_to_ask", width: 30 },
-      { header: "action_id", key: "action_id", width: 30 },
-    ],
-    {
-      id: "ask_temp",
-      question: "What temperature does the hopper display show?",
-      purpose: "Determine if hopper is in operating range",
-      when_to_ask: "When user reports runny product",
-      action_id: "read_hopper_temp",
-    }
-  );
-  addSheet(
-    wb,
     "Triggers",
     "Escalation triggers. If user mentions this, assistant escalates.",
     [
@@ -246,13 +227,11 @@ async function GETHandler() {
       { header: "title", key: "title", width: 30 },
       { header: "instruction", key: "instruction", width: 56 },
       { header: "check", key: "check", width: 36 },
-      { header: "if_failed", key: "if_failed", width: 36 },
     ],
     {
       title: "Lower hopper temperature",
       instruction: "Set hopper temperature to target range for this product.",
       check: "Confirm display shows target range",
-      if_failed: "If temperature remains out of range, escalate.",
     }
   );
   addReferenceSheet(wb, labelRows, productTypeRows, actionRows);

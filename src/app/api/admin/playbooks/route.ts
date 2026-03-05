@@ -11,8 +11,6 @@ type Step = {
   title: string;
   instruction: string;
   check?: string;
-  if_failed?: string;
-  safetyLevel?: "safe" | "caution" | "technician_only";
 };
 
 function ensureStepIds(steps: Step[]): Step[] {
@@ -22,7 +20,6 @@ function ensureStepIds(steps: Step[]): Step[] {
     title: s.title ?? "",
     instruction: s.instruction ?? "",
     check: s.check,
-    if_failed: s.if_failed,
   }));
 }
 
@@ -73,13 +70,6 @@ type CauseItem = {
   likelihood: "high" | "medium" | "low";
   rulingEvidence: string[];
 };
-type QuestionItem = {
-  id: string;
-  question: string;
-  purpose: string;
-  whenToAsk?: string;
-  actionId?: string;
-};
 type TriggerItem = { trigger: string; reason: string };
 
 const StepSchema = z.object({
@@ -87,8 +77,6 @@ const StepSchema = z.object({
   title: z.string().optional().default(""),
   instruction: z.string().optional().default(""),
   check: z.string().optional(),
-  if_failed: z.string().optional(),
-  safetyLevel: z.enum(["safe", "caution", "technician_only"]).optional(),
 });
 
 const PlaybookSchema = z.object({
@@ -130,18 +118,6 @@ const PlaybookSchema = z.object({
     )
     .nullable()
     .optional(),
-  diagnosticQuestions: z
-    .array(
-      z.object({
-        id: z.string().min(1),
-        question: z.string().min(1),
-        purpose: z.string().min(1),
-        whenToAsk: z.string().optional(),
-        actionId: z.string().optional(),
-      })
-    )
-    .nullable()
-    .optional(),
   escalationTriggers: z
     .array(
       z.object({
@@ -172,7 +148,6 @@ async function POSTHandler(request: Request) {
     symptoms,
     evidenceChecklist,
     candidateCauses,
-    diagnosticQuestions,
     escalationTriggers,
   } = parsed.data;
   const stepsWithIds = ensureStepIds(steps || []);
@@ -187,7 +162,6 @@ async function POSTHandler(request: Request) {
     ...(symptoms != null && { symptoms }),
     ...(evidenceChecklist != null && { evidenceChecklist }),
     ...(candidateCauses != null && { candidateCauses }),
-    ...(diagnosticQuestions != null && { diagnosticQuestions }),
     ...(escalationTriggers != null && { escalationTriggers }),
   };
 
@@ -231,7 +205,6 @@ async function POSTHandler(request: Request) {
         ...(symptoms != null && { symptoms }),
         ...(evidenceChecklist != null && { evidenceChecklist }),
         ...(candidateCauses != null && { candidateCauses }),
-        ...(diagnosticQuestions != null && { diagnosticQuestions }),
         ...(escalationTriggers != null && { escalationTriggers }),
       })
       .returning();

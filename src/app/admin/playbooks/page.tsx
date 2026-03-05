@@ -12,7 +12,6 @@ type Step = {
   title: string;
   instruction: string;
   check?: string;
-  if_failed?: string;
 };
 type SymptomItem = { id: string; description: string };
 type EvidenceItem = {
@@ -28,13 +27,6 @@ type CauseItem = {
   likelihood: "high" | "medium" | "low";
   rulingEvidence: string[];
 };
-type QuestionItem = {
-  id: string;
-  question: string;
-  purpose: string;
-  whenToAsk?: string;
-  actionId?: string;
-};
 type TriggerItem = { trigger: string; reason: string };
 type Action = { id: string; title: string };
 type ProductTypeOption = { id: string; name: string; isOther: boolean };
@@ -49,7 +41,6 @@ type Playbook = {
   symptoms?: SymptomItem[] | null;
   evidenceChecklist?: EvidenceItem[] | null;
   candidateCauses?: CauseItem[] | null;
-  diagnosticQuestions?: QuestionItem[] | null;
   escalationTriggers?: TriggerItem[] | null;
   updatedAt: string;
 };
@@ -62,7 +53,6 @@ type PlaybookFormState = {
   symptoms: SymptomItem[];
   evidenceChecklist: EvidenceItem[];
   candidateCauses: CauseItem[];
-  diagnosticQuestions: QuestionItem[];
   escalationTriggers: TriggerItem[];
 };
 
@@ -79,7 +69,6 @@ const TABS = [
   "symptoms",
   "evidence",
   "causes",
-  "questions",
   "triggers",
   "steps",
 ] as const;
@@ -93,7 +82,6 @@ function toFormState(p: Playbook): PlaybookFormState {
     symptoms: Array.isArray(p.symptoms) ? p.symptoms : [],
     evidenceChecklist: Array.isArray(p.evidenceChecklist) ? p.evidenceChecklist : [],
     candidateCauses: Array.isArray(p.candidateCauses) ? p.candidateCauses : [],
-    diagnosticQuestions: Array.isArray(p.diagnosticQuestions) ? p.diagnosticQuestions : [],
     escalationTriggers: Array.isArray(p.escalationTriggers) ? p.escalationTriggers : [],
   };
 }
@@ -120,7 +108,6 @@ export default function AdminPlaybooksPage() {
     symptoms: [] as SymptomItem[],
     evidenceChecklist: [] as EvidenceItem[],
     candidateCauses: [] as CauseItem[],
-    diagnosticQuestions: [] as QuestionItem[],
     escalationTriggers: [] as TriggerItem[],
   });
   const [saving, setSaving] = useState(false);
@@ -185,7 +172,6 @@ export default function AdminPlaybooksPage() {
           title: "",
           instruction: "",
           check: "",
-          if_failed: "",
         },
       ],
     }));
@@ -260,27 +246,6 @@ export default function AdminPlaybooksPage() {
     setForm((f) => ({ ...f, candidateCauses: f.candidateCauses.filter((_, j) => j !== i) }));
   };
 
-  const addQuestion = () => {
-    setForm((f) => ({
-      ...f,
-      diagnosticQuestions: [...f.diagnosticQuestions, { id: "", question: "", purpose: "" }],
-    }));
-  };
-  const updateQuestion = (i: number, field: keyof QuestionItem, value: string) => {
-    setForm((f) => ({
-      ...f,
-      diagnosticQuestions: f.diagnosticQuestions.map((q, j) =>
-        j === i ? { ...q, [field]: value } : q
-      ),
-    }));
-  };
-  const removeQuestion = (i: number) => {
-    setForm((f) => ({
-      ...f,
-      diagnosticQuestions: f.diagnosticQuestions.filter((_, j) => j !== i),
-    }));
-  };
-
   const addTrigger = () => {
     setForm((f) => ({
       ...f,
@@ -320,12 +285,6 @@ export default function AdminPlaybooksPage() {
               }))
             : null,
           candidateCauses: form.candidateCauses.length ? form.candidateCauses : null,
-          diagnosticQuestions: form.diagnosticQuestions.length
-            ? form.diagnosticQuestions.map((q) => ({
-                ...q,
-                actionId: q.actionId?.trim() || undefined,
-              }))
-            : null,
           escalationTriggers: form.escalationTriggers.length ? form.escalationTriggers : null,
         }),
       });
@@ -355,7 +314,6 @@ export default function AdminPlaybooksPage() {
             symptoms: [],
             evidenceChecklist: [],
             candidateCauses: [],
-            diagnosticQuestions: [],
             escalationTriggers: [],
           });
         }
@@ -378,7 +336,6 @@ export default function AdminPlaybooksPage() {
       symptoms: [],
       evidenceChecklist: [],
       candidateCauses: [],
-      diagnosticQuestions: [],
       escalationTriggers: [],
     });
   };
@@ -928,108 +885,6 @@ export default function AdminPlaybooksPage() {
             </div>
           )}
 
-          {activeTab === "questions" && (
-            <div>
-              <p className="mb-2 text-sm text-muted">Diagnostic questions</p>
-              <p className="mb-3 text-xs text-muted">
-                <span className="group/tip relative inline cursor-help border-b border-dotted border-gray-400">
-                  ⓘ
-                  <span className="pointer-events-none absolute left-0 top-full z-50 mt-1 hidden max-w-sm rounded bg-gray-800 px-2 py-1.5 text-xs font-normal text-white shadow-lg group-hover/tip:block">
-                    Suggested questions the assistant can ask to gather evidence and narrow down causes. Purpose and when-to-ask help keep the conversation focused and in a logical order.
-                  </span>
-                </span>
-              </p>
-              {form.diagnosticQuestions.map((q, i) => (
-                <div key={i} className="mb-3 rounded border border-border p-2">
-                  <div className="mb-2 flex flex-col gap-0.5">
-                    <label className="group/tip relative inline-block text-xs font-medium text-muted cursor-help">
-                      Question ID <span className="text-muted" aria-hidden>ⓘ</span>
-                      <span className="pointer-events-none absolute left-0 top-full z-50 mt-1 hidden max-w-sm rounded bg-gray-800 px-2 py-1.5 text-xs font-normal text-white shadow-lg group-hover/tip:block">
-                        Short unique slug (e.g. ask_temp, ask_mix). Lowercase, underscores OK. Leave blank to auto-generate on import.
-                      </span>
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. ask_temp"
-                      className="w-40 rounded border px-2 py-1 text-sm"
-                      value={q.id}
-                      onChange={(ev) => updateQuestion(i, "id", ev.target.value)}
-                    />
-                  </div>
-                  <div className="mb-2 flex flex-col gap-0.5">
-                    <label className="group/tip relative inline-block text-xs font-medium text-muted cursor-help">
-                      Question text <span className="text-muted" aria-hidden>ⓘ</span>
-                      <span className="pointer-events-none absolute left-0 top-full z-50 mt-1 hidden max-w-sm rounded bg-gray-800 px-2 py-1.5 text-xs font-normal text-white shadow-lg group-hover/tip:block">
-                        The exact question to ask the user, as they will see it (e.g. &quot;What temperature does the hopper display show?&quot;).
-                      </span>
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. What temperature does the hopper display show?"
-                      className="w-full rounded border px-2 py-1 text-sm"
-                      value={q.question}
-                      onChange={(ev) => updateQuestion(i, "question", ev.target.value)}
-                    />
-                  </div>
-                  <div className="mb-2 flex flex-col gap-0.5">
-                    <label className="group/tip relative inline-block text-xs font-medium text-muted cursor-help">
-                      Purpose <span className="text-muted" aria-hidden>ⓘ</span>
-                      <span className="pointer-events-none absolute left-0 top-full z-50 mt-1 hidden max-w-sm rounded bg-gray-800 px-2 py-1.5 text-xs font-normal text-white shadow-lg group-hover/tip:block">
-                        Why we ask this (e.g. &quot;Check if hopper is running too cold&quot;, &quot;Rule out incorrect mix concentration&quot;). Links the question to possible causes.
-                      </span>
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Check if hopper is running too cold"
-                      className="w-full rounded border px-2 py-1 text-sm"
-                      value={q.purpose}
-                      onChange={(ev) => updateQuestion(i, "purpose", ev.target.value)}
-                    />
-                  </div>
-                  <div className="mb-2 flex flex-col gap-0.5">
-                    <label className="group/tip relative inline-block text-xs font-medium text-muted cursor-help">
-                      When to ask (optional) <span className="text-muted" aria-hidden>ⓘ</span>
-                      <span className="pointer-events-none absolute left-0 top-full z-50 mt-1 hidden max-w-sm rounded bg-gray-800 px-2 py-1.5 text-xs font-normal text-white shadow-lg group-hover/tip:block">
-                        When this question should be asked (e.g. &quot;Always ask first&quot;, &quot;After temperature check&quot;, &quot;If product still thick after temp check&quot;). Helps order the conversation.
-                      </span>
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Always ask first"
-                      className="w-full rounded border px-2 py-1 text-sm"
-                      value={q.whenToAsk ?? ""}
-                      onChange={(ev) => updateQuestion(i, "whenToAsk", ev.target.value)}
-                    />
-                  </div>
-                  <div className="mb-2 flex flex-col gap-0.5">
-                    <label className="group/tip relative inline-block text-xs font-medium text-muted cursor-help">
-                      Action (optional) <span className="text-muted" aria-hidden>ⓘ</span>
-                      <span className="pointer-events-none absolute left-0 top-full z-50 mt-1 hidden max-w-sm rounded bg-gray-800 px-2 py-1.5 text-xs font-normal text-white shadow-lg group-hover/tip:block">
-                        If the user needs to perform a task to answer (e.g. read a display), link an Action here to show them how. Otherwise leave &quot;No action&quot;.
-                      </span>
-                    </label>
-                    <select
-                      className="w-full rounded border px-2 py-1 text-sm"
-                      value={q.actionId ?? ""}
-                      onChange={(ev) => updateQuestion(i, "actionId", ev.target.value || "")}
-                    >
-                      <option value="">No action</option>
-                      {actionsList.map((a) => (
-                        <option key={a.id} value={a.id}>{a.title}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <button type="button" onClick={() => removeQuestion(i)} className="text-red-600 text-sm">
-                    Remove
-                  </button>
-                </div>
-              ))}
-              <button type="button" onClick={addQuestion} className="text-sm text-primary hover:underline">
-                Add question
-              </button>
-            </div>
-          )}
-
           {activeTab === "triggers" && (
             <div>
               <p className="mb-2 text-sm text-muted">
@@ -1158,21 +1013,6 @@ export default function AdminPlaybooksPage() {
                         onChange={(e) => updateStep(index, "check", e.target.value)}
                       />
                     </div>
-                    <div className="flex flex-col gap-0.5">
-                      <label className="group/tip relative inline-block text-xs font-medium text-muted cursor-help">
-                        If failed / escalate (optional) <span className="text-muted" aria-hidden>ⓘ</span>
-                        <span className="pointer-events-none absolute left-0 top-full z-50 mt-1 hidden max-w-sm rounded bg-gray-800 px-2 py-1.5 text-xs font-normal text-white shadow-lg group-hover/tip:block">
-                          What to do if the step doesn&apos;t work (e.g. &quot;If temperature doesn&apos;t drop, escalate to technician&quot;).
-                        </span>
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="e.g. If temperature does not drop, escalate to technician"
-                        className="w-full rounded border border-border px-2 py-1 text-sm"
-                        value={step.if_failed ?? ""}
-                        onChange={(e) => updateStep(index, "if_failed", e.target.value)}
-                      />
-                    </div>
                   </li>
                 ))}
               </ul>
@@ -1210,7 +1050,6 @@ export default function AdminPlaybooksPage() {
                   symptoms: [],
                   evidenceChecklist: [],
                   candidateCauses: [],
-                  diagnosticQuestions: [],
                   escalationTriggers: [],
                 });
               }}

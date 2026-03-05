@@ -291,7 +291,6 @@ async function GETHandler(request: Request) {
       symptoms: playbooks.symptoms,
       evidenceChecklist: playbooks.evidenceChecklist,
       candidateCauses: playbooks.candidateCauses,
-      diagnosticQuestions: playbooks.diagnosticQuestions,
       escalationTriggers: playbooks.escalationTriggers,
       steps: playbooks.steps,
       updatedAt: playbooks.updatedAt,
@@ -312,7 +311,7 @@ async function GETHandler(request: Request) {
     symptomCount: asCount(row.symptoms),
     evidenceItemCount: asCount(row.evidenceChecklist),
     candidateCauseCount: asCount(row.candidateCauses),
-    questionCount: asCount(row.diagnosticQuestions),
+    questionCount: 0,
     triggerCount: asCount(row.escalationTriggers),
     updatedAt: row.updatedAt?.toISOString() ?? null,
   }));
