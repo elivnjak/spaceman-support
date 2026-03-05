@@ -3,7 +3,15 @@ import { db } from "@/lib/db";
 import { auditLogs } from "@/lib/db/schema";
 
 const CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
-const RETENTION_DAYS = 30;
+const rawAuditLogRetentionDays = process.env.AUDIT_LOG_RETENTION_DAYS?.trim();
+const parsedAuditLogRetentionDays =
+  rawAuditLogRetentionDays && rawAuditLogRetentionDays.length > 0
+    ? Number(rawAuditLogRetentionDays)
+    : 0;
+const RETENTION_DAYS =
+  Number.isFinite(parsedAuditLogRetentionDays) && parsedAuditLogRetentionDays > 0
+    ? parsedAuditLogRetentionDays
+    : 0;
 let lastCleanupAt = 0;
 
 export type SessionStateSnapshot = {
@@ -65,6 +73,7 @@ type AuditPayload = {
 };
 
 async function maybeCleanupOldAuditLogs(): Promise<void> {
+  if (RETENTION_DAYS <= 0) return;
   const now = Date.now();
   if (now - lastCleanupAt < CLEANUP_INTERVAL_MS) return;
   lastCleanupAt = now;
