@@ -6,7 +6,7 @@ import { extractSpecsFromMarkdown } from "./extract-specs";
 import { openaiTextEmbedder } from "@/lib/embeddings/openai-text";
 import { chunkBySize, chunkMarkdownOrText, flattenTablesToKV } from "./chunker";
 import { extractPagesWithVision } from "./pdf-vision-extractor";
-import { chunkDocumentWithLlm } from "./llm-chunker";
+import { chunkDocumentWithLlm, chunkTextWithLlm } from "./llm-chunker";
 import {
   extractPdfPages,
   getFullTextFromPages,
@@ -163,12 +163,29 @@ export async function ingestDocument(documentId: string): Promise<void> {
     const mimeType = isPdf ? "application/pdf" : "text/plain";
 
     if (!isPdf) {
-      await updateIngestionProgress(documentId, 20, "Chunking text");
       const { fullText } = await extractTextPreview(buffer, mimeType);
-      const chunks = chunkMarkdownOrText(
-        fullText,
-        doc.filePath.toLowerCase().endsWith(".md") ? "md" : "txt"
-      );
+      await updateIngestionProgress(documentId, 20, "Chunking text with LLM");
+      let chunks: { content: string; metadata: Record<string, unknown> }[];
+      try {
+        const llmResult = await chunkTextWithLlm(fullText, doc.filePath);
+        chunks = llmResult.chunks.map((c) => ({
+          content: c.content,
+          metadata: { ...c.metadata } as Record<string, unknown>,
+        }));
+        await updateIngestionProgress(documentId, 45, "LLM chunking complete");
+      } catch (llmErr) {
+        if (process.env.NODE_ENV !== "test") {
+          console.warn(
+            `[ingest] LLM chunker failed for non-PDF doc ${documentId}, falling back to deterministic path:`,
+            llmErr instanceof Error ? llmErr.message : llmErr
+          );
+        }
+        chunks = chunkMarkdownOrText(
+          fullText,
+          doc.filePath.toLowerCase().endsWith(".md") ? "md" : "txt"
+        );
+        await updateIngestionProgress(documentId, 45, "Deterministic chunking complete");
+      }
       await updateIngestionProgress(documentId, 55, "Generating embeddings");
       const textsToEmbed = chunks.map(buildChunkEmbeddingText);
       const embeddings = await openaiTextEmbedder.embedBatch(textsToEmbed);
@@ -514,15 +531,33 @@ export async function ingestUrlContent(documentId: string): Promise<void> {
   const resolvedTitle =
     (extractedTitle?.trim() && extractedTitle) || slugFromUrl(sourceUrl);
 
-  const chunks = chunkMarkdownOrText(markdown, "md");
-  const withMeta = chunks.map((c) => ({
-    ...c,
-    metadata: {
-      ...c.metadata,
-      source: "html",
-      source_url: sourceUrl,
-    } as Record<string, unknown>,
-  }));
+  let withMeta: { content: string; metadata: Record<string, unknown> }[];
+  try {
+    const llmResult = await chunkTextWithLlm(markdown, sourceUrl);
+    withMeta = llmResult.chunks.map((c) => ({
+      content: c.content,
+      metadata: {
+        ...c.metadata,
+        source_url: sourceUrl,
+      } as Record<string, unknown>,
+    }));
+  } catch (llmErr) {
+    if (process.env.NODE_ENV !== "test") {
+      console.warn(
+        `[ingest] LLM chunker failed for URL doc ${documentId}, falling back to deterministic path:`,
+        llmErr instanceof Error ? llmErr.message : llmErr
+      );
+    }
+    const chunks = chunkMarkdownOrText(markdown, "md");
+    withMeta = chunks.map((c) => ({
+      ...c,
+      metadata: {
+        ...c.metadata,
+        source: "html",
+        source_url: sourceUrl,
+      } as Record<string, unknown>,
+    }));
+  }
   const textsToEmbed = withMeta.map(buildChunkEmbeddingText);
   const embeddings = await openaiTextEmbedder.embedBatch(textsToEmbed);
 
@@ -623,7 +658,25 @@ export async function ingestPastedText(
     .where(eq(documents.id, documentId));
 
   try {
-    const chunks = chunkMarkdownOrText(text, "txt");
+    await updateIngestionProgress(documentId, 20, "Chunking pasted text with LLM");
+    let chunks: { content: string; metadata: Record<string, unknown> }[];
+    try {
+      const llmResult = await chunkTextWithLlm(text, doc.title || "pasted text");
+      chunks = llmResult.chunks.map((c) => ({
+        content: c.content,
+        metadata: { ...c.metadata } as Record<string, unknown>,
+      }));
+      await updateIngestionProgress(documentId, 45, "LLM chunking complete");
+    } catch (llmErr) {
+      if (process.env.NODE_ENV !== "test") {
+        console.warn(
+          `[ingest] LLM chunker failed for pasted-text doc ${documentId}, falling back to deterministic path:`,
+          llmErr instanceof Error ? llmErr.message : llmErr
+        );
+      }
+      chunks = chunkMarkdownOrText(text, "txt");
+      await updateIngestionProgress(documentId, 45, "Deterministic chunking complete");
+    }
     await updateIngestionProgress(documentId, 55, "Generating embeddings");
     const embeddings = await openaiTextEmbedder.embedBatch(
       chunks.map(buildChunkEmbeddingText)

@@ -2,7 +2,6 @@ import { JSDOM } from "jsdom";
 import { Readability } from "@mozilla/readability";
 import TurndownService from "turndown";
 import OpenAI from "openai";
-import { chromium } from "playwright";
 import { HTML_INGESTION_CONFIG } from "@/lib/config";
 
 const MIN_IMAGE_DIM = 150;
@@ -68,6 +67,7 @@ async function fetchHtmlWithBrowser(
   cssSelector?: string,
   timeout: number = HTML_INGESTION_CONFIG.jsRenderTimeout ?? DEFAULT_JS_TIMEOUT
 ): Promise<FetchAndExtractResult> {
+  const { chromium } = await import("playwright");
   const browser = await chromium.launch({ headless: true });
   try {
     const page = await browser.newPage();
@@ -101,19 +101,19 @@ async function fetchHtmlWithBrowser(
   }
 }
 
-/**
- * Fetch HTML from URL and extract main content using Readability or an optional CSS selector.
- * When renderJs is true, uses Playwright to render the page before extraction.
- */
-export async function fetchAndExtractHtml(
+function isMissingPlaywrightBrowserError(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err);
+  return (
+    message.includes("Executable doesn't exist") ||
+    message.includes("Please run the following command to download new browsers") ||
+    message.includes("npx playwright install")
+  );
+}
+
+async function fetchHtmlWithoutBrowser(
   url: string,
   cssSelector?: string,
-  renderJs: boolean = false
 ): Promise<FetchAndExtractResult> {
-  if (renderJs) {
-    return fetchHtmlWithBrowser(url, cssSelector);
-  }
-
   const res = await fetch(url, {
     headers: {
       "User-Agent":
@@ -157,6 +157,32 @@ export async function fetchAndExtractHtml(
   }
 
   return { title, html: contentHtml };
+}
+
+/**
+ * Fetch HTML from URL and extract main content using Readability or an optional CSS selector.
+ * When renderJs is true, uses Playwright to render the page before extraction.
+ */
+export async function fetchAndExtractHtml(
+  url: string,
+  cssSelector?: string,
+  renderJs: boolean = false
+): Promise<FetchAndExtractResult> {
+  if (renderJs) {
+    try {
+      return await fetchHtmlWithBrowser(url, cssSelector);
+    } catch (err) {
+      if (!isMissingPlaywrightBrowserError(err)) throw err;
+      // Fall back to non-JS extraction when Playwright browsers are not installed.
+      if (process.env.NODE_ENV !== "test") {
+        console.warn(
+          "[ingest] Playwright browser executable not found; falling back to non-JS URL extraction."
+        );
+      }
+      return fetchHtmlWithoutBrowser(url, cssSelector);
+    }
+  }
+  return fetchHtmlWithoutBrowser(url, cssSelector);
 }
 
 export type ImageCandidate = {

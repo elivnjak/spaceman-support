@@ -107,6 +107,48 @@ Total pages: ${numPages}
 The PDF content follows. Read ALL pages and produce chunks covering the entire document.`;
 }
 
+function buildTextUserPrompt(sourceLabel: string): string {
+  return `Chunk the following text document into semantically coherent pieces for a RAG system.
+
+Source: ${sourceLabel}
+
+The document content follows. Read the full content and produce chunks covering the entire text.`;
+}
+
+function parseLlmChunkerOutput(outputText: string): LlmChunk[] {
+  const cleaned = outputText
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```\s*$/, "");
+
+  const parsed = JSON.parse(cleaned) as Array<{
+    id: string;
+    title: string;
+    page_start: number;
+    page_end: number;
+    tags: string[];
+    doc_type: string;
+    content: string;
+  }>;
+
+  if (!Array.isArray(parsed) || parsed.length === 0) {
+    throw new Error("LLM chunker returned empty or non-array response");
+  }
+
+  return parsed.map((item) => ({
+    id: item.id,
+    content: item.content,
+    metadata: {
+      title: item.title,
+      tags: item.tags ?? [],
+      page_start: item.page_start,
+      page_end: item.page_end,
+      doc_type: item.doc_type ?? "general",
+      source: "llm_chunker" as const,
+    },
+  }));
+}
+
 /**
  * Use an LLM with vision to read a PDF and produce semantically chunked output.
  * Uploads the PDF via the Files API and uses the Responses API with input_file.
@@ -150,37 +192,7 @@ export async function chunkDocumentWithLlm(
         .join("") ??
       "";
 
-    const cleaned = outputText
-      .trim()
-      .replace(/^```(?:json)?\s*/i, "")
-      .replace(/\s*```\s*$/, "");
-
-    const parsed = JSON.parse(cleaned) as Array<{
-      id: string;
-      title: string;
-      page_start: number;
-      page_end: number;
-      tags: string[];
-      doc_type: string;
-      content: string;
-    }>;
-
-    if (!Array.isArray(parsed) || parsed.length === 0) {
-      throw new Error("LLM chunker returned empty or non-array response");
-    }
-
-    const chunks: LlmChunk[] = parsed.map((item) => ({
-      id: item.id,
-      content: item.content,
-      metadata: {
-        title: item.title,
-        tags: item.tags ?? [],
-        page_start: item.page_start,
-        page_end: item.page_end,
-        doc_type: item.doc_type ?? "general",
-        source: "llm_chunker" as const,
-      },
-    }));
+    const chunks = parseLlmChunkerOutput(outputText);
 
     return {
       chunks,
@@ -189,4 +201,43 @@ export async function chunkDocumentWithLlm(
   } finally {
     await openai.files.del(file.id).catch(() => {});
   }
+}
+
+export async function chunkTextWithLlm(
+  text: string,
+  sourceLabel: string
+): Promise<LlmChunkerResult> {
+  const openai = getOpenAI();
+  const { llmChunkerModel } = await getLlmConfig();
+
+  const response = await openai.responses.create({
+    model: llmChunkerModel,
+    input: [
+      {
+        role: "system",
+        content: [{ type: "input_text", text: SYSTEM_PROMPT }],
+      },
+      {
+        role: "user",
+        content: [
+          { type: "input_text", text: buildTextUserPrompt(sourceLabel) },
+          { type: "input_text", text },
+        ],
+      },
+    ],
+  });
+
+  const outputText =
+    (response as { output_text?: string }).output_text ??
+    (response.output as Array<{ type?: string; text?: string }>)
+      ?.filter((item) => item.type === "output_text")
+      .map((item) => item.text)
+      .join("") ??
+    "";
+
+  const chunks = parseLlmChunkerOutput(outputText);
+  return {
+    chunks,
+    rawMarkdown: chunks.map((c) => c.content).join("\n\n---\n\n"),
+  };
 }

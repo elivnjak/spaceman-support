@@ -8,7 +8,10 @@ import {
   extractMachineModelFromText,
   formatMachineModelsForStorage,
 } from "@/lib/ingestion/extract-machine-model";
-import { kickIngestionWorker } from "@/lib/ingestion/ingestion-queue";
+import {
+  enqueueDocumentIngestion,
+  kickIngestionWorker,
+} from "@/lib/ingestion/ingestion-queue";
 import { withApiRouteErrorLogging } from "@/lib/error-logs";
 
 async function GETHandler() {
@@ -66,7 +69,14 @@ async function POSTHandler(request: Request) {
         machineModel: machineModel ?? autoMachineModels,
       })
       .returning();
-    return NextResponse.json(doc);
+    const queued = await enqueueDocumentIngestion(doc.id, { pastedText });
+    return NextResponse.json(
+      {
+        ...doc,
+        queueStatus: queued.status,
+      },
+      { status: 202 }
+    );
   }
 
   if (url) {

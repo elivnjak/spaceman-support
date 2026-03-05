@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { LoadingScreen } from "@/components/ui/LoadingScreen";
 
@@ -34,6 +35,7 @@ async function fetchJsonSafe(url: string): Promise<{ ok: boolean; status: number
 }
 
 export default function AdminDocsNewPage() {
+  const router = useRouter();
   const [labels, setLabels] = useState<Label[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -143,6 +145,10 @@ export default function AdminDocsNewPage() {
       setUrlsText("");
       setMachineModel("");
       setSelectedLabelIds([]);
+      if (successCount > 0) {
+        router.push("/admin/docs");
+        return;
+      }
       alert(`Queued: ${successCount} accepted, ${failed.length} failed.`);
       if (failed.length > 0) {
         const summary = failed.map((f) => `${f.url}: ${f.error}`).join("\n");
@@ -171,7 +177,8 @@ export default function AdminDocsNewPage() {
           setPastedText("");
           setMachineModel("");
           setSelectedLabelIds([]);
-          alert("Document added.");
+          router.push("/admin/docs");
+          return;
         } else {
           const err = await res.json().catch(() => ({}));
           alert(err.error ?? "Failed to add document.");
@@ -270,6 +277,10 @@ export default function AdminDocsNewPage() {
       setFiles([]);
       setMachineModel("");
       setSelectedLabelIds([]);
+      if (successCount > 0) {
+        router.push("/admin/docs");
+        return;
+      }
       alert(`Queued: ${successCount} accepted, ${failed.length} failed.`);
       if (failed.length > 0) {
         const summary = failed.map((f) => `${f.label}: ${f.error}`).join("\n");
