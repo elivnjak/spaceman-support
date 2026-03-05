@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import { Badge } from "@/components/ui/Badge";
+import { formatDateAu } from "@/lib/date-format";
 
 type User = { id: string; email: string; role: string; createdAt: string };
 
@@ -236,7 +237,7 @@ export default function AdminUsersPageClient({
                     <Badge variant={u.role === "admin" ? "info" : "default"}>{u.role}</Badge>
                   </td>
                   <td className="px-4 py-3 text-muted">
-                    {new Date(u.createdAt).toLocaleDateString()}
+                    {formatDateAu(u.createdAt)}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-2">

@@ -4,9 +4,15 @@ import { db } from "@/lib/db";
 import { documents, docChunks } from "@/lib/db/schema";
 import { writeStorageFile, documentPath } from "@/lib/storage";
 import { extractTextPreview } from "@/lib/ingestion/document-ingestor";
+import {
+  extractMachineModelFromText,
+  formatMachineModelsForStorage,
+} from "@/lib/ingestion/extract-machine-model";
+import { kickIngestionWorker } from "@/lib/ingestion/ingestion-queue";
 import { withApiRouteErrorLogging } from "@/lib/error-logs";
 
 async function GETHandler() {
+  kickIngestionWorker();
   const list = await db
     .select()
     .from(documents)
@@ -46,6 +52,9 @@ async function POSTHandler(request: Request) {
         { status: 400 }
       );
     }
+    const autoMachineModels = formatMachineModelsForStorage(
+      extractMachineModelFromText(`${title}\n${pastedText}`)
+    );
     const [doc] = await db
       .insert(documents)
       .values({
@@ -54,7 +63,7 @@ async function POSTHandler(request: Request) {
         status: "UPLOADED",
         rawTextPreview: pastedText.slice(0, 1000),
         pastedContent: pastedText,
-        machineModel,
+        machineModel: machineModel ?? autoMachineModels,
       })
       .returning();
     return NextResponse.json(doc);
@@ -67,6 +76,9 @@ async function POSTHandler(request: Request) {
         { status: 400 }
       );
     }
+    const autoMachineModels = formatMachineModelsForStorage(
+      extractMachineModelFromText(`${title}\n${url}`)
+    );
     const [doc] = await db
       .insert(documents)
       .values({
@@ -77,7 +89,7 @@ async function POSTHandler(request: Request) {
         sourceUrl: url,
         cssSelector: cssSelector || null,
         renderJs,
-        machineModel,
+        machineModel: machineModel ?? autoMachineModels,
       })
       .returning();
     return NextResponse.json(doc);
@@ -103,6 +115,9 @@ async function POSTHandler(request: Request) {
 
   const mimeType = file.type || (ext === "pdf" ? "application/pdf" : "text/plain");
   const { preview } = await extractTextPreview(buffer, mimeType);
+  const autoMachineModels = formatMachineModelsForStorage(
+    extractMachineModelFromText(`${fileTitle}\n${preview}`)
+  );
 
   const [doc] = await db
     .insert(documents)
@@ -111,7 +126,7 @@ async function POSTHandler(request: Request) {
       filePath: fullPath,
       status: "UPLOADED",
       rawTextPreview: preview,
-      machineModel,
+      machineModel: machineModel ?? autoMachineModels,
     })
     .returning();
 

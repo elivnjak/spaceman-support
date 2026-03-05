@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { documents } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { deleteStorageFile, getStorageRelativePath } from "@/lib/storage";
+import { kickIngestionWorker } from "@/lib/ingestion/ingestion-queue";
 import { logErrorEvent, withApiRouteErrorLogging } from "@/lib/error-logs";
 
 async function GETHandler(
@@ -10,6 +11,7 @@ async function GETHandler(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
+  kickIngestionWorker();
   const doc = await db.query.documents.findFirst({
     where: eq(documents.id, id),
   });

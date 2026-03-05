@@ -22,6 +22,20 @@ import {
 
 const PREVIEW_LENGTH = 1000;
 
+async function updateIngestionProgress(
+  documentId: string,
+  progress: number,
+  stage: string
+): Promise<void> {
+  await db
+    .update(documents)
+    .set({
+      ingestionProgress: Math.max(0, Math.min(100, Math.round(progress))),
+      ingestionStage: stage,
+    })
+    .where(eq(documents.id, documentId));
+}
+
 function toStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value
@@ -127,11 +141,17 @@ export async function ingestDocument(documentId: string): Promise<void> {
     where: eq(documents.id, documentId),
   });
   if (!doc) throw new Error("Document not found");
-  if (doc.status === "INGESTING") throw new Error("Document is already ingesting");
 
   await db
     .update(documents)
-    .set({ status: "INGESTING", errorMessage: null })
+    .set({
+      status: "INGESTING",
+      errorMessage: null,
+      ingestionProgress: 5,
+      ingestionStage: "Preparing document",
+      ingestionStartedAt: new Date(),
+      ingestionCompletedAt: null,
+    })
     .where(eq(documents.id, documentId));
 
   try {
@@ -143,14 +163,17 @@ export async function ingestDocument(documentId: string): Promise<void> {
     const mimeType = isPdf ? "application/pdf" : "text/plain";
 
     if (!isPdf) {
+      await updateIngestionProgress(documentId, 20, "Chunking text");
       const { fullText } = await extractTextPreview(buffer, mimeType);
       const chunks = chunkMarkdownOrText(
         fullText,
         doc.filePath.toLowerCase().endsWith(".md") ? "md" : "txt"
       );
+      await updateIngestionProgress(documentId, 55, "Generating embeddings");
       const textsToEmbed = chunks.map(buildChunkEmbeddingText);
       const embeddings = await openaiTextEmbedder.embedBatch(textsToEmbed);
       await db.delete(docChunks).where(eq(docChunks.documentId, documentId));
+      await updateIngestionProgress(documentId, 80, "Saving chunks");
       for (let i = 0; i < chunks.length; i++) {
         await db.insert(docChunks).values({
           documentId,
@@ -161,7 +184,7 @@ export async function ingestDocument(documentId: string): Promise<void> {
         });
       }
       const autoModels = formatMachineModelsForStorage(
-        extractMachineModelFromText(fullText)
+        extractMachineModelFromText(`${doc.title}\n${fullText}`)
       );
       const hasExistingModel =
         doc.machineModel != null && String(doc.machineModel).trim() !== "";
@@ -170,6 +193,9 @@ export async function ingestDocument(documentId: string): Promise<void> {
         .set({
           status: "READY",
           errorMessage: null,
+          ingestionProgress: 100,
+          ingestionStage: "Complete",
+          ingestionCompletedAt: new Date(),
           machineModel: hasExistingModel ? doc.machineModel : (autoModels ?? null),
         })
         .where(eq(documents.id, documentId));
@@ -180,6 +206,7 @@ export async function ingestDocument(documentId: string): Promise<void> {
     const fullText = getFullTextFromPages(pages);
     const numPages = pages.length;
     const fileName = doc.filePath.split(/[/\\]/).pop() ?? "document.pdf";
+    await updateIngestionProgress(documentId, 20, `Parsed ${numPages} PDF pages`);
 
     // --- LLM Chunker path: primary for PDFs within the page limit ---
     const llmChunkerMaxPages = INGESTION_CONFIG.maxPagesForLlmChunker;
@@ -187,6 +214,7 @@ export async function ingestDocument(documentId: string): Promise<void> {
       let llmSuccess = false;
       try {
         const llmResult = await chunkDocumentWithLlm(buffer, fileName, numPages);
+        await updateIngestionProgress(documentId, 45, "LLM chunking complete");
 
         let verificationStatus: "verified" | "unverified" | "mismatch" = "unverified";
         if (INGESTION_CONFIG.verifyNumerics) {
@@ -209,6 +237,7 @@ export async function ingestDocument(documentId: string): Promise<void> {
         const embeddings = await openaiTextEmbedder.embedBatch(
           chunks.map(buildChunkEmbeddingText)
         );
+        await updateIngestionProgress(documentId, 70, "Saving LLM chunks");
 
         await db.delete(docChunks).where(eq(docChunks.documentId, documentId));
         for (let i = 0; i < chunks.length; i++) {
@@ -222,7 +251,7 @@ export async function ingestDocument(documentId: string): Promise<void> {
         }
 
         const resolvedMachineModels = extractMachineModelFromText(
-          llmResult.rawMarkdown + "\n" + fullText
+          `${doc.title}\n${llmResult.rawMarkdown}\n${fullText}`
         );
         const resolvedMachineModelStr =
           formatMachineModelsForStorage(resolvedMachineModels) ?? null;
@@ -264,6 +293,9 @@ export async function ingestDocument(documentId: string): Promise<void> {
           .set({
             status: "READY",
             errorMessage: null,
+            ingestionProgress: 100,
+            ingestionStage: "Complete",
+            ingestionCompletedAt: new Date(),
             machineModel: hasExistingModel
               ? doc.machineModel
               : (resolvedMachineModelStr ?? null),
@@ -286,6 +318,7 @@ export async function ingestDocument(documentId: string): Promise<void> {
     // --- Fallback: deterministic + vision path (large PDFs or LLM failure) ---
 
     if (numPages > INGESTION_CONFIG.maxPagesForVision) {
+      await updateIngestionProgress(documentId, 40, "Chunking large PDF");
       const chunks = chunkBySize(fullText).map((c) => ({
         content: c.content,
         metadata: {} as Record<string, unknown>,
@@ -294,6 +327,7 @@ export async function ingestDocument(documentId: string): Promise<void> {
         chunks.map(buildChunkEmbeddingText)
       );
       await db.delete(docChunks).where(eq(docChunks.documentId, documentId));
+      await updateIngestionProgress(documentId, 75, "Saving chunks");
       for (let i = 0; i < chunks.length; i++) {
         await db.insert(docChunks).values({
           documentId,
@@ -304,7 +338,7 @@ export async function ingestDocument(documentId: string): Promise<void> {
         });
       }
       const autoModels = formatMachineModelsForStorage(
-        extractMachineModelFromText(fullText)
+        extractMachineModelFromText(`${doc.title}\n${fullText}`)
       );
       const hasExistingModel =
         doc.machineModel != null && String(doc.machineModel).trim() !== "";
@@ -313,6 +347,9 @@ export async function ingestDocument(documentId: string): Promise<void> {
         .set({
           status: "READY",
           errorMessage: null,
+          ingestionProgress: 100,
+          ingestionStage: "Complete",
+          ingestionCompletedAt: new Date(),
           machineModel: hasExistingModel ? doc.machineModel : (autoModels ?? null),
         })
         .where(eq(documents.id, documentId));
@@ -362,9 +399,11 @@ export async function ingestDocument(documentId: string): Promise<void> {
     });
 
     const textsToEmbed = chunks.map(buildChunkEmbeddingText);
+    await updateIngestionProgress(documentId, 65, "Generating embeddings");
     const embeddings = await openaiTextEmbedder.embedBatch(textsToEmbed);
 
     await db.delete(docChunks).where(eq(docChunks.documentId, documentId));
+    await updateIngestionProgress(documentId, 82, "Saving chunks");
     for (let i = 0; i < chunks.length; i++) {
       await db.insert(docChunks).values({
         documentId,
@@ -375,7 +414,9 @@ export async function ingestDocument(documentId: string): Promise<void> {
       });
     }
 
-    const resolvedMachineModels = extractMachineModelFromText(mergedMarkdown);
+    const resolvedMachineModels = extractMachineModelFromText(
+      `${doc.title}\n${mergedMarkdown}`
+    );
     const resolvedMachineModelStr =
       formatMachineModelsForStorage(resolvedMachineModels) ?? null;
     const hasExistingModel =
@@ -416,6 +457,9 @@ export async function ingestDocument(documentId: string): Promise<void> {
       .set({
         status: "READY",
         errorMessage: null,
+        ingestionProgress: 100,
+        ingestionStage: "Complete",
+        ingestionCompletedAt: new Date(),
         machineModel: hasExistingModel
           ? doc.machineModel
           : (resolvedMachineModelStr ?? null),
@@ -425,7 +469,12 @@ export async function ingestDocument(documentId: string): Promise<void> {
     const message = err instanceof Error ? err.message : String(err);
     await db
       .update(documents)
-      .set({ status: "ERROR", errorMessage: message })
+      .set({
+        status: "ERROR",
+        errorMessage: message,
+        ingestionStage: "Failed",
+        ingestionCompletedAt: new Date(),
+      })
       .where(eq(documents.id, documentId));
     throw err;
   }
@@ -489,7 +538,7 @@ export async function ingestUrlContent(documentId: string): Promise<void> {
   }
 
   const autoModels = formatMachineModelsForStorage(
-    extractMachineModelFromText(markdown)
+    extractMachineModelFromText(`${resolvedTitle}\n${sourceUrl}\n${markdown}`)
   );
   const hasExistingModel =
     doc.machineModel != null && String(doc.machineModel).trim() !== "";
@@ -509,22 +558,42 @@ export async function ingestUrl(documentId: string): Promise<void> {
     where: eq(documents.id, documentId),
   });
   if (!doc) throw new Error("Document not found");
-  if (doc.status === "INGESTING") throw new Error("Document is already ingesting");
   const sourceUrl = doc.sourceUrl ?? "";
   if (!sourceUrl) throw new Error("No source URL to ingest");
 
   await db
     .update(documents)
-    .set({ status: "INGESTING", errorMessage: null })
+    .set({
+      status: "INGESTING",
+      errorMessage: null,
+      ingestionProgress: 5,
+      ingestionStage: "Fetching URL",
+      ingestionStartedAt: new Date(),
+      ingestionCompletedAt: null,
+    })
     .where(eq(documents.id, documentId));
 
   try {
+    await updateIngestionProgress(documentId, 35, "Extracting page content");
     await ingestUrlContent(documentId);
+    await db
+      .update(documents)
+      .set({
+        ingestionProgress: 100,
+        ingestionStage: "Complete",
+        ingestionCompletedAt: new Date(),
+      })
+      .where(eq(documents.id, documentId));
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     await db
       .update(documents)
-      .set({ status: "ERROR", errorMessage: message })
+      .set({
+        status: "ERROR",
+        errorMessage: message,
+        ingestionStage: "Failed",
+        ingestionCompletedAt: new Date(),
+      })
       .where(eq(documents.id, documentId));
     throw err;
   }
@@ -543,16 +612,25 @@ export async function ingestPastedText(
 
   await db
     .update(documents)
-    .set({ status: "INGESTING", errorMessage: null })
+    .set({
+      status: "INGESTING",
+      errorMessage: null,
+      ingestionProgress: 10,
+      ingestionStage: "Chunking pasted text",
+      ingestionStartedAt: new Date(),
+      ingestionCompletedAt: null,
+    })
     .where(eq(documents.id, documentId));
 
   try {
     const chunks = chunkMarkdownOrText(text, "txt");
+    await updateIngestionProgress(documentId, 55, "Generating embeddings");
     const embeddings = await openaiTextEmbedder.embedBatch(
       chunks.map(buildChunkEmbeddingText)
     );
 
     await db.delete(docChunks).where(eq(docChunks.documentId, documentId));
+    await updateIngestionProgress(documentId, 80, "Saving chunks");
 
     for (let i = 0; i < chunks.length; i++) {
       await db.insert(docChunks).values({
@@ -565,7 +643,7 @@ export async function ingestPastedText(
     }
 
     const autoModels = formatMachineModelsForStorage(
-      extractMachineModelFromText(text)
+      extractMachineModelFromText(`${doc.title}\n${text}`)
     );
     const hasExistingModel =
       doc.machineModel != null && String(doc.machineModel).trim() !== "";
@@ -574,6 +652,9 @@ export async function ingestPastedText(
       .set({
         status: "READY",
         errorMessage: null,
+        ingestionProgress: 100,
+        ingestionStage: "Complete",
+        ingestionCompletedAt: new Date(),
         machineModel: hasExistingModel ? doc.machineModel : (autoModels ?? null),
       })
       .where(eq(documents.id, documentId));
@@ -581,7 +662,12 @@ export async function ingestPastedText(
     const message = err instanceof Error ? err.message : String(err);
     await db
       .update(documents)
-      .set({ status: "ERROR", errorMessage: message })
+      .set({
+        status: "ERROR",
+        errorMessage: message,
+        ingestionStage: "Failed",
+        ingestionCompletedAt: new Date(),
+      })
       .where(eq(documents.id, documentId));
     throw err;
   }

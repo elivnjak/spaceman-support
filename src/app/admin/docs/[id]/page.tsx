@@ -3,12 +3,18 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { formatDateAu } from "@/lib/date-format";
 
 type Doc = {
   id: string;
   title: string;
   filePath: string;
   status: string;
+  ingestionProgress: number;
+  ingestionStage: string | null;
+  queuedAt: string | null;
+  ingestionStartedAt: string | null;
+  ingestionCompletedAt: string | null;
   errorMessage: string | null;
   rawTextPreview: string | null;
   pastedContent: string | null;
@@ -72,11 +78,11 @@ function DocTypeBadge({ type }: { type: DocType }) {
 
 function formatDate(iso: string): string {
   try {
-    return new Date(iso).toLocaleDateString(undefined, {
+    return formatDateAu(iso, {
       year: "numeric",
       month: "short",
       day: "numeric",
-    });
+    }, iso);
   } catch {
     return iso;
   }
@@ -111,6 +117,22 @@ export default function AdminDocDetailPage() {
       .catch(() => setDoc(null))
       .finally(() => setLoading(false));
   }, [id]);
+
+  useEffect(() => {
+    if (!id) return;
+    if (!doc || (doc.status !== "PENDING" && doc.status !== "INGESTING")) return;
+    const intervalId = window.setInterval(async () => {
+      const latest = await fetch(`/api/admin/docs/${id}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .catch(() => null);
+      if (latest) setDoc(latest);
+      if (latest && (latest.status === "READY" || latest.status === "ERROR")) {
+        const chunksRes = await fetch(`/api/admin/docs/${id}/chunks`);
+        setChunks(await chunksRes.json());
+      }
+    }, 4000);
+    return () => window.clearInterval(intervalId);
+  }, [id, doc]);
 
   useEffect(() => {
     fetch("/api/admin/labels")
@@ -251,6 +273,8 @@ export default function AdminDocDetailPage() {
                 ? "bg-emerald-50 text-emerald-700"
                 : doc.status === "ERROR"
                   ? "bg-red-50 text-red-700"
+                  : doc.status === "PENDING"
+                    ? "bg-slate-100 text-slate-700"
                   : doc.status === "INGESTING"
                     ? "bg-amber-50 text-amber-700"
                     : "bg-page"
@@ -277,14 +301,27 @@ export default function AdminDocDetailPage() {
             {doc.errorMessage}
           </p>
         )}
+        {(doc.status === "PENDING" || doc.status === "INGESTING") && (
+          <div className="mb-4 max-w-lg">
+            <div className="h-2 rounded bg-page">
+              <div
+                className="h-2 rounded bg-primary transition-all"
+                style={{ width: `${Math.max(0, Math.min(100, doc.ingestionProgress ?? 0))}%` }}
+              />
+            </div>
+            <p className="mt-2 text-sm text-muted">
+              {doc.ingestionStage ?? "Working..."} ({Math.max(0, Math.min(100, doc.ingestionProgress ?? 0))}%)
+            </p>
+          </div>
+        )}
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
             onClick={ingest}
-            disabled={ingesting || doc.status === "INGESTING"}
+            disabled={ingesting || doc.status === "INGESTING" || doc.status === "PENDING"}
             className="rounded border border-border px-3 py-1.5 text-sm disabled:opacity-50"
           >
-            {ingesting ? "Ingesting…" : "Ingest / Re-ingest"}
+            {ingesting ? "Queueing…" : doc.status === "PENDING" || doc.status === "INGESTING" ? "Ingestion running..." : "Ingest / Re-ingest"}
           </button>
           <button
             type="button"

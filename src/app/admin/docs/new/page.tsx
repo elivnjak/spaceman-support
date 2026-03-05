@@ -9,7 +9,13 @@ type Label = {
   displayName: string;
 };
 
-type BulkItemStatus = "pending" | "uploading" | "ingesting" | "done" | "failed";
+type BulkItemStatus =
+  | "pending"
+  | "uploading"
+  | "ingesting"
+  | "queued"
+  | "done"
+  | "failed";
 
 function toArray<T>(value: unknown): T[] {
   return Array.isArray(value) ? (value as T[]) : [];
@@ -102,16 +108,16 @@ export default function AdminDocsNewPage() {
                 : null
             );
           } else {
-            const done = data.status === "READY";
-            if (done) successCount += 1;
+            const accepted = res.status === 202 || data.status === "queued" || data.status === "already_running";
+            if (accepted) successCount += 1;
             setBulkProgress((prev) =>
               prev
                 ? prev.map((p, j) =>
                     j === i
                       ? {
                           ...p,
-                          status: done ? ("done" as const) : ("failed" as const),
-                          error: data.errorMessage,
+                          status: accepted ? ("queued" as const) : ("failed" as const),
+                          error: accepted ? null : (data.errorMessage ?? "Queueing failed"),
                         }
                       : p
                   )
@@ -136,7 +142,7 @@ export default function AdminDocsNewPage() {
       setUrlsText("");
       setMachineModel("");
       setSelectedLabelIds([]);
-      alert(`Completed: ${successCount} succeeded, ${failed.length} failed.`);
+      alert(`Queued: ${successCount} accepted, ${failed.length} failed.`);
       if (failed.length > 0) {
         const summary = failed.map((f) => `${f.url}: ${f.error}`).join("\n");
         alert(`${failed.length} URL(s) failed:\n\n${summary}`);
@@ -229,7 +235,7 @@ export default function AdminDocsNewPage() {
             successCount += 1;
             setBulkProgress((prev) =>
               prev
-                ? prev.map((p, j) => (j === i ? { ...p, status: "done" as const } : p))
+                ? prev.map((p, j) => (j === i ? { ...p, status: "queued" as const } : p))
                 : null
             );
           } else {
@@ -263,7 +269,7 @@ export default function AdminDocsNewPage() {
       setFiles([]);
       setMachineModel("");
       setSelectedLabelIds([]);
-      alert(`Completed: ${successCount} succeeded, ${failed.length} failed.`);
+      alert(`Queued: ${successCount} accepted, ${failed.length} failed.`);
       if (failed.length > 0) {
         const summary = failed.map((f) => `${f.label}: ${f.error}`).join("\n");
         alert(`${failed.length} file(s) failed:\n\n${summary}`);
@@ -427,6 +433,8 @@ export default function AdminDocsNewPage() {
                     className={
                       p.status === "done"
                         ? "text-emerald-600"
+                        : p.status === "queued"
+                          ? "text-emerald-600"
                         : p.status === "failed"
                           ? "text-red-600"
                           : p.status === "ingesting"
@@ -444,6 +452,8 @@ export default function AdminDocsNewPage() {
                           ? "ingesting…"
                           : p.status === "done"
                             ? "done"
+                            : p.status === "queued"
+                              ? "queued"
                             : `failed: ${p.error ?? "unknown"}`}
                   </span>
                 </li>

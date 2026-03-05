@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { formatDateTimeAu } from "@/lib/date-format";
 
 type ErrorLogLevel = "error" | "warn" | "info";
 
@@ -40,8 +41,7 @@ type ErrorLogsResponse = {
 
 function formatDate(value?: string | null): string {
   if (!value) return "-";
-  const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? "-" : d.toLocaleString();
+  return formatDateTimeAu(value);
 }
 
 function prettyJson(value: unknown): string {

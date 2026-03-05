@@ -1,15 +1,21 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Input } from "@/components/ui/Input";
+import { formatDateAu, formatDateTimeAu } from "@/lib/date-format";
 
 type Doc = {
   id: string;
   title: string;
   filePath: string;
   status: string;
+  ingestionProgress: number;
+  ingestionStage: string | null;
+  queuedAt: string | null;
+  ingestionStartedAt: string | null;
+  ingestionCompletedAt: string | null;
   errorMessage: string | null;
   rawTextPreview: string | null;
   pastedContent: string | null;
@@ -95,15 +101,31 @@ function DocTypeBadge({ type }: { type: DocType }) {
 
 function formatDate(iso: string): string {
   try {
-    return new Date(iso).toLocaleDateString(undefined, {
+    return formatDateAu(iso, {
       year: "numeric",
       month: "short",
       day: "numeric",
-    });
+    }, iso);
   } catch {
     return iso;
   }
 }
+
+function formatDateTime(iso: string | null): string {
+  if (!iso) return "—";
+  try {
+    return formatDateTimeAu(iso, undefined, iso);
+  } catch {
+    return iso;
+  }
+}
+
+function isActiveIngestionStatus(status: string): boolean {
+  return status === "PENDING" || status === "INGESTING";
+}
+
+const INGESTION_HISTORY_HOURS = 24;
+const INGESTION_HISTORY_KEY = "adminDocsHiddenIngestionHistory";
 
 export default function AdminDocsPage() {
   const [docs, setDocs] = useState<Doc[]>([]);
@@ -119,6 +141,8 @@ export default function AdminDocsPage() {
   const [editLabelIds, setEditLabelIds] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [jobsOpen, setJobsOpen] = useState(false);
+  const [hiddenHistoryIds, setHiddenHistoryIds] = useState<string[]>([]);
 
   // Filter & pagination
   const [filterQuery, setFilterQuery] = useState("");
@@ -147,15 +171,45 @@ export default function AdminDocsPage() {
     });
   }, [docs, filterQuery, filterModel, filterLabelId, filterType, filterStatus]);
 
+  const ingestionJobs = useMemo(() => {
+    const cutoffMs = Date.now() - INGESTION_HISTORY_HOURS * 60 * 60 * 1000;
+    const hidden = new Set(hiddenHistoryIds);
+    return docs
+      .filter((d) => {
+        const active = isActiveIngestionStatus(d.status);
+        const isHistory = d.status === "ERROR" || d.ingestionCompletedAt != null;
+        if (!active && !isHistory) return false;
+        if (!active && hidden.has(d.id)) return false;
+        if (active) return true;
+        const ts = new Date(
+          d.ingestionCompletedAt ?? d.ingestionStartedAt ?? d.queuedAt ?? d.createdAt
+        ).getTime();
+        return Number.isNaN(ts) || ts >= cutoffMs;
+      })
+      .sort((a, b) => {
+        const aTime =
+          a.queuedAt ?? a.ingestionStartedAt ?? a.ingestionCompletedAt ?? a.createdAt;
+        const bTime =
+          b.queuedAt ?? b.ingestionStartedAt ?? b.ingestionCompletedAt ?? b.createdAt;
+        return new Date(bTime).getTime() - new Date(aTime).getTime();
+      });
+  }, [docs, hiddenHistoryIds]);
+
+  const activeJobsCount = useMemo(
+    () => ingestionJobs.filter((j) => isActiveIngestionStatus(j.status)).length,
+    [ingestionJobs]
+  );
+  const historyJobsCount = ingestionJobs.length - activeJobsCount;
+
   const totalPages = Math.ceil(filteredDocs.length / PAGE_SIZE);
   const paginatedDocs = filteredDocs.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const canGoPrev = page > 1;
   const canGoNext = page < totalPages;
 
-  const refreshDocs = async () => {
+  const refreshDocs = useCallback(async () => {
     const docsRes = await fetchJsonSafe("/api/admin/docs");
     setDocs(toArray<Doc>(docsRes.data));
-  };
+  }, []);
 
   useEffect(() => {
     const load = async () => {
@@ -181,6 +235,37 @@ export default function AdminDocsPage() {
     };
     void load();
   }, []);
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(INGESTION_HISTORY_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return;
+      setHiddenHistoryIds(parsed.filter((v): v is string => typeof v === "string"));
+    } catch {
+      // ignore invalid local storage value
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        INGESTION_HISTORY_KEY,
+        JSON.stringify(hiddenHistoryIds)
+      );
+    } catch {
+      // ignore local storage failures
+    }
+  }, [hiddenHistoryIds]);
+
+  useEffect(() => {
+    if (!docs.some((d) => isActiveIngestionStatus(d.status))) return;
+    const id = window.setInterval(() => {
+      void refreshDocs();
+    }, 4000);
+    return () => window.clearInterval(id);
+  }, [docs, refreshDocs]);
 
   const ingest = async (id: string, pasted?: string) => {
     setIngestingId(id);
@@ -274,11 +359,106 @@ export default function AdminDocsPage() {
     }
   };
 
+  const clearIngestionHistory = () => {
+    setHiddenHistoryIds((prev) => {
+      const next = new Set(prev);
+      for (const job of ingestionJobs) {
+        if (!isActiveIngestionStatus(job.status)) {
+          next.add(job.id);
+        }
+      }
+      return Array.from(next);
+    });
+  };
+
   if (loading) return <p>Loading…</p>;
 
   return (
     <div>
       <PageHeader title="Documents" />
+      {!loading && ingestionJobs.length > 0 && (
+        <section className="mb-4 rounded-lg border border-border bg-surface p-4">
+          <div className="flex items-center justify-between gap-2">
+            <button
+              type="button"
+              onClick={() => setJobsOpen((v) => !v)}
+              className="flex items-center gap-2 text-left"
+            >
+              <h2 className="font-medium">Ingestion jobs</h2>
+              <span className="text-xs text-muted">
+                {jobsOpen ? "Hide" : "Show"} ({ingestionJobs.length})
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={clearIngestionHistory}
+              disabled={historyJobsCount === 0}
+              className="rounded border border-border px-2 py-1 text-xs text-muted hover:bg-page disabled:opacity-40"
+            >
+              Clear history
+            </button>
+          </div>
+          <p className="mt-1 text-xs text-muted">
+            Active: {activeJobsCount} | History (last {INGESTION_HISTORY_HOURS}h):{" "}
+            {historyJobsCount}
+          </p>
+          {jobsOpen && (
+            <ul className="mt-3 space-y-2">
+              {ingestionJobs.map((job) => (
+                <li
+                  key={`job-${job.id}`}
+                  className="rounded border border-border bg-page p-3"
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Link
+                      href={`/admin/docs/${job.id}`}
+                      className="text-sm font-medium text-primary hover:underline"
+                    >
+                      {job.title}
+                    </Link>
+                    <span
+                      className={`rounded px-2 py-0.5 text-xs font-medium ${
+                        job.status === "READY"
+                          ? "bg-emerald-50 text-emerald-700"
+                          : job.status === "ERROR"
+                            ? "bg-red-50 text-red-700"
+                            : job.status === "PENDING"
+                              ? "bg-slate-100 text-slate-700"
+                              : job.status === "INGESTING"
+                                ? "bg-amber-50 text-amber-700"
+                                : "bg-page"
+                      }`}
+                    >
+                      {job.status}
+                    </span>
+                    {(job.status === "PENDING" || job.status === "INGESTING") && (
+                      <span className="text-xs text-muted">
+                        {job.ingestionStage ?? "Working..."} (
+                        {Math.max(0, Math.min(100, job.ingestionProgress ?? 0))}%)
+                      </span>
+                    )}
+                    {job.status === "ERROR" && (
+                      <button
+                        type="button"
+                        onClick={() => ingest(job.id)}
+                        disabled={ingestingId === job.id}
+                        className="rounded border border-red-300 px-2 py-0.5 text-xs text-red-700 hover:bg-red-50 disabled:opacity-50"
+                      >
+                        {ingestingId === job.id ? "Queueing..." : "Retry"}
+                      </button>
+                    )}
+                  </div>
+                  <div className="mt-1 text-xs text-muted">
+                    Queued: {formatDateTime(job.queuedAt)} | Started:{" "}
+                    {formatDateTime(job.ingestionStartedAt)} | Completed:{" "}
+                    {formatDateTime(job.ingestionCompletedAt)}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
       <div className="mb-4 flex justify-end">
         <Link
           href="/admin/docs/new"
@@ -440,6 +620,8 @@ export default function AdminDocsPage() {
                             ? "bg-emerald-50 text-emerald-700"
                             : d.status === "ERROR"
                               ? "bg-red-50 text-red-700"
+                              : d.status === "PENDING"
+                                ? "bg-slate-100 text-slate-700"
                               : d.status === "INGESTING"
                                 ? "bg-amber-50 text-amber-700"
                                 : "bg-page"
@@ -447,6 +629,19 @@ export default function AdminDocsPage() {
                       >
                         {d.status}
                       </span>
+                      {(d.status === "PENDING" || d.status === "INGESTING") && (
+                        <div className="mt-1 max-w-[11rem]">
+                          <div className="h-1.5 rounded bg-page">
+                            <div
+                              className="h-1.5 rounded bg-primary transition-all"
+                              style={{ width: `${Math.max(0, Math.min(100, d.ingestionProgress ?? 0))}%` }}
+                            />
+                          </div>
+                          <p className="mt-1 text-xs text-muted">
+                            {d.ingestionStage ?? "Working..."} ({Math.max(0, Math.min(100, d.ingestionProgress ?? 0))}%)
+                          </p>
+                        </div>
+                      )}
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-sm text-muted">
                       {d.chunkCount ?? 0}
@@ -459,10 +654,10 @@ export default function AdminDocsPage() {
                         <button
                           type="button"
                           onClick={() => ingest(d.id)}
-                          disabled={ingestingId === d.id || d.status === "INGESTING"}
+                          disabled={ingestingId === d.id || isActiveIngestionStatus(d.status)}
                           className="rounded border border-border px-2 py-1 text-xs disabled:opacity-50"
                         >
-                          {ingestingId === d.id ? "Ingesting…" : "Ingest"}
+                          {ingestingId === d.id ? "Queueing…" : isActiveIngestionStatus(d.status) ? "Running..." : "Ingest"}
                         </button>
                         <button
                           type="button"

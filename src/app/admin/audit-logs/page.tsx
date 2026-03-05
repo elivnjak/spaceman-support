@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
+import { formatDateTimeAu } from "@/lib/date-format";
 
 type AuditSessionSummary = {
   sessionId: string;
@@ -22,8 +23,7 @@ type AuditSessionSummary = {
 
 function formatDate(value?: string | null): string {
   if (!value) return "-";
-  const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? "-" : d.toLocaleString();
+  return formatDateTimeAu(value);
 }
 
 function truncate(value: string, max = 14): string {

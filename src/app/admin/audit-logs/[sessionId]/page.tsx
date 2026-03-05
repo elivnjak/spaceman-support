@@ -6,6 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { formatDateTimeAu } from "@/lib/date-format";
 
 type AuditEntry = {
   id: string;
@@ -72,8 +73,7 @@ type AuditDetailResponse = {
 
 function formatDate(value?: string | null): string {
   if (!value) return "-";
-  const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? "-" : d.toLocaleString();
+  return formatDateTimeAu(value);
 }
 
 function prettyJson(value: unknown): string {

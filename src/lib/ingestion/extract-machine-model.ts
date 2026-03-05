@@ -15,7 +15,7 @@
  * Matches model identifiers with an explicit SM- prefix (3+ digits, optional
  * dash-suffixes). E.g. SM-6210-C, SM-6220.
  */
-const SM_PREFIX_PATTERN = /\bSM-(\d{3,}(?:-[A-Z0-9]+)*)\b/gi;
+const SM_PREFIX_PATTERN = /\bSM-(\d{3,}[A-Z]?(?:-[A-Z0-9]+)*)\b/gi;
 
 /**
  * Matches a "For Models:" / "Model:" / "Models:" header followed by the
@@ -27,7 +27,7 @@ const MODELS_CONTEXT_PATTERN = /\b(?:for\s+)?models?\s*:\s*([^\n]+)/gi;
  * Inside a known models-list context, match model numbers with or without
  * SM- prefix (3+ digits required to avoid incidental numbers).
  */
-const MODEL_IN_LIST_PATTERN = /\b(?:SM-)?(\d{3,}(?:-[A-Z0-9]+)*)\b/gi;
+const MODEL_IN_LIST_PATTERN = /\b(?:SM-)?(\d{3,}[A-Z]?(?:-[A-Z0-9]+)*)\b/gi;
 
 /**
  * Normalize a model string to canonical form (without SM- prefix).

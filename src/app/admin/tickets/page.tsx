@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
+import { formatDateTimeAu } from "@/lib/date-format";
 
 type TicketStatus = "open" | "in_progress" | "waiting" | "closed";
 type SessionStatus = "active" | "resolved" | "escalated";
@@ -51,10 +52,7 @@ const SESSION_STATUS_OPTIONS: Array<{ value: "all" | SessionStatus; label: strin
 
 function formatDate(value: string | null | undefined): string {
   if (!value) return "-";
-  const d = new Date(value);
-  return Number.isNaN(d.getTime())
-    ? "-"
-    : d.toLocaleString(undefined, { hour12: true });
+  return formatDateTimeAu(value, { hour12: true });
 }
 
 function truncate(value: string, max = 16): string {

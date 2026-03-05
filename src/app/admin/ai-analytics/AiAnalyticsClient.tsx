@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { formatDateTimeAu } from "@/lib/date-format";
 
 type Preset = "today" | "7d" | "30d" | "90d" | "all" | "custom";
 
@@ -906,7 +907,7 @@ export function AiAnalyticsClient() {
               <li key={`${item.createdAt}-${idx}`} className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-ink">
-                    {new Date(item.createdAt).toLocaleString()} - {item.recommendationCount} recommendations
+                    {formatDateTimeAu(item.createdAt)} - {item.recommendationCount} recommendations
                   </p>
                   <p className="text-xs text-muted line-clamp-2">{item.summary}</p>
                 </div>

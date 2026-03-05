@@ -2,11 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { documents } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
-import {
-  ingestDocument,
-  ingestPastedText,
-  ingestUrl,
-} from "@/lib/ingestion/document-ingestor";
+import { enqueueDocumentIngestion } from "@/lib/ingestion/ingestion-queue";
 import { withApiRouteErrorLogging } from "@/lib/error-logs";
 
 async function POSTHandler(
@@ -25,16 +21,14 @@ async function POSTHandler(
   }
 
   try {
-    if (pastedText) {
-      await ingestPastedText(id, pastedText);
-    } else if (doc.filePath === "_pasted" || doc.pastedContent) {
-      await ingestPastedText(id);
-    } else if (doc.filePath === "_url" && doc.sourceUrl) {
-      await ingestUrl(id);
-    } else {
-      await ingestDocument(id);
-    }
-    return NextResponse.json({ ok: true });
+    const queued = await enqueueDocumentIngestion(id, { pastedText });
+    return NextResponse.json(
+      {
+        ok: true,
+        status: queued.status,
+      },
+      { status: 202 }
+    );
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ error: message }, { status: 500 });

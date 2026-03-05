@@ -14,6 +14,7 @@ import {
   YAxis,
 } from "recharts";
 import { Card } from "@/components/ui/Card";
+import { formatDateAu } from "@/lib/date-format";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -122,8 +123,11 @@ function fmt(n: number): string {
 }
 
 function fmtDate(dateStr: string): string {
-  const d = new Date(`${dateStr}T00:00:00Z`);
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", timeZone: "UTC" });
+  return formatDateAu(`${dateStr}T00:00:00Z`, {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
 }
 
 // ── Stat card ──────────────────────────────────────────────────────────────

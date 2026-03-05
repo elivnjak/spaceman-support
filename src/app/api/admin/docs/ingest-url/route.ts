@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
-import { count } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { documents, docChunks } from "@/lib/db/schema";
+import { documents } from "@/lib/db/schema";
+import { slugFromUrl } from "@/lib/ingestion/document-ingestor";
 import {
-  ingestUrlContent,
-  slugFromUrl,
-} from "@/lib/ingestion/document-ingestor";
-import { eq } from "drizzle-orm";
+  extractMachineModelFromText,
+  formatMachineModelsForStorage,
+} from "@/lib/ingestion/extract-machine-model";
+import { enqueueDocumentIngestion } from "@/lib/ingestion/ingestion-queue";
 import { withApiRouteErrorLogging } from "@/lib/error-logs";
 import { validateExternalHttpUrl } from "@/lib/url-security";
 
@@ -45,18 +45,24 @@ async function POSTHandler(request: Request) {
   const renderJs = Boolean(body.renderJs);
   const machineModel = (body.machineModel as string)?.trim() || null;
   const placeholderTitle = slugFromUrl(url);
+  const autoMachineModels = formatMachineModelsForStorage(
+    extractMachineModelFromText(`${placeholderTitle}\n${url}`)
+  );
 
   const [doc] = await db
     .insert(documents)
     .values({
       title: placeholderTitle,
       filePath: "_url",
-      status: "INGESTING",
+      status: "PENDING",
+      ingestionProgress: 0,
+      ingestionStage: "Queued",
+      queuedAt: new Date(),
       rawTextPreview: url.slice(0, 500),
       sourceUrl: url,
       cssSelector,
       renderJs,
-      machineModel,
+      machineModel: machineModel ?? autoMachineModels,
     })
     .returning();
 
@@ -67,36 +73,8 @@ async function POSTHandler(request: Request) {
     );
   }
 
-  try {
-    await ingestUrlContent(doc.id);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    await db
-      .update(documents)
-      .set({ status: "ERROR", errorMessage: message })
-      .where(eq(documents.id, doc.id));
-  }
-
-  const updated = await db.query.documents.findFirst({
-    where: eq(documents.id, doc.id),
-  });
-  if (!updated) {
-    return NextResponse.json(
-      { error: "Document not found after ingestion" },
-      { status: 500 }
-    );
-  }
-
-  const chunkCountResult = await db
-    .select({ count: count(docChunks.id) })
-    .from(docChunks)
-    .where(eq(docChunks.documentId, doc.id));
-  const chunkCount = chunkCountResult[0]?.count ?? 0;
-
-  return NextResponse.json({
-    ...updated,
-    chunkCount,
-  });
+  await enqueueDocumentIngestion(doc.id);
+  return NextResponse.json(doc, { status: 202 });
 }
 
 export const POST = withApiRouteErrorLogging("/api/admin/docs/ingest-url", POSTHandler);

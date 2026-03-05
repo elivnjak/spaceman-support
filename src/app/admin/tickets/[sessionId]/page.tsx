@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Textarea } from "@/components/ui/Input";
+import { formatDateTimeAu } from "@/lib/date-format";
 
 type TicketStatus = "open" | "in_progress" | "waiting" | "closed";
 
@@ -128,10 +129,7 @@ function toEvidenceDisplay(value: unknown): EvidenceDisplay {
 
 function formatDate(value: string | null | undefined): string {
   if (!value) return "-";
-  const d = new Date(value);
-  return Number.isNaN(d.getTime())
-    ? "-"
-    : d.toLocaleString(undefined, { hour12: true });
+  return formatDateTimeAu(value, { hour12: true });
 }
 
 function ticketStatusBadgeVariant(status: string | null): "warning" | "danger" | "success" | "info" {
