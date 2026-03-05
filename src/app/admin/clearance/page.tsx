@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input, Textarea } from "@/components/ui/Input";
+import { LoadingScreen } from "@/components/ui/LoadingScreen";
 
 type GuideImage = {
   id: string;
@@ -102,7 +103,7 @@ export default function AdminClearanceConfigPage() {
     }
   }
 
-  if (loading) return <p>Loading...</p>;
+  if (loading) return <LoadingScreen />;
 
   return (
     <div className="space-y-8">

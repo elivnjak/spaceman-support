@@ -6,6 +6,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
+import { LoadingScreen } from "@/components/ui/LoadingScreen";
 import { Textarea } from "@/components/ui/Input";
 import { formatDateTimeAu } from "@/lib/date-format";
 
@@ -402,9 +403,7 @@ export default function AdminTicketDetailPage() {
     }
   }
 
-  if (loading) {
-    return <p className="text-sm text-muted">Loading ticket details...</p>;
-  }
+  if (loading) return <LoadingScreen />;
   if (error || !data) {
     return <p className="text-sm text-red-600">{error ?? "Ticket not found."}</p>;
   }

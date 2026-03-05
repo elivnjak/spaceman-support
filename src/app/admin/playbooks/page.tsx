@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { LoadingScreen } from "@/components/ui/LoadingScreen";
 
 type Label = { id: string; displayName: string };
 type Step = {
@@ -442,7 +443,7 @@ export default function AdminPlaybooksPage() {
     }
   };
 
-  if (loading) return <p>Loading…</p>;
+  if (loading) return <LoadingScreen />;
 
   return (
     <div>

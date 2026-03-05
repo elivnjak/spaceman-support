@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { LoadingScreen } from "@/components/ui/LoadingScreen";
 import { formatDateAu } from "@/lib/date-format";
 
 type Doc = {
@@ -247,7 +248,7 @@ export default function AdminDocDetailPage() {
     }
   };
 
-  if (loading) return <p>Loading…</p>;
+  if (loading) return <LoadingScreen />;
   if (!doc) return <p>Document not found.</p>;
 
   const docType = getDocType(doc.filePath);

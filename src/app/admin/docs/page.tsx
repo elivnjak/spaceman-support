@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { LoadingScreen } from "@/components/ui/LoadingScreen";
 import { Input } from "@/components/ui/Input";
 import { formatDateAu, formatDateTimeAu } from "@/lib/date-format";
 
@@ -371,7 +372,7 @@ export default function AdminDocsPage() {
     });
   };
 
-  if (loading) return <p>Loading…</p>;
+  if (loading) return <LoadingScreen />;
 
   return (
     <div>

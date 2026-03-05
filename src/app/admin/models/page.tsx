@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Card } from "@/components/ui/Card";
+import { LoadingScreen } from "@/components/ui/LoadingScreen";
 
 type SupportedModel = {
   id: string;
@@ -67,7 +68,7 @@ export default function AdminModelsPage() {
     if (page !== safePage) setPage(safePage);
   }, [page, safePage]);
 
-  if (loading) return <p>Loading...</p>;
+  if (loading) return <LoadingScreen />;
 
   return (
     <div className="space-y-8">

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { FieldMeta, IntentManifest, IntentManifestMeta } from "@/lib/intent/types";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { LoadingScreen } from "@/components/ui/LoadingScreen";
 
 type IntentManifestApiResponse = {
   manifest: IntentManifest;
@@ -143,7 +144,7 @@ export default function AdminIntentManifestPage() {
     }
   }
 
-  if (loading) return <p>Loading intent manifest...</p>;
+  if (loading) return <LoadingScreen />;
   if (!manifest || !metadata) {
     return (
       <div className="space-y-3">

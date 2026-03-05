@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Toggle } from "@/components/ui/Toggle";
+import { LoadingScreen } from "@/components/ui/LoadingScreen";
 
 type ProductType = {
   id: string;
@@ -109,7 +110,7 @@ export default function AdminProductTypesPage() {
     saveOrder(next);
   }
 
-  if (loading) return <p>Loading...</p>;
+  if (loading) return <LoadingScreen />;
 
   return (
     <div className="space-y-8">

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import { Badge } from "@/components/ui/Badge";
+import { LoadingScreen } from "@/components/ui/LoadingScreen";
 import { formatDateAu } from "@/lib/date-format";
 
 type User = { id: string; email: string; role: string; createdAt: string };
@@ -135,7 +136,7 @@ export default function AdminUsersPageClient({
     if (page !== safePage) setPage(safePage);
   }, [page, safePage]);
 
-  if (loading) return <p className="text-muted">Loading…</p>;
+  if (loading) return <LoadingScreen />;
 
   return (
     <div>

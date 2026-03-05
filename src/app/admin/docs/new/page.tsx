@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { LoadingScreen } from "@/components/ui/LoadingScreen";
 
 type Label = {
   id: string;
@@ -277,7 +278,7 @@ export default function AdminDocsNewPage() {
     }
   };
 
-  if (loading) return <p>Loading…</p>;
+  if (loading) return <LoadingScreen />;
 
   return (
     <div>

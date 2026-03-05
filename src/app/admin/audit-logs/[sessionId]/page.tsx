@@ -6,6 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { LoadingScreen } from "@/components/ui/LoadingScreen";
 import { formatDateTimeAu } from "@/lib/date-format";
 
 type AuditEntry = {
@@ -167,7 +168,7 @@ export default function AdminAuditDetailPage() {
     }
   }
 
-  if (loading) return <p className="text-sm text-muted">Loading audit details...</p>;
+  if (loading) return <LoadingScreen />;
   if (error || !data) return <p className="text-sm text-red-600">{error ?? "Not found."}</p>;
 
   const session = data.session;

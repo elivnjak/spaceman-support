@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Toggle } from "@/components/ui/Toggle";
+import { LoadingScreen } from "@/components/ui/LoadingScreen";
 
 type DiagnosisModePayload = {
   enabled: boolean;
@@ -47,7 +48,7 @@ export default function AdminDiagnosisModePage() {
     }
   }
 
-  if (loading) return <p>Loading...</p>;
+  if (loading) return <LoadingScreen />;
 
   return (
     <div className="space-y-8">

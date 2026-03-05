@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { LoadingScreen } from "@/components/ui/LoadingScreen";
 
 type Label = { id: string; displayName: string; description: string | null };
 
@@ -53,7 +54,7 @@ export default function AdminLabelsPage() {
     }
   };
 
-  if (loading) return <p>Loading…</p>;
+  if (loading) return <LoadingScreen />;
 
   return (
     <div>

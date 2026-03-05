@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { RichTextEditor } from "@/components/ui/RichTextEditor";
+import { LoadingScreen } from "@/components/ui/LoadingScreen";
 
 type EscalationConfigPayload = {
   generalEscalationMessage: string;
@@ -95,7 +96,7 @@ export default function AdminEscalationPage() {
     }
   }
 
-  if (loading) return <p>Loading...</p>;
+  if (loading) return <LoadingScreen />;
 
   return (
     <div className="space-y-8">
