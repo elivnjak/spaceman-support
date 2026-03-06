@@ -5,6 +5,7 @@ import Link from "next/link";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { LabelsGuideModal } from "./LabelsGuideModal";
 
 type Label = {
   id: string;
@@ -24,6 +25,7 @@ type LabelListResponse = {
 const PAGE_SIZE = 20;
 
 export default function AdminLabelsPage() {
+  const [guideOpen, setGuideOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
   const [data, setData] = useState<LabelListResponse>({
@@ -106,14 +108,30 @@ export default function AdminLabelsPage() {
       <PageHeader
         title="Labels"
         actions={
-          <Link
-            href="/admin/labels/new"
-            className="inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-hover min-h-[44px]"
-          >
-            Add label
-          </Link>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setGuideOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded border border-border px-3 py-1 text-sm text-muted transition-colors hover:border-primary hover:text-primary"
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <circle cx="8" cy="8" r="7" />
+                <path d="M6 6a2 2 0 1 1 2 2v1" />
+                <circle cx="8" cy="12" r="0.5" fill="currentColor" stroke="none" />
+              </svg>
+              Labels Guide
+            </button>
+            <Link
+              href="/admin/labels/new"
+              className="inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-hover min-h-[44px]"
+            >
+              Add label
+            </Link>
+          </div>
         }
       />
+
+      <LabelsGuideModal open={guideOpen} onClose={() => setGuideOpen(false)} />
 
       <section className="mb-4 flex flex-wrap items-center gap-3">
         <div className="min-w-[260px] flex-1">
