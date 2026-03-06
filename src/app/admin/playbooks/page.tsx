@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { LoadingScreen } from "@/components/ui/LoadingScreen";
 import { useAdminRole } from "@/app/admin/AdminSidebarProvider";
@@ -97,8 +97,15 @@ function toFormState(p: Playbook): PlaybookFormState {
   };
 }
 
+function parseTabFromParams(searchParams: ReturnType<typeof useSearchParams>): (typeof TABS)[number] {
+  const t = searchParams.get("tab");
+  return t && TABS.includes(t as (typeof TABS)[number]) ? (t as (typeof TABS)[number]) : "overview";
+}
+
 export default function AdminPlaybooksPage() {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const params = useParams<{ id?: string }>();
   const focusPlaybookId = params?.id;
   const dedicatedMode = Boolean(focusPlaybookId);
@@ -110,7 +117,7 @@ export default function AdminPlaybooksPage() {
   const [targetMissing, setTargetMissing] = useState(false);
   const [editing, setEditing] = useState<Playbook | null>(null);
   const [showForm, setShowForm] = useState(false);
-  const [activeTab, setActiveTab] = useState<(typeof TABS)[number]>("overview");
+  const [activeTab, setActiveTab] = useState<(typeof TABS)[number]>(() => parseTabFromParams(searchParams));
   const [form, setForm] = useState({
     labelId: "",
     title: "",
@@ -160,7 +167,6 @@ export default function AdminPlaybooksPage() {
         if (match) {
           setEditing(match);
           setShowForm(true);
-          setActiveTab("overview");
           setForm(toFormState(match));
           setTargetMissing(false);
           setSaveMsg(null);
@@ -171,6 +177,17 @@ export default function AdminPlaybooksPage() {
       setLoading(false);
     });
   }, [focusPlaybookId]);
+
+  useEffect(() => {
+    setActiveTab(parseTabFromParams(searchParams));
+  }, [searchParams]);
+
+  const setActiveTabWithUrl = (tab: (typeof TABS)[number]) => {
+    setActiveTab(tab);
+    const next = new URLSearchParams(searchParams.toString());
+    next.set("tab", tab);
+    router.replace(`${pathname}?${next.toString()}`);
+  };
 
   useEffect(() => {
     const maxPage = Math.max(1, Math.ceil(playbooks.length / PAGE_SIZE));
@@ -356,7 +373,7 @@ export default function AdminPlaybooksPage() {
     setSaveMsg(null);
     setEditing(null);
     setShowForm(true);
-    setActiveTab("overview");
+    setActiveTabWithUrl("overview");
     setForm({
       labelId: labels[0]?.id ?? "",
       title: "",
@@ -646,7 +663,7 @@ export default function AdminPlaybooksPage() {
               <button
                 key={t}
                 type="button"
-                onClick={() => setActiveTab(t)}
+                onClick={() => setActiveTabWithUrl(t)}
                 className={`rounded px-3 py-1.5 text-sm ${
                   activeTab === t
                     ? "bg-primary text-white"
