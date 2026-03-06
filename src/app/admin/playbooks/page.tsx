@@ -391,43 +391,60 @@ export default function AdminPlaybooksPage() {
     });
   };
 
-  const handleImport = async (file: File) => {
+  const handleImport = async (files: FileList) => {
     setImporting(true);
     setImportMsg(null);
-    try {
-      const fd = new FormData();
-      fd.append("file", file);
-      const res = await fetch("/api/admin/playbooks/import", {
-        method: "POST",
-        body: fd,
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setImportMsg({ type: "error", text: data.error ?? "Import failed" });
-        return;
-      }
-      setPlaybooks((prev) => {
-        const existingIndex = prev.findIndex((item) => item.id === data.id);
-        if (existingIndex >= 0) {
-          const next = [...prev];
-          next[existingIndex] = data;
-          return next;
+    const succeeded: string[] = [];
+    const failed: { name: string; error: string }[] = [];
+
+    for (const file of Array.from(files)) {
+      try {
+        const fd = new FormData();
+        fd.append("file", file);
+        const res = await fetch("/api/admin/playbooks/import", {
+          method: "POST",
+          body: fd,
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          failed.push({ name: file.name, error: data.error ?? "Import failed" });
+          continue;
         }
-        return [...prev, data];
-      });
-      const wasExisting = playbooks.some((item) => item.id === data.id);
-      setImportMsg({
-        type: "success",
-        text: wasExisting
-          ? `Playbook "${data.title}" updated successfully from Excel.`
-          : `Playbook "${data.title}" imported successfully.`,
-      });
-    } catch {
-      setImportMsg({ type: "error", text: "Failed to upload file." });
-    } finally {
-      setImporting(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
+        setPlaybooks((prev) => {
+          const existingIndex = prev.findIndex((item) => item.id === data.id);
+          if (existingIndex >= 0) {
+            const next = [...prev];
+            next[existingIndex] = data;
+            return next;
+          }
+          return [...prev, data];
+        });
+        succeeded.push(data.title || file.name);
+      } catch {
+        failed.push({ name: file.name, error: "Failed to upload file." });
+      }
     }
+
+    const parts: string[] = [];
+    if (succeeded.length > 0) {
+      parts.push(
+        succeeded.length === 1
+          ? `Imported "${succeeded[0]}" successfully.`
+          : `Imported ${succeeded.length} playbooks successfully.`
+      );
+    }
+    if (failed.length > 0) {
+      parts.push(
+        failed.map((f) => `${f.name}: ${f.error}`).join("\n")
+      );
+    }
+
+    setImportMsg({
+      type: failed.length > 0 ? "error" : "success",
+      text: parts.join("\n\n"),
+    });
+    setImporting(false);
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   const handleDelete = async (playbook: Playbook) => {
@@ -537,7 +554,7 @@ export default function AdminPlaybooksPage() {
               disabled={importing}
               className="rounded border border-primary px-4 py-2 text-primary hover:bg-aqua/30 disabled:opacity-50"
             >
-              {importing ? "Importing…" : "Import from Excel"}
+              {importing ? "Importing…" : "Import from Excel…"}
             </button>
             <a
               href="/api/admin/playbooks/template"
@@ -550,10 +567,11 @@ export default function AdminPlaybooksPage() {
               ref={fileInputRef}
               type="file"
               accept=".xlsx"
+              multiple
               className="hidden"
               onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) handleImport(file);
+                const files = e.target.files;
+                if (files && files.length > 0) handleImport(files);
               }}
             />
           </div>

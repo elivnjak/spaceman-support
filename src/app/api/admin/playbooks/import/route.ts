@@ -100,9 +100,13 @@ async function POSTHandler(request: Request) {
         .from(labels)
         .where(eq(labels.id, labelId));
       if (!label) {
-        errors.push(
-          `Overview sheet: label_id "${labelId}" does not exist. Check Admin → Labels for valid IDs.`,
-        );
+        const displayName = labelId
+          .replace(/[_-]/g, " ")
+          .replace(/\b\w/g, (c) => c.toUpperCase());
+        await db.insert(labels).values({
+          id: labelId,
+          displayName,
+        });
       }
     }
 

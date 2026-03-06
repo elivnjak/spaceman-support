@@ -7,10 +7,45 @@ import { hashPassword } from "@/lib/auth";
 import { toCanonicalModel } from "@/lib/ingestion/extract-machine-model";
 
 const DEFAULT_LABELS = [
+  // Texture classification labels
   { id: "good_texture", displayName: "Good texture", description: "Normal, desired consistency" },
   { id: "too_runny", displayName: "Too runny", description: "Watery, thin, melts too fast" },
   { id: "too_icy", displayName: "Too icy", description: "Crystalline, icy texture" },
   { id: "too_thick", displayName: "Too thick", description: "Overly dense or stiff" },
+
+  // Frozen Beverage (FB) playbook labels
+  { id: "fb_auger_not_turning", displayName: "FB – Auger not turning", description: "Frozen beverage auger/beater motor is not spinning" },
+  { id: "fb_auto_fill_not_refilling", displayName: "FB – Auto-fill not refilling", description: "Automatic refill system is not replenishing the bowl" },
+  { id: "fb_brix_out_of_range", displayName: "FB – Brix out of range", description: "Product sugar concentration (brix) is outside acceptable range" },
+  { id: "fb_chunks_or_particles_in_product", displayName: "FB – Chunks or particles in product", description: "Unwanted chunks, ice crystals, or particles appearing in dispensed product" },
+  { id: "fb_compressor_runs_no_frost", displayName: "FB – Compressor runs, no frost", description: "Compressor is running but cylinder is not getting cold" },
+  { id: "fb_display_alarm_or_error", displayName: "FB – Display alarm or error", description: "Machine display showing an alarm code or error message" },
+  { id: "fb_draw_handle_stuck", displayName: "FB – Draw handle stuck", description: "Dispensing handle is jammed or difficult to operate" },
+  { id: "fb_freeze_up_thermal_overload_trip", displayName: "FB – Freeze-up / thermal overload trip", description: "Machine has frozen up or tripped on thermal overload" },
+  { id: "fb_inconsistent_texture_between_sides", displayName: "FB – Inconsistent texture between sides", description: "Product texture differs between left and right barrels" },
+  { id: "fb_low_mix_light_with_full_hopper", displayName: "FB – Low-mix light with full hopper", description: "Low-mix indicator is on despite hopper being full" },
+  { id: "fb_machine_not_cooling", displayName: "FB – Machine not cooling", description: "Frozen beverage machine is not reaching or maintaining target temperature" },
+  { id: "fb_product_freeze_up_thick", displayName: "FB – Product freeze-up / too thick", description: "Product is freezing solid or dispensing too thick" },
+  { id: "fb_product_leaking_from_door", displayName: "FB – Product leaking from door", description: "Product leaking around the dispensing door area" },
+  { id: "fb_product_leaking_inside_machine", displayName: "FB – Product leaking inside machine", description: "Product leaking internally within the machine cabinet" },
+  { id: "fb_product_not_freezing", displayName: "FB – Product not freezing", description: "Product remains liquid and is not freezing at all" },
+
+  // Soft Serve (SS) playbook labels
+  { id: "ss_beater_not_turning", displayName: "SS – Beater not turning", description: "Soft serve beater/auger motor is not spinning" },
+  { id: "ss_excessive_internal_leak_drip_tray", displayName: "SS – Excessive internal leak / drip tray", description: "Excessive leaking into drip tray or internal cabinet" },
+  { id: "ss_excessive_overrun_foamy", displayName: "SS – Excessive overrun / foamy", description: "Product has too much air, appears foamy or spits" },
+  { id: "ss_first_pull_runny_after_idle", displayName: "SS – First pull runny after idle", description: "First serve after idle period is runny or soft" },
+  { id: "ss_hopper_too_warm_or_too_cold", displayName: "SS – Hopper too warm or too cold", description: "Hopper temperature is outside the safe operating range" },
+  { id: "ss_insufficient_overrun_flat", displayName: "SS – Insufficient overrun / flat", description: "Product has too little air, appears dense or flat" },
+  { id: "ss_leak_from_door_or_spout", displayName: "SS – Leak from door or spout", description: "Product leaking from the dispensing door or spout area" },
+  { id: "ss_machine_freeze_up_stop1_stop2", displayName: "SS – Machine freeze-up / STOP1–STOP2", description: "Machine has frozen up or entered STOP1/STOP2 alarm state" },
+  { id: "ss_machine_not_cooling", displayName: "SS – Machine not cooling", description: "Soft serve machine is not reaching or maintaining target temperature" },
+  { id: "ss_no_power_or_trips_breaker", displayName: "SS – No power or trips breaker", description: "Machine has no power or is tripping the circuit breaker" },
+  { id: "ss_off_taste_contamination", displayName: "SS – Off taste / contamination", description: "Product has an unusual taste, odour, or contamination" },
+  { id: "ss_product_too_icy", displayName: "SS – Product too icy", description: "Soft serve product has an icy or crystalline texture" },
+  { id: "ss_product_too_soft_runny", displayName: "SS – Product too soft / runny", description: "Soft serve is dispensing too soft or runny" },
+  { id: "ss_product_too_stiff_freeze_up_risk", displayName: "SS – Product too stiff / freeze-up risk", description: "Product is too stiff with risk of freeze-up" },
+  { id: "ss_stop4_temperature_sensor_error", displayName: "SS – STOP4 temperature sensor error", description: "Machine reporting STOP4 alarm due to temperature sensor fault" },
 ];
 
 /** Spaceman Soft Serve Ice Cream Machines — https://spaceman.com.au/products/soft-serve-ice-cream-machines/ */
