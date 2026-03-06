@@ -5,11 +5,8 @@ export async function logPlaywrightHealth(): Promise<void> {
   hasRun = true;
 
   try {
-    // Load Playwright at runtime to avoid bundling its internal assets in Turbopack.
-    const runtimeRequire = eval("require") as (id: string) => {
-      chromium: { launch: (options: { headless: boolean }) => Promise<{ close: () => Promise<void> }> };
-    };
-    const { chromium } = runtimeRequire("playwright");
+    // Dynamic import to avoid bundling Playwright in Edge Runtime and to stay within Edge's no-eval rules.
+    const { chromium } = await import("playwright");
     const browser = await chromium.launch({ headless: true });
     await browser.close();
     console.log("[startup] Playwright Chromium is available.");
