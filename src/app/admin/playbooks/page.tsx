@@ -147,9 +147,13 @@ export default function AdminPlaybooksPage() {
   const dragSrcEvidence = useRef<number | null>(null);
   const dragSrcTrigger = useRef<number | null>(null);
   const dragSrcStep = useRef<number | null>(null);
+  const dragSrcSymptom = useRef<number | null>(null);
+  const dragSrcCause = useRef<number | null>(null);
   const [dragOverEvidenceIdx, setDragOverEvidenceIdx] = useState<number | null>(null);
   const [dragOverTriggerIdx, setDragOverTriggerIdx] = useState<number | null>(null);
   const [dragOverStepIdx, setDragOverStepIdx] = useState<number | null>(null);
+  const [dragOverSymptomIdx, setDragOverSymptomIdx] = useState<number | null>(null);
+  const [dragOverCauseIdx, setDragOverCauseIdx] = useState<number | null>(null);
 
   useEffect(() => {
     Promise.all([
@@ -761,7 +765,30 @@ export default function AdminPlaybooksPage() {
                 </span>
               </p>
               {form.symptoms.map((s, i) => (
-                <div key={i} className="mb-3 flex flex-wrap items-end gap-2">
+                <div
+                  key={i}
+                  draggable
+                  onDragStart={(ev) => { ev.dataTransfer.effectAllowed = "move"; dragSrcSymptom.current = i; }}
+                  onDragOver={(ev) => { ev.preventDefault(); setDragOverSymptomIdx(i); }}
+                  onDragLeave={() => setDragOverSymptomIdx(null)}
+                  onDrop={(ev) => {
+                    ev.preventDefault();
+                    if (dragSrcSymptom.current !== null && dragSrcSymptom.current !== i) {
+                      setForm((f) => ({ ...f, symptoms: reorder(f.symptoms, dragSrcSymptom.current!, i) }));
+                    }
+                    dragSrcSymptom.current = null;
+                    setDragOverSymptomIdx(null);
+                  }}
+                  onDragEnd={() => { dragSrcSymptom.current = null; setDragOverSymptomIdx(null); }}
+                  className={`mb-3 flex flex-wrap items-end gap-2 rounded border p-2 transition-colors ${dragOverSymptomIdx === i ? "border-primary bg-primary/5" : "border-transparent"}`}
+                >
+                  <span className="cursor-grab self-center select-none text-gray-400" title="Drag to reorder">
+                    <svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor" aria-hidden="true">
+                      <circle cx="2" cy="3" r="1.5"/><circle cx="8" cy="3" r="1.5"/>
+                      <circle cx="2" cy="8" r="1.5"/><circle cx="8" cy="8" r="1.5"/>
+                      <circle cx="2" cy="13" r="1.5"/><circle cx="8" cy="13" r="1.5"/>
+                    </svg>
+                  </span>
                   <div className="flex flex-col gap-0.5">
                     <label className="group/tip relative inline-block text-xs font-medium text-muted cursor-help">
                       ID <span className="text-muted" aria-hidden>ⓘ</span>
@@ -940,8 +967,31 @@ export default function AdminPlaybooksPage() {
                 </span>
               </p>
               {form.candidateCauses.map((c, i) => (
-                <div key={i} className="mb-3 rounded border border-border p-2">
+                <div
+                  key={i}
+                  draggable
+                  onDragStart={(ev) => { ev.dataTransfer.effectAllowed = "move"; dragSrcCause.current = i; }}
+                  onDragOver={(ev) => { ev.preventDefault(); setDragOverCauseIdx(i); }}
+                  onDragLeave={() => setDragOverCauseIdx(null)}
+                  onDrop={(ev) => {
+                    ev.preventDefault();
+                    if (dragSrcCause.current !== null && dragSrcCause.current !== i) {
+                      setForm((f) => ({ ...f, candidateCauses: reorder(f.candidateCauses, dragSrcCause.current!, i) }));
+                    }
+                    dragSrcCause.current = null;
+                    setDragOverCauseIdx(null);
+                  }}
+                  onDragEnd={() => { dragSrcCause.current = null; setDragOverCauseIdx(null); }}
+                  className={`mb-3 rounded border p-2 transition-colors ${dragOverCauseIdx === i ? "border-primary bg-primary/5" : "border-border"}`}
+                >
                   <div className="mb-2 flex flex-wrap items-end gap-2">
+                    <span className="cursor-grab self-center select-none text-gray-400 mr-0.5" title="Drag to reorder">
+                      <svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor" aria-hidden="true">
+                        <circle cx="2" cy="3" r="1.5"/><circle cx="8" cy="3" r="1.5"/>
+                        <circle cx="2" cy="8" r="1.5"/><circle cx="8" cy="8" r="1.5"/>
+                        <circle cx="2" cy="13" r="1.5"/><circle cx="8" cy="13" r="1.5"/>
+                      </svg>
+                    </span>
                     <div className="flex flex-col gap-0.5">
                       <label className="group/tip relative inline-block text-xs font-medium text-muted cursor-help">
                         Cause ID <span className="text-muted" aria-hidden>ⓘ</span>
