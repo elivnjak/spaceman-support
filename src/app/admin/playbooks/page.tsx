@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { LoadingScreen } from "@/components/ui/LoadingScreen";
+import { useAdminRole } from "@/app/admin/AdminSidebarProvider";
 
 type Label = { id: string; displayName: string };
 type Step = {
@@ -75,6 +76,13 @@ const TABS = [
   "steps",
 ] as const;
 
+function reorder<T>(arr: T[], from: number, to: number): T[] {
+  const next = [...arr];
+  const [moved] = next.splice(from, 1);
+  next.splice(to, 0, moved);
+  return next;
+}
+
 function toFormState(p: Playbook): PlaybookFormState {
   return {
     labelId: p.labelId,
@@ -115,6 +123,8 @@ export default function AdminPlaybooksPage() {
     escalationTriggers: [] as TriggerItem[],
   });
   const [saving, setSaving] = useState(false);
+  const [savedFeedback, setSavedFeedback] = useState(false);
+  const savedFeedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [importing, setImporting] = useState(false);
   const [importMsg, setImportMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -124,6 +134,15 @@ export default function AdminPlaybooksPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 20;
+  const adminRole = useAdminRole();
+  const showSchemaVersion = adminRole === "admin";
+
+  const dragSrcEvidence = useRef<number | null>(null);
+  const dragSrcTrigger = useRef<number | null>(null);
+  const dragSrcStep = useRef<number | null>(null);
+  const [dragOverEvidenceIdx, setDragOverEvidenceIdx] = useState<number | null>(null);
+  const [dragOverTriggerIdx, setDragOverTriggerIdx] = useState<number | null>(null);
+  const [dragOverStepIdx, setDragOverStepIdx] = useState<number | null>(null);
 
   useEffect(() => {
     Promise.all([
@@ -306,6 +325,9 @@ export default function AdminPlaybooksPage() {
           return [...prev, saved];
         });
         setSaveMsg("Playbook saved successfully.");
+        if (savedFeedbackTimer.current) clearTimeout(savedFeedbackTimer.current);
+        setSavedFeedback(true);
+        savedFeedbackTimer.current = setTimeout(() => setSavedFeedback(false), 2500);
         if (dedicatedMode) {
           setEditing(saved);
           setForm(toFormState(saved));
@@ -572,10 +594,11 @@ export default function AdminPlaybooksPage() {
       {(dedicatedMode ? !!editing : editing || showForm) && (
         <div className={dedicatedMode ? "xl:max-w-[50%]" : undefined}>
           <div className="mb-8 rounded-lg border border-border bg-surface p-6">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="font-medium">
-              {editing ? "Edit playbook" : "Create playbook"}
-            </h2>
+          <div className="mb-4 flex flex-col gap-0.5">
+            <div className="flex items-center justify-between">
+              <h2 className="font-medium">
+                {editing ? "Edit playbook" : "Create playbook"}
+              </h2>
             <button
               type="button"
               role="switch"
@@ -600,6 +623,10 @@ export default function AdminPlaybooksPage() {
                 />
               </span>
             </button>
+            </div>
+            {showSchemaVersion && editing?.schemaVersion != null && (
+              <p className="text-xs text-muted">Schema version: {editing.schemaVersion}</p>
+            )}
           </div>
           <div className={`mb-5 flex items-center gap-2 rounded-md px-3 py-2 text-sm ${
             form.enabled
@@ -700,9 +727,6 @@ export default function AdminPlaybooksPage() {
                   })}
                 </div>
               </div>
-              {editing?.schemaVersion != null && (
-                <p className="text-sm text-gray-500">Schema version: {editing.schemaVersion}</p>
-              )}
             </>
           )}
 
@@ -776,8 +800,31 @@ export default function AdminPlaybooksPage() {
                 </span>
               </p>
               {form.evidenceChecklist.map((e, i) => (
-                <div key={i} className="mb-3 rounded border border-border p-2">
+                <div
+                  key={i}
+                  draggable
+                  onDragStart={(ev) => { ev.dataTransfer.effectAllowed = "move"; dragSrcEvidence.current = i; }}
+                  onDragOver={(ev) => { ev.preventDefault(); setDragOverEvidenceIdx(i); }}
+                  onDragLeave={() => setDragOverEvidenceIdx(null)}
+                  onDrop={(ev) => {
+                    ev.preventDefault();
+                    if (dragSrcEvidence.current !== null && dragSrcEvidence.current !== i) {
+                      setForm((f) => ({ ...f, evidenceChecklist: reorder(f.evidenceChecklist, dragSrcEvidence.current!, i) }));
+                    }
+                    dragSrcEvidence.current = null;
+                    setDragOverEvidenceIdx(null);
+                  }}
+                  onDragEnd={() => { dragSrcEvidence.current = null; setDragOverEvidenceIdx(null); }}
+                  className={`mb-3 rounded border p-2 transition-colors ${dragOverEvidenceIdx === i ? "border-primary bg-primary/5" : "border-border"}`}
+                >
                   <div className="mb-2 flex flex-wrap items-end gap-2">
+                    <span className="cursor-grab self-center select-none text-gray-400 mr-0.5" title="Drag to reorder">
+                      <svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor" aria-hidden="true">
+                        <circle cx="2" cy="3" r="1.5"/><circle cx="8" cy="3" r="1.5"/>
+                        <circle cx="2" cy="8" r="1.5"/><circle cx="8" cy="8" r="1.5"/>
+                        <circle cx="2" cy="13" r="1.5"/><circle cx="8" cy="13" r="1.5"/>
+                      </svg>
+                    </span>
                     <div className="flex flex-col gap-0.5">
                       <label className="group/tip relative inline-block text-xs font-medium text-muted cursor-help">
                         Evidence ID <span className="text-muted" aria-hidden>ⓘ</span>
@@ -989,7 +1036,30 @@ export default function AdminPlaybooksPage() {
                 </span>
               </p>
               {form.escalationTriggers.map((t, i) => (
-                <div key={i} className="mb-3 flex flex-wrap items-end gap-2">
+                <div
+                  key={i}
+                  draggable
+                  onDragStart={(ev) => { ev.dataTransfer.effectAllowed = "move"; dragSrcTrigger.current = i; }}
+                  onDragOver={(ev) => { ev.preventDefault(); setDragOverTriggerIdx(i); }}
+                  onDragLeave={() => setDragOverTriggerIdx(null)}
+                  onDrop={(ev) => {
+                    ev.preventDefault();
+                    if (dragSrcTrigger.current !== null && dragSrcTrigger.current !== i) {
+                      setForm((f) => ({ ...f, escalationTriggers: reorder(f.escalationTriggers, dragSrcTrigger.current!, i) }));
+                    }
+                    dragSrcTrigger.current = null;
+                    setDragOverTriggerIdx(null);
+                  }}
+                  onDragEnd={() => { dragSrcTrigger.current = null; setDragOverTriggerIdx(null); }}
+                  className={`mb-3 flex flex-wrap items-end gap-2 rounded border p-2 transition-colors ${dragOverTriggerIdx === i ? "border-primary bg-primary/5" : "border-transparent"}`}
+                >
+                  <span className="cursor-grab self-center select-none text-gray-400" title="Drag to reorder">
+                    <svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor" aria-hidden="true">
+                      <circle cx="2" cy="3" r="1.5"/><circle cx="8" cy="3" r="1.5"/>
+                      <circle cx="2" cy="8" r="1.5"/><circle cx="8" cy="8" r="1.5"/>
+                      <circle cx="2" cy="13" r="1.5"/><circle cx="8" cy="13" r="1.5"/>
+                    </svg>
+                  </span>
                   <div className="flex flex-col gap-0.5">
                     <label className="group/tip relative inline-block text-xs font-medium text-muted cursor-help">
                       Trigger text <span className="text-muted" aria-hidden>ⓘ</span>
@@ -1046,10 +1116,32 @@ export default function AdminPlaybooksPage() {
                 {form.steps.map((step, index) => (
                   <li
                     key={step.step_id}
-                    className="rounded border border-border p-4"
+                    draggable
+                    onDragStart={(ev) => { ev.dataTransfer.effectAllowed = "move"; dragSrcStep.current = index; }}
+                    onDragOver={(ev) => { ev.preventDefault(); setDragOverStepIdx(index); }}
+                    onDragLeave={() => setDragOverStepIdx(null)}
+                    onDrop={(ev) => {
+                      ev.preventDefault();
+                      if (dragSrcStep.current !== null && dragSrcStep.current !== index) {
+                        setForm((f) => ({ ...f, steps: reorder(f.steps, dragSrcStep.current!, index) }));
+                      }
+                      dragSrcStep.current = null;
+                      setDragOverStepIdx(null);
+                    }}
+                    onDragEnd={() => { dragSrcStep.current = null; setDragOverStepIdx(null); }}
+                    className={`rounded border p-4 transition-colors ${dragOverStepIdx === index ? "border-primary bg-primary/5" : "border-border"}`}
                   >
-                    <div className="mb-2 flex justify-between">
-                      <span className="text-sm font-medium">Step {index + 1}</span>
+                    <div className="mb-2 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="cursor-grab select-none text-gray-400" title="Drag to reorder">
+                          <svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor" aria-hidden="true">
+                            <circle cx="2" cy="3" r="1.5"/><circle cx="8" cy="3" r="1.5"/>
+                            <circle cx="2" cy="8" r="1.5"/><circle cx="8" cy="8" r="1.5"/>
+                            <circle cx="2" cy="13" r="1.5"/><circle cx="8" cy="13" r="1.5"/>
+                          </svg>
+                        </span>
+                        <span className="text-sm font-medium">Step {index + 1}</span>
+                      </div>
                       <button
                         type="button"
                         onClick={() => removeStep(index)}
@@ -1116,7 +1208,7 @@ export default function AdminPlaybooksPage() {
             </div>
           )}
 
-          <div className="mt-6 flex gap-2">
+          <div className="mt-6 flex flex-wrap items-center gap-3">
             <button
               onClick={savePlaybook}
               disabled={saving}
@@ -1148,6 +1240,18 @@ export default function AdminPlaybooksPage() {
             >
               Cancel
             </button>
+            <span
+              className={`flex items-center gap-1.5 text-sm font-medium text-emerald-600 transition-opacity duration-300 ${
+                savedFeedback ? "opacity-100" : "opacity-0 pointer-events-none"
+              }`}
+              aria-live="polite"
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <circle cx="8" cy="8" r="7"/>
+                <polyline points="5,8.5 7,10.5 11,6"/>
+              </svg>
+              Saved
+            </span>
           </div>
         </div>
         </div>

@@ -1,8 +1,14 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { createContext, useContext, useState, useEffect } from "react";
 import { AdminNav } from "./AdminNav";
 import type { AdminUiRole } from "@/lib/auth";
+
+const AdminRoleContext = createContext<AdminUiRole | null>(null);
+
+export function useAdminRole(): AdminUiRole | null {
+  return useContext(AdminRoleContext);
+}
 
 export function AdminSidebarProvider({
   role,
@@ -27,7 +33,7 @@ export function AdminSidebarProvider({
   };
 
   return (
-    <>
+    <AdminRoleContext.Provider value={role}>
       <AdminNav role={role} collapsed={collapsed} onToggle={toggle} />
       <main
         id="main-content"
@@ -37,6 +43,6 @@ export function AdminSidebarProvider({
           {children}
         </div>
       </main>
-    </>
+    </AdminRoleContext.Provider>
   );
 }
