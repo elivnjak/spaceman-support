@@ -130,6 +130,7 @@ export const playbooks = pgTable("playbooks", {
     .notNull()
     .references(() => labels.id),
   title: text("title").notNull(),
+  enabled: boolean("enabled").notNull().default(false),
   steps: jsonb("steps").notNull(),
   schemaVersion: integer("schema_version").notNull().default(1),
   symptoms: jsonb("symptoms"),

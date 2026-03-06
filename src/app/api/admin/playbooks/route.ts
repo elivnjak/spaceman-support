@@ -83,6 +83,7 @@ const PlaybookSchema = z.object({
   id: z.string().uuid().optional(),
   labelId: z.string().min(1),
   title: z.string().min(1),
+  enabled: z.boolean().optional().default(false),
   productTypeIds: z.array(z.string().uuid()).optional(),
   steps: z.array(StepSchema).default([]),
   schemaVersion: z.number().int().optional(),
@@ -142,6 +143,7 @@ async function POSTHandler(request: Request) {
     id,
     labelId,
     title,
+    enabled,
     productTypeIds,
     steps,
     schemaVersion,
@@ -156,6 +158,7 @@ async function POSTHandler(request: Request) {
   const payload = {
     labelId,
     title,
+    enabled,
     steps: stepsWithIds,
     updatedAt: new Date(),
     ...(schemaVersion != null && { schemaVersion }),
@@ -200,6 +203,7 @@ async function POSTHandler(request: Request) {
       .values({
         labelId,
         title,
+        enabled,
         steps: stepsWithIds,
         ...(schemaVersion != null && { schemaVersion }),
         ...(symptoms != null && { symptoms }),

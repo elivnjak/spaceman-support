@@ -134,6 +134,13 @@
       "when": 1772680000000,
       "tag": "0018_document_ingestion_progress",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1772770000000,
+      "tag": "0020_playbook_enabled",
+      "breakpoints": true
     }
   ]
 }

@@ -16,7 +16,7 @@ import {
   clearanceGuideImages,
   diagnosisModeConfig,
 } from "@/lib/db/schema";
-import { asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import { openaiTextEmbedder } from "@/lib/embeddings/openai-text";
 import { searchDocChunks } from "@/lib/pipeline/text-retrieval";
 import {
@@ -2549,7 +2549,8 @@ export async function POST(request: Request) {
               labelId: playbooks.labelId,
               title: playbooks.title,
             })
-            .from(playbooks);
+            .from(playbooks)
+            .where(eq(playbooks.enabled, true));
           const playbookProductTypeAssignments = allPlaybooks.length
             ? await db
                 .select({
@@ -3341,7 +3342,7 @@ export async function POST(request: Request) {
               const [switchPb] = await db
                 .select()
                 .from(playbooks)
-                .where(eq(playbooks.labelId, switchLabel));
+                .where(and(eq(playbooks.labelId, switchLabel), eq(playbooks.enabled, true)));
               if (switchPb && switchPb.id !== session.playbookId) {
                 await db
                   .update(diagnosticSessions)

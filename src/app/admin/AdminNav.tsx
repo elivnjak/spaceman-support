@@ -243,7 +243,7 @@ export function AdminNav({
               height={18}
               className="h-[18px] w-[18px] rounded-sm"
             />
-            <span>AG Support</span>
+            <span>Support</span>
           </span>
           <span className="text-xs text-muted">({roleLabel})</span>
           <div className="ml-auto flex items-center gap-1">

@@ -35,6 +35,7 @@ type Playbook = {
   id: string;
   labelId: string;
   title: string;
+  enabled: boolean;
   productTypeIds?: string[];
   steps: Step[];
   schemaVersion?: number;
@@ -48,6 +49,7 @@ type Playbook = {
 type PlaybookFormState = {
   labelId: string;
   title: string;
+  enabled: boolean;
   productTypeIds: string[];
   steps: Step[];
   symptoms: SymptomItem[];
@@ -77,6 +79,7 @@ function toFormState(p: Playbook): PlaybookFormState {
   return {
     labelId: p.labelId,
     title: p.title,
+    enabled: Boolean(p.enabled),
     productTypeIds: Array.isArray(p.productTypeIds) ? p.productTypeIds : [],
     steps: Array.isArray(p.steps) ? p.steps : [],
     symptoms: Array.isArray(p.symptoms) ? p.symptoms : [],
@@ -103,6 +106,7 @@ export default function AdminPlaybooksPage() {
   const [form, setForm] = useState({
     labelId: "",
     title: "",
+    enabled: false,
     productTypeIds: [] as string[],
     steps: [] as Step[],
     symptoms: [] as SymptomItem[],
@@ -116,6 +120,7 @@ export default function AdminPlaybooksPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 20;
@@ -129,7 +134,7 @@ export default function AdminPlaybooksPage() {
     ]).then(([l, pt, p, a]) => {
       setLabels(l);
       setProductTypes(pt);
-      setPlaybooks(p);
+      setPlaybooks((p as Playbook[]).map((playbook) => ({ ...playbook, enabled: Boolean(playbook.enabled) })));
       setActionsList(a);
       if (focusPlaybookId) {
         const match = (p as Playbook[]).find((item) => item.id === focusPlaybookId);
@@ -275,6 +280,7 @@ export default function AdminPlaybooksPage() {
           id: editing?.id,
           labelId: form.labelId,
           title: form.title,
+          enabled: form.enabled,
           productTypeIds: form.productTypeIds,
           steps: form.steps,
           symptoms: form.symptoms.length ? form.symptoms : null,
@@ -309,6 +315,7 @@ export default function AdminPlaybooksPage() {
           setForm({
             labelId: "",
             title: "",
+            enabled: false,
             productTypeIds: [],
             steps: [],
             symptoms: [],
@@ -331,6 +338,7 @@ export default function AdminPlaybooksPage() {
     setForm({
       labelId: labels[0]?.id ?? "",
       title: "",
+      enabled: false,
       productTypeIds: [],
       steps: [],
       symptoms: [],
@@ -397,6 +405,49 @@ export default function AdminPlaybooksPage() {
       }
     } finally {
       setDeletingId(null);
+    }
+  };
+
+  const togglePlaybookEnabled = async (playbook: Playbook) => {
+    setTogglingId(playbook.id);
+    setSaveMsg(null);
+    try {
+      const res = await fetch("/api/admin/playbooks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: playbook.id,
+          labelId: playbook.labelId,
+          title: playbook.title,
+          enabled: !playbook.enabled,
+          productTypeIds: playbook.productTypeIds ?? [],
+          steps: Array.isArray(playbook.steps) ? playbook.steps : [],
+          symptoms: Array.isArray(playbook.symptoms) && playbook.symptoms.length > 0 ? playbook.symptoms : null,
+          evidenceChecklist:
+            Array.isArray(playbook.evidenceChecklist) && playbook.evidenceChecklist.length > 0
+              ? playbook.evidenceChecklist
+              : null,
+          candidateCauses:
+            Array.isArray(playbook.candidateCauses) && playbook.candidateCauses.length > 0
+              ? playbook.candidateCauses
+              : null,
+          escalationTriggers:
+            Array.isArray(playbook.escalationTriggers) && playbook.escalationTriggers.length > 0
+              ? playbook.escalationTriggers
+              : null,
+        }),
+      });
+      const saved = await res.json();
+      if (!res.ok) return;
+
+      setPlaybooks((prev) => prev.map((item) => (item.id === saved.id ? saved : item)));
+      if (editing?.id === saved.id) {
+        setEditing(saved);
+        setForm(toFormState(saved));
+      }
+      setSaveMsg(saved.enabled ? "Playbook enabled for diagnosis triage." : "Playbook disabled for diagnosis triage.");
+    } finally {
+      setTogglingId(null);
     }
   };
 
@@ -519,10 +570,49 @@ export default function AdminPlaybooksPage() {
       )}
 
       {(dedicatedMode ? !!editing : editing || showForm) && (
-        <div className="mb-8 rounded-lg border border-border bg-surface p-6">
-          <h2 className="mb-4 font-medium">
-            {editing ? "Edit playbook" : "Create playbook"}
-          </h2>
+        <div className={dedicatedMode ? "xl:max-w-[50%]" : undefined}>
+          <div className="mb-8 rounded-lg border border-border bg-surface p-6">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="font-medium">
+              {editing ? "Edit playbook" : "Create playbook"}
+            </h2>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={form.enabled}
+              onClick={() => setForm((f) => ({ ...f, enabled: !f.enabled }))}
+              className={`flex items-center gap-2.5 rounded-full border py-1.5 pl-3 pr-1.5 text-sm font-medium transition-colors ${
+                form.enabled
+                  ? "border-green-300 bg-green-50 text-green-800"
+                  : "border-gray-300 bg-gray-50 text-gray-600"
+              }`}
+            >
+              {form.enabled ? "Enabled" : "Disabled"}
+              <span
+                className={`relative inline-flex h-6 w-10 shrink-0 items-center rounded-full transition-colors ${
+                  form.enabled ? "bg-green-500" : "bg-gray-300"
+                }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${
+                    form.enabled ? "translate-x-[22px]" : "translate-x-[3px]"
+                  }`}
+                />
+              </span>
+            </button>
+          </div>
+          <div className={`mb-5 flex items-center gap-2 rounded-md px-3 py-2 text-sm ${
+            form.enabled
+              ? "border border-green-200 bg-green-50 text-green-800"
+              : "border border-amber-200 bg-amber-50 text-amber-800"
+          }`}>
+            <span className="font-medium">{form.enabled ? "Enabled" : "Disabled"}</span>
+            <span className="text-xs opacity-75">
+              {form.enabled
+                ? "— this playbook will be used in diagnosis triage"
+                : "— this playbook is excluded from diagnosis triage"}
+            </span>
+          </div>
 
           <div className="mb-4 flex flex-wrap gap-2 border-b border-border">
             {TABS.map((t) => (
@@ -1045,6 +1135,7 @@ export default function AdminPlaybooksPage() {
                 setForm({
                   labelId: "",
                   title: "",
+                  enabled: false,
                   productTypeIds: [],
                   steps: [],
                   symptoms: [],
@@ -1058,6 +1149,7 @@ export default function AdminPlaybooksPage() {
               Cancel
             </button>
           </div>
+        </div>
         </div>
       )}
 
@@ -1080,7 +1172,16 @@ export default function AdminPlaybooksPage() {
                 className="flex items-center justify-between rounded border border-border bg-surface p-4"
               >
                 <div>
-                  <span className="font-medium">{p.title}</span>
+                  <Link href={`/admin/playbooks/${p.id}`} className="font-medium text-primary hover:underline">
+                    {p.title}
+                  </Link>
+                  <span
+                    className={`ml-2 rounded-full px-2 py-0.5 text-xs font-medium ${
+                      p.enabled ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-700"
+                    }`}
+                  >
+                    {p.enabled ? "Enabled" : "Disabled"}
+                  </span>
                   <span className="ml-2 text-sm text-gray-500">
                     ({labels.find((l) => l.id === p.labelId)?.displayName ?? p.labelId})
                   </span>
@@ -1092,6 +1193,13 @@ export default function AdminPlaybooksPage() {
                   </p>
                 </div>
                 <div className="flex gap-2">
+                  <button
+                    onClick={() => togglePlaybookEnabled(p)}
+                    disabled={togglingId === p.id}
+                    className="rounded border border-border px-3 py-1 text-sm"
+                  >
+                    {togglingId === p.id ? "Saving…" : p.enabled ? "Disable" : "Enable"}
+                  </button>
                   <a
                     href={`/api/admin/playbooks/${p.id}/export`}
                     download
