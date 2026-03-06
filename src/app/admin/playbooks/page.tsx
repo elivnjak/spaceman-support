@@ -6,6 +6,8 @@ import { useParams, usePathname, useRouter, useSearchParams } from "next/navigat
 import { PageHeader } from "@/components/ui/PageHeader";
 import { LoadingScreen } from "@/components/ui/LoadingScreen";
 import { useAdminRole } from "@/app/admin/AdminSidebarProvider";
+import { TAB_HELP } from "./playbook-help-content";
+import { PlaybookGuideModal } from "./PlaybookGuideModal";
 
 type Label = { id: string; displayName: string };
 type Step = {
@@ -102,6 +104,51 @@ function parseTabFromParams(searchParams: ReturnType<typeof useSearchParams>): (
   return t && TABS.includes(t as (typeof TABS)[number]) ? (t as (typeof TABS)[number]) : "overview";
 }
 
+function TabHelpBlock({
+  tab,
+  expanded,
+  onToggle,
+}: {
+  tab: (typeof TABS)[number];
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  const help = TAB_HELP[tab];
+  if (!help) return null;
+
+  return (
+    <div className="mb-4">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="inline-flex items-center gap-1.5 text-xs font-medium text-primary/80 transition-colors hover:text-primary"
+      >
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 14 14"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <circle cx="7" cy="7" r="6" />
+          <path d="M5.5 5.5a1.5 1.5 0 1 1 1.5 1.5v.75" />
+          <circle cx="7" cy="10" r="0.4" fill="currentColor" stroke="none" />
+        </svg>
+        {expanded ? "Hide guide" : "Show guide"}
+      </button>
+      {expanded && (
+        <div className="mt-2 rounded-lg border border-primary/20 bg-primary-light px-4 py-3 text-sm text-ink">
+          {help.body}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function AdminPlaybooksPage() {
   const router = useRouter();
   const pathname = usePathname();
@@ -143,6 +190,19 @@ export default function AdminPlaybooksPage() {
   const PAGE_SIZE = 20;
   const adminRole = useAdminRole();
   const showSchemaVersion = adminRole === "admin";
+
+  const [guideOpen, setGuideOpen] = useState(false);
+  const [helpExpanded, setHelpExpanded] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem("playbook-help-expanded") !== "false";
+  });
+  const toggleHelp = () => {
+    setHelpExpanded((prev) => {
+      const next = !prev;
+      localStorage.setItem("playbook-help-expanded", String(next));
+      return next;
+    });
+  };
 
   const dragSrcEvidence = useRef<number | null>(null);
   const dragSrcTrigger = useRef<number | null>(null);
@@ -519,6 +579,18 @@ export default function AdminPlaybooksPage() {
         title={dedicatedMode ? "Edit playbook" : "Playbooks"}
         actions={
           <div className="flex items-center gap-4">
+            <button
+              type="button"
+              onClick={() => setGuideOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded border border-border px-3 py-1 text-sm text-muted transition-colors hover:border-primary hover:text-primary"
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <circle cx="8" cy="8" r="7" />
+                <path d="M6 6a2 2 0 1 1 2 2v1" />
+                <circle cx="8" cy="12" r="0.5" fill="currentColor" stroke="none" />
+              </svg>
+              Playbook Guide
+            </button>
             {editing && (
               <a
                 href={`/api/admin/playbooks/${editing.id}/export`}
@@ -538,6 +610,12 @@ export default function AdminPlaybooksPage() {
             </Link>
           </div>
         }
+      />
+
+      <PlaybookGuideModal
+        open={guideOpen}
+        onClose={() => setGuideOpen(false)}
+        scrollToTab={activeTab}
       />
 
       {!dedicatedMode && (
@@ -699,6 +777,7 @@ export default function AdminPlaybooksPage() {
 
           {activeTab === "overview" && (
             <>
+              <TabHelpBlock tab="overview" expanded={helpExpanded} onToggle={toggleHelp} />
               <div className="mb-4">
                 <label className="group/tip relative inline-block text-sm font-medium text-muted cursor-help">
                   Label <span className="text-muted" aria-hidden>ⓘ</span>
@@ -771,6 +850,7 @@ export default function AdminPlaybooksPage() {
 
           {activeTab === "symptoms" && (
             <div>
+              <TabHelpBlock tab="symptoms" expanded={helpExpanded} onToggle={toggleHelp} />
               <p className="mb-2 text-sm text-muted">
                 Symptom descriptions that may trigger this playbook
               </p>
@@ -850,6 +930,7 @@ export default function AdminPlaybooksPage() {
 
           {activeTab === "evidence" && (
             <div>
+              <TabHelpBlock tab="evidence" expanded={helpExpanded} onToggle={toggleHelp} />
               <p className="mb-2 text-sm text-muted">
                 Evidence to gather (link to Action for instructions)
               </p>
@@ -974,6 +1055,7 @@ export default function AdminPlaybooksPage() {
 
           {activeTab === "causes" && (
             <div>
+              <TabHelpBlock tab="causes" expanded={helpExpanded} onToggle={toggleHelp} />
               <p className="mb-2 text-sm text-muted">Candidate root causes</p>
               <p className="mb-3 text-xs text-muted">
                 List possible root causes. The assistant narrows these down as the user provides evidence.{" "}
@@ -1109,6 +1191,7 @@ export default function AdminPlaybooksPage() {
 
           {activeTab === "triggers" && (
             <div>
+              <TabHelpBlock tab="triggers" expanded={helpExpanded} onToggle={toggleHelp} />
               <p className="mb-2 text-sm text-muted">
                 Escalation triggers (if user message contains trigger text)
               </p>
@@ -1188,6 +1271,7 @@ export default function AdminPlaybooksPage() {
 
           {activeTab === "steps" && (
             <div>
+              <TabHelpBlock tab="steps" expanded={helpExpanded} onToggle={toggleHelp} />
               <p className="mb-2 text-sm text-muted">Resolution steps</p>
               <p className="mb-3 text-xs text-muted">
                 <span className="group/tip relative inline cursor-help border-b border-dotted border-gray-400">
