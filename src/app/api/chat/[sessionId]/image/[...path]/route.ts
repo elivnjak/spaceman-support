@@ -2,6 +2,11 @@ import path from "path";
 import { NextResponse } from "next/server";
 import { readStorageFile, diagnosticSessionImagePath } from "@/lib/storage";
 import { withApiRouteErrorLogging } from "@/lib/error-logs";
+import { getSessionFromRequest } from "@/lib/auth";
+import {
+  readChatSessionTokenFromRequest,
+  verifyChatSessionToken,
+} from "@/lib/chat-session-token";
 
 const ALLOWED_EXTENSIONS = new Set(["jpg", "jpeg", "png", "gif", "webp"]);
 
@@ -14,13 +19,20 @@ function getContentType(ext: string): string {
 
 /**
  * Serves stored diagnostic session images so restored chat sessions can display
- * user-uploaded photos. No auth: session ID is the capability (same as GET session).
+ * user-uploaded photos. Public access requires a valid chat session token.
  */
 async function GETHandler(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ sessionId: string; path: string[] }> }
 ) {
   const { sessionId, path: pathSegments } = await params;
+  const authSession = await getSessionFromRequest(request);
+  if (!authSession) {
+    const publicToken = readChatSessionTokenFromRequest(request);
+    if (!verifyChatSessionToken(publicToken, sessionId)) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+  }
   const filename = Array.isArray(pathSegments)
     ? pathSegments.join("/")
     : String(pathSegments ?? "").trim();

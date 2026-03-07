@@ -65,6 +65,7 @@ type ChatMessage = {
 
 type MessagePayload = {
   sessionId: string;
+  sessionToken?: string;
   message: string;
   message_html?: string;
   phase: string;
@@ -143,6 +144,7 @@ const FIRST_MESSAGE_DELAY_MS = 1500;
 const SESSION_STALE_MS = 2 * 60 * 60 * 1000;
 
 const CHAT_SESSION_STORAGE_KEY = "chatSessionId";
+const CHAT_SESSION_TOKEN_KEY = "chatSessionToken";
 const CHAT_USER_NAME_KEY = "chatUserName";
 const CHAT_USER_PHONE_KEY = "chatUserPhone";
 
@@ -162,14 +164,24 @@ function getAustralianPhoneError(value: string): string | null {
 }
 
 /** Convert stored image path from backend to a URL the browser can load. */
-function toSessionImageUrl(sessionId: string, storedPath: string): string {
+function toSessionImageUrl(
+  sessionId: string,
+  storedPath: string,
+  sessionToken?: string | null
+): string {
   const normalized = storedPath.replace(/\\/g, "/");
   const filename = normalized.split("/").pop() ?? "";
-  return `/api/chat/${sessionId}/image/${encodeURIComponent(filename)}`;
+  const base = `/api/chat/${sessionId}/image/${encodeURIComponent(filename)}`;
+  if (!sessionToken) return base;
+  return `${base}?token=${encodeURIComponent(sessionToken)}`;
 }
 
 /** Return a loadable image URL; pass through blob/http URLs, convert stored paths. */
-function toImageUrl(sessionId: string | null, img: string): string {
+function toImageUrl(
+  sessionId: string | null,
+  img: string,
+  sessionToken?: string | null
+): string {
   if (
     img.startsWith("blob:") ||
     img.startsWith("http://") ||
@@ -178,7 +190,12 @@ function toImageUrl(sessionId: string | null, img: string): string {
   ) {
     return img;
   }
-  return sessionId ? toSessionImageUrl(sessionId, img) : img;
+  return sessionId ? toSessionImageUrl(sessionId, img, sessionToken) : img;
+}
+
+function buildSessionFetchUrl(sessionId: string, sessionToken?: string | null): string {
+  if (!sessionToken) return `/api/chat/${sessionId}`;
+  return `/api/chat/${sessionId}?token=${encodeURIComponent(sessionToken)}`;
 }
 
 function htmlToText(html: string): string {
@@ -199,6 +216,7 @@ export function ChatPageClient({
 }: ChatPageClientProps) {
   const activeTurnstileSiteKey = turnstileEnabled ? turnstileSiteKey.trim() : "";
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [userName, setUserName] = useState("");
   const [userPhone, setUserPhone] = useState("");
   const [phoneError, setPhoneError] = useState<string | null>(null);
@@ -361,14 +379,16 @@ export function ChatPageClient({
   // Restore session from sessionStorage on mount (e.g. after page reload).
   useEffect(() => {
     const stored = sessionStorage.getItem(CHAT_SESSION_STORAGE_KEY);
+    const storedToken = sessionStorage.getItem(CHAT_SESSION_TOKEN_KEY);
     if (!stored) return;
 
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(`/api/chat/${stored}`);
+        const res = await fetch(buildSessionFetchUrl(stored, storedToken));
         if (!res.ok || cancelled) {
           sessionStorage.removeItem(CHAT_SESSION_STORAGE_KEY);
+          sessionStorage.removeItem(CHAT_SESSION_TOKEN_KEY);
           sessionStorage.removeItem(CHAT_USER_NAME_KEY);
           sessionStorage.removeItem(CHAT_USER_PHONE_KEY);
           return;
@@ -391,18 +411,20 @@ export function ChatPageClient({
             Date.now() - new Date(session.updatedAt).getTime() > SESSION_STALE_MS)
         ) {
           sessionStorage.removeItem(CHAT_SESSION_STORAGE_KEY);
+          sessionStorage.removeItem(CHAT_SESSION_TOKEN_KEY);
           sessionStorage.removeItem(CHAT_USER_NAME_KEY);
           sessionStorage.removeItem(CHAT_USER_PHONE_KEY);
           return;
         }
 
         setSessionId(session.id);
+        setSessionToken(storedToken || null);
         setUserName(session.userName ?? sessionStorage.getItem(CHAT_USER_NAME_KEY) ?? "");
         setUserPhone(session.userPhone ?? sessionStorage.getItem(CHAT_USER_PHONE_KEY) ?? "");
         setMessages(
           (session.messages ?? []).map((m) => ({
             ...m,
-            images: m.images?.map((img) => toImageUrl(session.id, img)) ?? m.images,
+            images: m.images?.map((img) => toImageUrl(session.id, img, storedToken)) ?? m.images,
           }))
         );
         setCurrentPhase(session.phase ?? "collecting_issue");
@@ -411,6 +433,7 @@ export function ChatPageClient({
       } catch {
         if (!cancelled) {
           sessionStorage.removeItem(CHAT_SESSION_STORAGE_KEY);
+          sessionStorage.removeItem(CHAT_SESSION_TOKEN_KEY);
           sessionStorage.removeItem(CHAT_USER_NAME_KEY);
           sessionStorage.removeItem(CHAT_USER_PHONE_KEY);
         }
@@ -546,9 +569,11 @@ export function ChatPageClient({
       pendingSubmitTimerRef.current = null;
     }
     sessionStorage.removeItem(CHAT_SESSION_STORAGE_KEY);
+    sessionStorage.removeItem(CHAT_SESSION_TOKEN_KEY);
     sessionStorage.removeItem(CHAT_USER_NAME_KEY);
     sessionStorage.removeItem(CHAT_USER_PHONE_KEY);
     setSessionId(null);
+    setSessionToken(null);
     setMessages([]);
     setChatStarted(false);
     setInitialPhase("idle");
@@ -753,6 +778,7 @@ export function ChatPageClient({
     form.set("message", messageToSend);
     form.set("inputSource", resolvedInputSource);
     if (sessionId) form.set("sessionId", sessionId);
+    if (sessionId && sessionToken) form.set("sessionToken", sessionToken);
     if (!sessionId && turnstileToken) {
       form.set("cf-turnstile-response", turnstileToken);
     }
@@ -839,6 +865,10 @@ export function ChatPageClient({
       if (payload) {
         setSessionId(payload.sessionId);
         sessionStorage.setItem(CHAT_SESSION_STORAGE_KEY, payload.sessionId);
+        if (typeof payload.sessionToken === "string" && payload.sessionToken) {
+          setSessionToken(payload.sessionToken);
+          sessionStorage.setItem(CHAT_SESSION_TOKEN_KEY, payload.sessionToken);
+        }
         if (userName.trim()) sessionStorage.setItem(CHAT_USER_NAME_KEY, userName.trim());
         if (userPhone.trim()) sessionStorage.setItem(CHAT_USER_PHONE_KEY, userPhone.trim());
         setMessages((prev) => [
@@ -864,8 +894,10 @@ export function ChatPageClient({
           payload.phase === "escalated"
         ) {
           sessionStorage.removeItem(CHAT_SESSION_STORAGE_KEY);
+          sessionStorage.removeItem(CHAT_SESSION_TOKEN_KEY);
           sessionStorage.removeItem(CHAT_USER_NAME_KEY);
           sessionStorage.removeItem(CHAT_USER_PHONE_KEY);
+          setSessionToken(null);
         }
       } else if (sessionId) {
         setConnectionInterrupted(true);
@@ -884,7 +916,7 @@ export function ChatPageClient({
         let recovered = false;
         if (sessionId) {
           try {
-            const res = await fetch(`/api/chat/${sessionId}`);
+            const res = await fetch(buildSessionFetchUrl(sessionId, sessionToken));
             if (res.ok) {
               const session: {
                 id: string;
@@ -899,7 +931,9 @@ export function ChatPageClient({
               setMessages(
                 (session.messages ?? []).map((m) => ({
                   ...m,
-                  images: m.images?.map((img) => toImageUrl(session.id, img)) ?? m.images,
+                  images:
+                    m.images?.map((img) => toImageUrl(session.id, img, sessionToken)) ??
+                    m.images,
                 }))
               );
               setCurrentPhase(session.phase ?? "collecting_issue");
@@ -944,7 +978,7 @@ export function ChatPageClient({
     setError("");
     setConnectionInterrupted(false);
     try {
-      const res = await fetch(`/api/chat/${sessionId}`);
+      const res = await fetch(buildSessionFetchUrl(sessionId, sessionToken));
       if (!res.ok) throw new Error("Could not load session");
       const session: {
         id: string;
@@ -960,12 +994,14 @@ export function ChatPageClient({
       setMessages(
         (session.messages ?? []).map((m) => ({
           ...m,
-          images: m.images?.map((img) => toImageUrl(session.id, img)) ?? m.images,
+          images:
+            m.images?.map((img) => toImageUrl(session.id, img, sessionToken)) ?? m.images,
         }))
       );
       setCurrentPhase(session.phase ?? "collecting_issue");
       setSessionId(session.id);
       sessionStorage.setItem(CHAT_SESSION_STORAGE_KEY, session.id);
+      if (sessionToken) sessionStorage.setItem(CHAT_SESSION_TOKEN_KEY, sessionToken);
       if (session.userName) sessionStorage.setItem(CHAT_USER_NAME_KEY, session.userName);
       if (session.userPhone) sessionStorage.setItem(CHAT_USER_PHONE_KEY, session.userPhone);
       if (
@@ -973,8 +1009,10 @@ export function ChatPageClient({
         session.status === "escalated"
       ) {
         sessionStorage.removeItem(CHAT_SESSION_STORAGE_KEY);
+        sessionStorage.removeItem(CHAT_SESSION_TOKEN_KEY);
         sessionStorage.removeItem(CHAT_USER_NAME_KEY);
         sessionStorage.removeItem(CHAT_USER_PHONE_KEY);
+        setSessionToken(null);
       }
     } catch (err) {
       if (isAuthenticated) {
@@ -1266,7 +1304,9 @@ export function ChatPageClient({
                       })()}
                       {m.role === "user" && m.images && m.images.length > 0 && (() => {
                         const count = m.images!.length;
-                        const urls = m.images!.map((src) => toImageUrl(sessionId, src));
+                        const urls = m.images!.map((src) =>
+                          toImageUrl(sessionId, src, sessionToken)
+                        );
                         const gridClass =
                           count === 1
                             ? "grid grid-cols-1"

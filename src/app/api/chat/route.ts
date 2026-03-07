@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import sharp from "sharp";
 import { getSessionFromRequest } from "@/lib/auth";
 import { RATE_LIMITS } from "@/lib/rate-limit";
 import { checkRateLimit } from "@/lib/rate-limit-server";
@@ -57,6 +58,10 @@ import { AuditLogger } from "@/lib/audit";
 import { verifyTurnstileToken } from "@/lib/turnstile";
 import { logErrorEvent } from "@/lib/error-logs";
 import { richTextToPlainText } from "@/lib/rich-text";
+import {
+  issueChatSessionToken,
+  verifyChatSessionToken,
+} from "@/lib/chat-session-token";
 
 const STAGE_MESSAGES: Record<string, string> = {
   requesting_nameplate: "Collecting machine details…",
@@ -241,6 +246,61 @@ function buildCitations(
 
 /** Max length for user message to prevent token abuse. */
 const MAX_MESSAGE_LENGTH = 4000;
+const MAX_IMAGES_PER_TURN = 8;
+const MAX_IMAGE_SIZE_BYTES = 20 * 1024 * 1024;
+const MAX_TOTAL_IMAGE_BYTES = 80 * 1024 * 1024;
+const SUPPORTED_IMAGE_MIME_TYPES = new Set([
+  "image/jpeg",
+  "image/jpg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+  "image/heic",
+  "image/heif",
+  "image/avif",
+  "image/tiff",
+  "image/bmp",
+]);
+
+async function normalizeUploadedImage(file: File): Promise<Buffer> {
+  const mimeType = file.type.trim().toLowerCase();
+  if (mimeType && !SUPPORTED_IMAGE_MIME_TYPES.has(mimeType)) {
+    throw new Error(
+      "Unsupported image format. Please upload JPG, PNG, WEBP, GIF, HEIC/HEIF, AVIF, TIFF, or BMP."
+    );
+  }
+  if (file.size > MAX_IMAGE_SIZE_BYTES) {
+    throw new Error("Image is too large. Please upload images up to 20 MB each.");
+  }
+
+  const raw = Buffer.from(await file.arrayBuffer());
+  if (raw.length === 0) {
+    throw new Error("One of the uploaded images is empty.");
+  }
+  try {
+    await sharp(raw, { animated: true }).metadata();
+  } catch {
+    throw new Error(
+      "One of the uploaded files is not a valid image. Please upload JPG, PNG, or WEBP photos."
+    );
+  }
+
+  // Keep JPEG bytes as-is; transcode all other formats (including HEIC) to JPEG for consistent model input.
+  if (mimeType === "image/jpeg" || mimeType === "image/jpg") {
+    return raw;
+  }
+
+  try {
+    return await sharp(raw)
+      .rotate()
+      .jpeg({ quality: 92, mozjpeg: true })
+      .toBuffer();
+  } catch {
+    throw new Error(
+      "We could not process one of the uploaded images. Please upload JPG, PNG, or WEBP."
+    );
+  }
+}
 
 const PLACEHOLDER_USER_MESSAGES = new Set(["(sent photos)", "sent photo(s)"]);
 const TRIVIAL_USER_MESSAGE_PATTERNS = [
@@ -750,6 +810,7 @@ async function escalateOnTechnicalFailure(opts: {
 export async function POST(request: Request) {
   const formData = await request.formData();
   const sessionIdRaw = (formData.get("sessionId") as string)?.trim() || null;
+  const sessionTokenRaw = (formData.get("sessionToken") as string)?.trim() || null;
   const turnstileToken = (formData.get("cf-turnstile-response") as string)?.trim() || null;
   const message = (formData.get("message") as string)?.trim() ?? "";
   const inputSourceRaw = (formData.get("inputSource") as string)?.trim().toLowerCase() ?? "";
@@ -767,6 +828,15 @@ export async function POST(request: Request) {
   if (message.length > MAX_MESSAGE_LENGTH) {
     return NextResponse.json(
       { error: `Message must be at most ${MAX_MESSAGE_LENGTH} characters.` },
+      { status: 400 }
+    );
+  }
+
+  if (files.length > MAX_IMAGES_PER_TURN) {
+    return NextResponse.json(
+      {
+        error: `You can upload up to ${MAX_IMAGES_PER_TURN} images per message.`,
+      },
       { status: 400 }
     );
   }
@@ -830,10 +900,22 @@ export async function POST(request: Request) {
     }
   }
 
+  let totalImageBytes = 0;
   const imageBuffers: Buffer[] = [];
   for (const file of files) {
-    if (file && file.size > 0) {
-      imageBuffers.push(Buffer.from(await file.arrayBuffer()));
+    if (!file || file.size <= 0) continue;
+    totalImageBytes += file.size;
+    if (totalImageBytes > MAX_TOTAL_IMAGE_BYTES) {
+      return NextResponse.json(
+        { error: "Total image upload size is too large. Please keep it under 80 MB per message." },
+        { status: 400 }
+      );
+    }
+    try {
+      imageBuffers.push(await normalizeUploadedImage(file));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Invalid image upload.";
+      return NextResponse.json({ error: msg }, { status: 400 });
     }
   }
 
@@ -849,6 +931,7 @@ export async function POST(request: Request) {
       let turnCountForError = 0;
       let playbookIdForError: string | null = null;
       let machineModelForError: string | null = machineModel;
+      let publicSessionToken: string | null = null;
       let technicalDifficultiesMessage = DEFAULT_TECHNICAL_DIFFICULTIES_MESSAGE;
       let technicalDifficultiesMessageHtml = DEFAULT_TECHNICAL_DIFFICULTIES_MESSAGE;
       const sendEvent = (
@@ -864,8 +947,16 @@ export async function POST(request: Request) {
             const parsed = JSON.parse(data) as Record<string, unknown>;
             if (parsed && typeof parsed === "object" && "escalation_reason" in parsed) {
               delete parsed.escalation_reason;
-              safeData = JSON.stringify(parsed);
             }
+            if (
+              publicSessionToken &&
+              parsed &&
+              typeof parsed === "object" &&
+              typeof parsed.sessionId === "string"
+            ) {
+              parsed.sessionToken = publicSessionToken;
+            }
+            safeData = JSON.stringify(parsed);
           } catch {
             // Keep original payload if it's not JSON
           }
@@ -952,6 +1043,14 @@ export async function POST(request: Request) {
             throw new Error("Session not found.");
           }
           sessionId = session.id;
+          if (!isAuthenticated && !verifyChatSessionToken(sessionTokenRaw, sessionId)) {
+            sendEvent("error", JSON.stringify({ error: "Unauthorized session access." }));
+            closeController(controller);
+            return;
+          }
+        }
+        if (!isAuthenticated) {
+          publicSessionToken = issueChatSessionToken(sessionId);
         }
         sessionForError = session;
         sessionIdForError = sessionId;
@@ -3670,6 +3769,9 @@ export async function POST(request: Request) {
             technicalDifficultiesMessage,
             technicalDifficultiesMessageHtml,
           });
+          if (!publicSessionToken) {
+            publicSessionToken = issueChatSessionToken(escalationPayload.sessionId);
+          }
           sendEvent(
             "message",
             JSON.stringify({
@@ -3698,7 +3800,13 @@ export async function POST(request: Request) {
           sendEvent(
             "message",
             JSON.stringify({
-              sessionId: sessionIdForError ?? crypto.randomUUID(),
+              sessionId: (() => {
+                const fallbackSessionId = sessionIdForError ?? crypto.randomUUID();
+                if (!publicSessionToken) {
+                  publicSessionToken = issueChatSessionToken(fallbackSessionId);
+                }
+                return fallbackSessionId;
+              })(),
               message: technicalDifficultiesMessage,
               message_html: technicalDifficultiesMessageHtml,
               phase: "escalated",

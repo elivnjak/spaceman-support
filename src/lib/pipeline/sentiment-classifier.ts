@@ -42,14 +42,19 @@ export async function runSentimentClassifier(
   const recentConv =
     input.recentMessages
       .slice(-4)
-      .map((m) => `${m.role}: ${(m.content ?? "").trim()}`)
+      .map((m) =>
+        JSON.stringify({
+          role: m.role,
+          content: (m.content ?? "").trim().replace(/\u0000/g, ""),
+        })
+      )
       .join("\n") || "(no prior messages)";
 
   const userContent = `Recent conversation (last few turns):
 ${recentConv}
 
 Latest user message to classify:
-"${input.latestMessage.replace(/"/g, '\\"')}"
+${JSON.stringify((input.latestMessage ?? "").replace(/\u0000/g, ""))}
 
 Rate the user's frustration level and whether they want to speak to a human. Output JSON only.`;
 

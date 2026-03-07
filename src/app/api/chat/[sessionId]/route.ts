@@ -4,6 +4,10 @@ import { diagnosticSessions } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { withApiRouteErrorLogging } from "@/lib/error-logs";
 import { getSessionFromRequest } from "@/lib/auth";
+import {
+  readChatSessionTokenFromRequest,
+  verifyChatSessionToken,
+} from "@/lib/chat-session-token";
 
 function redactMessageEscalationReasons(messages: unknown): unknown {
   if (!Array.isArray(messages)) return messages;
@@ -34,6 +38,10 @@ async function GETHandler(
     return NextResponse.json({ error: "Session not found" }, { status: 404 });
   }
   if (!authSession) {
+    const publicToken = readChatSessionTokenFromRequest(request);
+    if (!verifyChatSessionToken(publicToken, sessionId)) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
     return NextResponse.json({
       ...session,
       escalationReason: null,
