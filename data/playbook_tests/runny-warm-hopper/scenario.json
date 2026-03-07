@@ -1,0 +1,53 @@
+{
+  "id": "runny-warm-hopper",
+  "suite": "smoke",
+  "description": "Too-runny soft serve should resolve to warm hopper diagnosis.",
+  "initialContext": {
+    "machineModel": "6210"
+  },
+  "turns": [
+    {
+      "user": "Soft serve is really runny and melts immediately.",
+      "expect": {
+        "phase": "nameplate_check"
+      }
+    },
+    {
+      "user": "The nameplate says Spaceman 6210.",
+      "expect": {
+        "playbookLabel": "too_runny"
+      }
+    },
+    {
+      "user": "The hopper temperature shows -1C.",
+      "expect": {
+        "playbookLabel": "too_runny",
+        "extractedEvidenceIds": [
+          "machine_model",
+          "hopper_temp"
+        ]
+      }
+    },
+    {
+      "user": "Yes, there is good clearance on all sides.",
+      "expect": {
+        "playbookLabel": "too_runny"
+      }
+    },
+    {
+      "user": "We cleaned it last week.",
+      "expect": {
+        "playbookLabel": "too_runny",
+        "outcome": "resolved",
+        "causeId": "hopper_too_warm"
+      }
+    }
+  ],
+  "finalExpect": {
+    "status": "resolved",
+    "phase": "resolving",
+    "playbookLabel": "too_runny",
+    "causeId": "hopper_too_warm",
+    "maxTurns": 5
+  }
+}

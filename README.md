@@ -100,6 +100,22 @@ Quality gates fail the command when:
 - `npm run db:push` – Push Drizzle schema to DB
 - `npm run db:seed` – Seed labels and ensure vector extension + indexes
 - `npm run eval` – Run evaluation script
+- `npm run playbook:test -- [--suite <name>] [--scenario <id>] [--fix]` – Run the sandboxed playbook regression harness
+
+## Playbook Regression Harness
+
+Scenario packs live under `data/playbook_tests/<scenario-id>/` and must contain:
+
+- `scenario.json`
+- `fixtures/` for any scenario-owned placeholder images
+
+The harness:
+
+- clones the current diagnostic data into an isolated sandbox schema
+- starts a separate app instance on an ephemeral port
+- replays the real `/api/chat` workflow turn by turn
+- grades per-turn workflow assertions and final outcomes
+- optionally drafts ranked fix candidates and validates them against the full suite
 
 ## Troubleshooting
 

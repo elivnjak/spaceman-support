@@ -1,0 +1,54 @@
+{
+  "id": "runny-with-placeholder-image",
+  "suite": "smoke",
+  "description": "Text-plus-image scenario exercises the upload path while diagnosing a runny machine.",
+  "initialContext": {
+    "machineModel": "6228"
+  },
+  "turns": [
+    {
+      "user": "This machine is dispensing very thin product today.",
+      "images": [
+        "dispense-placeholder.png"
+      ],
+      "expect": {
+        "phase": "nameplate_check"
+      }
+    },
+    {
+      "user": "Model is SM-6228.",
+      "expect": {
+        "playbookLabel": "too_runny"
+      }
+    },
+    {
+      "user": "The display shows 2C.",
+      "expect": {
+        "playbookLabel": "too_runny",
+        "extractedEvidenceIds": [
+          "machine_model",
+          "hopper_temp"
+        ]
+      }
+    },
+    {
+      "user": "Yes, there is clearance.",
+      "expect": {
+        "playbookLabel": "too_runny"
+      }
+    },
+    {
+      "user": "It was cleaned this morning.",
+      "expect": {
+        "playbookLabel": "too_runny",
+        "outcome": "resolved"
+      }
+    }
+  ],
+  "finalExpect": {
+    "status": "resolved",
+    "phase": "resolving",
+    "playbookLabel": "too_runny",
+    "maxTurns": 5
+  }
+}

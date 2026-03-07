@@ -24,10 +24,12 @@
     "railway:start": "npm run railway:migrate && npm start",
     "railway:prod": "npx tsx scripts/run-with-production-env.ts",
     "eval": "npx tsx scripts/eval.ts",
+    "playbook:test": "node --import tsx scripts/playbook-test.ts",
     "db:seed": "npx tsx scripts/setup-db.ts",
     "types:audit": "npx tsx scripts/audit-input-types.ts",
     "types:normalize:dry": "npx tsx scripts/normalize-input-types.ts --mode dry-run",
-    "types:normalize": "npx tsx scripts/normalize-input-types.ts --mode apply"
+    "types:normalize": "npx tsx scripts/normalize-input-types.ts --mode apply",
+    "test:playbook-harness": "node --import tsx --test scripts/playbook-test/**/*.test.ts"
   },
   "dependencies": {
     "@mozilla/readability": "^0.6.0",

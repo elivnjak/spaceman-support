@@ -1,0 +1,21 @@
+{
+  "id": "escalation-electrical",
+  "suite": "smoke",
+  "description": "Electrical smell should escalate immediately.",
+  "initialContext": {},
+  "turns": [
+    {
+      "user": "The product is runny and there is a weird electrical smell from the back of the machine.",
+      "expect": {
+        "outcome": "escalated",
+        "phase": "escalated"
+      }
+    }
+  ],
+  "finalExpect": {
+    "status": "escalated",
+    "phase": "escalated",
+    "playbookLabel": "too_runny",
+    "maxTurns": 1
+  }
+}
