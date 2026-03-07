@@ -57,6 +57,7 @@ export const intentManifestSchema = z.object({
     classificationModel: z.string().min(1),
     generationModel: z.string().min(1),
     diagnosticPlannerModel: z.string().min(1),
+    insightsRecommendationModel: z.string().min(1),
     triageModel: z.string().min(1),
     visionModel: z.string().min(1),
     llmChunkerModel: z.string().min(1),

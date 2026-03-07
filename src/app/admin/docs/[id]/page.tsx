@@ -38,10 +38,11 @@ type Chunk = {
   metadata: unknown;
 };
 
-type DocType = "pdf" | "txt" | "md" | "pasted";
+type DocType = "pdf" | "txt" | "md" | "pasted" | "html";
 
 function getDocType(filePath: string): DocType {
   if (filePath === "_pasted") return "pasted";
+  if (filePath === "_url") return "html";
   const lower = filePath.toLowerCase();
   if (lower.endsWith(".pdf")) return "pdf";
   if (lower.endsWith(".md")) return "md";
@@ -59,6 +60,8 @@ function getDocTypeLabel(type: DocType): string {
       return "Markdown";
     case "pasted":
       return "Pasted";
+    case "html":
+      return "HTML";
     default:
       return "File";
   }
@@ -71,6 +74,7 @@ function DocTypeBadge({ type }: { type: DocType }) {
     txt: "bg-green-100 text-green-800",
     md: "bg-blue-100 text-blue-800",
     pasted: "bg-purple-100 text-purple-800",
+    html: "bg-amber-100 text-amber-800",
   };
   return (
     <span className={`${base} ${styles[type]}`}>{getDocTypeLabel(type)}</span>
@@ -252,6 +256,16 @@ export default function AdminDocDetailPage() {
   if (!doc) return <p>Document not found.</p>;
 
   const docType = getDocType(doc.filePath);
+  const sourceHref =
+    doc.filePath === "_url" && doc.sourceUrl
+      ? doc.sourceUrl
+      : `/api/admin/docs/${doc.id}/source`;
+  const sourceLabel =
+    doc.filePath === "_url"
+      ? "Open source URL"
+      : doc.filePath === "_pasted"
+        ? "View pasted source"
+        : "View source file";
 
   return (
     <div>
@@ -297,6 +311,19 @@ export default function AdminDocDetailPage() {
             Created {formatDate(doc.createdAt)}
           </span>
         </div>
+        {doc.sourceUrl && (
+          <p className="mb-4 text-sm text-muted">
+            Source URL:{" "}
+            <a
+              href={doc.sourceUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary underline break-all"
+            >
+              {doc.sourceUrl}
+            </a>
+          </p>
+        )}
         {doc.errorMessage && (
           <p className="mb-4 text-sm text-red-600">
             {doc.errorMessage}
@@ -316,6 +343,14 @@ export default function AdminDocDetailPage() {
           </div>
         )}
         <div className="flex flex-wrap gap-2">
+          <a
+            href={sourceHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded border border-border px-3 py-1.5 text-sm"
+          >
+            {sourceLabel}
+          </a>
           <button
             type="button"
             onClick={ingest}

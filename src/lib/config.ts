@@ -31,6 +31,7 @@ export const LLM_CONFIG = {
   classificationModel: MANIFEST_DEFAULTS.models.classificationModel,
   generationModel: MANIFEST_DEFAULTS.models.generationModel,
   diagnosticPlannerModel: MANIFEST_DEFAULTS.models.diagnosticPlannerModel,
+  insightsRecommendationModel: MANIFEST_DEFAULTS.models.insightsRecommendationModel,
 } as const;
 
 export const DIAGNOSTIC_CONFIG = {
@@ -91,6 +92,7 @@ export async function getLlmConfig() {
     classificationModel: manifest.models.classificationModel,
     generationModel: manifest.models.generationModel,
     diagnosticPlannerModel: manifest.models.diagnosticPlannerModel,
+    insightsRecommendationModel: manifest.models.insightsRecommendationModel,
     triageModel: manifest.models.triageModel,
     visionModel: manifest.models.visionModel,
     llmChunkerModel: manifest.models.llmChunkerModel,

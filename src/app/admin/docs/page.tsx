@@ -568,6 +568,10 @@ export default function AdminDocsPage() {
               {paginatedDocs.map((d) => {
                 const docType = getDocType(d.filePath);
                 const isEditing = editingId === d.id;
+                const sourceHref =
+                  d.filePath === "_url" && d.sourceUrl
+                    ? d.sourceUrl
+                    : `/api/admin/docs/${d.id}/source`;
                 return (
                   <tr key={d.id} className="bg-surface">
                     <td className="whitespace-nowrap px-4 py-3">
@@ -667,6 +671,14 @@ export default function AdminDocsPage() {
                         >
                           Edit
                         </button>
+                        <a
+                          href={sourceHref}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="rounded border border-border px-2 py-1 text-xs"
+                        >
+                          Source
+                        </a>
                         <button
                           type="button"
                           onClick={() => deleteDoc(d.id)}

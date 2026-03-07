@@ -240,7 +240,7 @@ ${JSON.stringify(input, null, 2)}
 Return JSON now.`;
 
   const res = await getOpenAI().chat.completions.create({
-    model: llmConfig.diagnosticPlannerModel,
+    model: llmConfig.insightsRecommendationModel,
     messages: [
       { role: "system", content: systemPrompt },
       { role: "user", content: userPrompt },

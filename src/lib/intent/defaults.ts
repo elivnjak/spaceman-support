@@ -117,10 +117,12 @@ export const MANIFEST_DEFAULTS: IntentManifest = {
     classificationModel: "gpt-4o",
     generationModel: "gpt-4o",
     diagnosticPlannerModel: "gpt-4o",
+    /** Model used by Admin > Insights recommendation generation. Separate from planner so it can be tuned independently. */
+    insightsRecommendationModel: "gpt-5.4",
     triageModel: "gpt-4o",
     visionModel: "gpt-4o",
     /** Model for LLM-based PDF chunking at ingest. Separate from vision so it can be gpt-5.2 for testing. */
-    llmChunkerModel: "gpt-5.2",
+    llmChunkerModel: "gpt-5.4",
   },
   frustrationHandling: {
     detectionPatterns: [
@@ -444,6 +446,12 @@ export const MANIFEST_META: IntentManifestMeta = {
       "Model used in multi-turn planning and evidence-to-hypothesis reasoning.",
       "This model drives most runtime cost during chat diagnostics.",
       d.models.diagnosticPlannerModel
+    ),
+    insightsRecommendationModel: meta(
+      "Insights recommendation model",
+      "Model used by Admin > Insights when generating recommendation analysis from analytics data.",
+      "Set this independently to tune quality/cost for analytics recommendations without changing chat planner behavior.",
+      d.models.insightsRecommendationModel
     ),
     triageModel: meta(
       "Triage model",
