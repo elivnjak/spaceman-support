@@ -9,6 +9,13 @@ import {
 } from "@/lib/auth";
 import { AdminSidebarProvider } from "./AdminSidebarProvider";
 
+const PUBLIC_ADMIN_PATHS = new Set([
+  "/admin",
+  "/admin/login",
+  "/admin/forgot-password",
+  "/admin/reset-password",
+]);
+
 export default async function AdminLayout({
   children,
 }: {
@@ -27,7 +34,7 @@ export default async function AdminLayout({
   }
 
   if (!role) {
-    if (pathname !== "/admin") {
+    if (!PUBLIC_ADMIN_PATHS.has(pathname)) {
       const next = encodeURIComponent(pathname);
       redirect(`/admin?unauthorized=1&next=${next}`);
     }

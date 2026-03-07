@@ -141,6 +141,13 @@
       "when": 1772770000000,
       "tag": "0020_playbook_enabled",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1772810000000,
+      "tag": "0021_auth_password_flows",
+      "breakpoints": true
     }
   ]
 }

@@ -70,4 +70,12 @@ export const RATE_LIMITS = {
   chatPerIp: { maxRequests: 30, windowMs: 60_000 },
   /** Max admin requests per IP per minute */
   adminPerIp: { maxRequests: 60, windowMs: 60_000 },
+  /** Max forgot-password submissions per IP per 15 minutes */
+  passwordResetRequestPerIp: { maxRequests: 5, windowMs: 15 * 60_000 },
+  /** Max forgot-password submissions per email per hour */
+  passwordResetRequestPerEmail: { maxRequests: 3, windowMs: 60 * 60_000 },
+  /** Max password-reset confirmations per IP per 15 minutes */
+  passwordResetConfirmPerIp: { maxRequests: 10, windowMs: 15 * 60_000 },
+  /** Max authenticated password changes per user per hour */
+  passwordChangePerUser: { maxRequests: 10, windowMs: 60 * 60_000 },
 } as const;

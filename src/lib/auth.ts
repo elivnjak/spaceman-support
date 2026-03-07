@@ -9,6 +9,7 @@ const SESSION_COOKIE_NAME =
     ? "__Host-session_token"
     : "session_token";
 const SESSION_DURATION_MS = 1000 * 60 * 60 * 24; // 24 hours
+export const PASSWORD_MIN_LENGTH = 12;
 export const ADMIN_ROLE = "admin";
 export const EDITOR_ROLE = "editor";
 export type AdminUiRole = typeof ADMIN_ROLE | typeof EDITOR_ROLE;
@@ -51,6 +52,10 @@ export async function createSession(userId: string): Promise<{ token: string; ex
 
 export async function deleteSession(token: string): Promise<void> {
   await db.delete(sessions).where(eq(sessions.token, token));
+}
+
+export async function deleteSessionsForUser(userId: string): Promise<void> {
+  await db.delete(sessions).where(eq(sessions.userId, userId));
 }
 
 export async function rotateSessionToken(

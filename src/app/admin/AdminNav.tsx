@@ -52,6 +52,7 @@ const navGroups: NavGroup[] = [
   {
     section: "Users & system",
     items: [
+      { href: "/admin/profile", label: "My profile" },
       { href: "/admin/users", label: "Users", adminOnly: true },
       { href: "/admin/telegram", label: "Telegram notifications" },
       { href: "/admin/maintenance", label: "Maintenance mode" },
@@ -270,9 +271,8 @@ export function AdminNav({
 
       {/* Mobile slide-out drawer */}
       <div
-        className={`fixed inset-y-0 left-0 z-50 flex w-72 max-w-[85vw] transform flex-col border-r border-border bg-surface shadow-xl transition-transform duration-200 ease-out lg:hidden ${
-          open ? "translate-x-0" : "-translate-x-full"
-        }`}
+        className={`fixed inset-y-0 left-0 z-50 flex w-72 max-w-[85vw] transform flex-col border-r border-border bg-surface shadow-xl transition-transform duration-200 ease-out lg:hidden ${open ? "translate-x-0" : "-translate-x-full"
+          }`}
         aria-hidden={!open}
       >
         <div className="flex items-center justify-between border-b border-border px-4 py-3">

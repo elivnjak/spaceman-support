@@ -1,6 +1,13 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 
+const PUBLIC_ADMIN_PATHS = new Set([
+  "/admin",
+  "/admin/login",
+  "/admin/forgot-password",
+  "/admin/reset-password",
+]);
+
 function getClientIp(request: NextRequest): string {
   return (
     request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
@@ -56,8 +63,8 @@ export async function proxy(request: NextRequest) {
     request.cookies.get("session_token")?.value?.trim() ??
     "";
 
-  // Allow admin root to render login form when unauthenticated.
-  if (pathname === "/admin") {
+  // Allow public admin auth pages to render when unauthenticated.
+  if (PUBLIC_ADMIN_PATHS.has(pathname)) {
     return nextWithPathHeader();
   }
 

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -10,25 +11,53 @@ import { Badge } from "@/components/ui/Badge";
 import { LoadingScreen } from "@/components/ui/LoadingScreen";
 import { formatDateAu } from "@/lib/date-format";
 
-type User = { id: string; email: string; role: string; createdAt: string };
+type User = {
+  id: string;
+  email: string;
+  role: string;
+  forcePasswordChange: boolean;
+  createdAt: string;
+};
+
+type Feedback = {
+  tone: "success" | "warning";
+  message: string;
+};
 
 export default function AdminUsersPageClient({
   currentUserId,
 }: {
   currentUserId: string | null;
 }) {
+  const searchParams = useSearchParams();
   const [list, setList] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [editing, setEditing] = useState<User | null>(null);
   const [editForm, setEditForm] = useState({ email: "", password: "", role: "editor" });
   const [savingEdit, setSavingEdit] = useState(false);
+  const [resendingId, setResendingId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [query, setQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<"all" | "admin" | "editor">("all");
   const [pageSize, setPageSize] = useState(25);
   const [page, setPage] = useState(1);
+
+  const notice = searchParams.get("notice");
+  const warning = searchParams.get("warning")?.trim() ?? "";
+
+  const noticeMessage = useMemo(() => {
+    switch (notice) {
+      case "user-created":
+        return "User created successfully.";
+      case "user-created-and-emailed":
+        return "User created and setup email sent successfully.";
+      default:
+        return null;
+    }
+  }, [notice]);
 
   const loadList = () => {
     setError(null);
@@ -62,6 +91,8 @@ export default function AdminUsersPageClient({
   }, [query, roleFilter, pageSize]);
 
   const startEdit = (user: User) => {
+    setError(null);
+    setFeedback(null);
     setEditing(user);
     setEditForm({ email: user.email, password: "", role: user.role });
   };
@@ -69,6 +100,8 @@ export default function AdminUsersPageClient({
   const handleEditSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editing) return;
+    setError(null);
+    setFeedback(null);
     setSavingEdit(true);
     try {
       const body: { email?: string; password?: string; role?: string } = {
@@ -81,31 +114,84 @@ export default function AdminUsersPageClient({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (res.ok) {
+        const { warning: responseWarning, passwordChanged, ...updatedUser } = data as User & {
+          warning?: string;
+          passwordChanged?: boolean;
+        };
         setList((prev) =>
-          prev.map((u) => (u.id === editing.id ? data : u))
+          prev.map((u) => (u.id === editing.id ? updatedUser : u))
         );
         setEditing(null);
+        setEditForm({ email: "", password: "", role: "editor" });
+
+        if (typeof responseWarning === "string" && responseWarning.trim()) {
+          setFeedback({ tone: "warning", message: responseWarning.trim() });
+        } else if (passwordChanged) {
+          setFeedback({
+            tone: "success",
+            message:
+              editing.id === currentUserId
+                ? "Your account details were updated successfully."
+                : `Updated ${updatedUser.email}. They will be required to choose a new password the next time they sign in.`,
+          });
+        } else {
+          setFeedback({ tone: "success", message: `Updated ${updatedUser.email}.` });
+        }
       } else {
         setError(data.error ?? "Failed to update user");
       }
+    } catch {
+      setError("Failed to update user");
     } finally {
       setSavingEdit(false);
     }
   };
 
+  const handleResendInvitation = async (user: User) => {
+    setError(null);
+    setFeedback(null);
+    setResendingId(user.id);
+
+    try {
+      const res = await fetch(`/api/admin/users/${user.id}/resend-invitation`, {
+        method: "POST",
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        setError(data.error ?? "Failed to send setup email");
+        return;
+      }
+
+      setFeedback({
+        tone: "success",
+        message: `Setup email sent to ${user.email}.`,
+      });
+    } catch {
+      setError("Failed to send setup email");
+    } finally {
+      setResendingId(null);
+    }
+  };
+
   const confirmDelete = async (id: string) => {
+    setError(null);
+    setFeedback(null);
     setDeleting(true);
     try {
       const res = await fetch(`/api/admin/users/${id}`, { method: "DELETE" });
       if (res.ok) {
         setList((prev) => prev.filter((u) => u.id !== id));
         setDeleteId(null);
+        setFeedback({ tone: "success", message: "User deleted successfully." });
       } else {
         const data = await res.json();
         setError(data.error ?? "Failed to delete user");
       }
+    } catch {
+      setError("Failed to delete user");
     } finally {
       setDeleting(false);
     }
@@ -131,6 +217,7 @@ export default function AdminUsersPageClient({
     (safePage - 1) * pageSize,
     safePage * pageSize
   );
+  const isEditingSelf = editing?.id === currentUserId;
 
   useEffect(() => {
     if (page !== safePage) setPage(safePage);
@@ -142,6 +229,7 @@ export default function AdminUsersPageClient({
     <div>
       <PageHeader
         title="Users"
+        description="Manage admin and editor access, invite setup, and password-reset readiness."
         actions={
           <Link
             href="/admin/users/new"
@@ -151,6 +239,26 @@ export default function AdminUsersPageClient({
           </Link>
         }
       />
+      {noticeMessage && (
+        <p className="mb-4 rounded border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-300">
+          {noticeMessage}
+        </p>
+      )}
+      {warning && (
+        <p className="mb-4 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
+          {warning}
+        </p>
+      )}
+      {feedback && (
+        <p
+          className={`mb-4 rounded px-3 py-2 text-sm ${feedback.tone === "warning"
+              ? "border border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300"
+              : "border border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-300"
+            }`}
+        >
+          {feedback.message}
+        </p>
+      )}
       {error && (
         <p className="mb-4 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">
           {error}
@@ -210,6 +318,7 @@ export default function AdminUsersPageClient({
             <tr className="text-left text-xs uppercase tracking-wide text-muted">
               <th className="px-4 py-3">Email</th>
               <th className="px-4 py-3">Role</th>
+              <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3">Created</th>
               <th className="px-4 py-3 text-right">Actions</th>
             </tr>
@@ -217,13 +326,13 @@ export default function AdminUsersPageClient({
           <tbody className="divide-y divide-border">
             {list.length === 0 ? (
               <tr>
-                <td className="px-4 py-6 text-sm text-muted" colSpan={4}>
+                <td className="px-4 py-6 text-sm text-muted" colSpan={5}>
                   No users found.
                 </td>
               </tr>
             ) : filteredUsers.length === 0 ? (
               <tr>
-                <td className="px-4 py-6 text-sm text-muted" colSpan={4}>
+                <td className="px-4 py-6 text-sm text-muted" colSpan={5}>
                   No users match the current filters.
                 </td>
               </tr>
@@ -237,11 +346,33 @@ export default function AdminUsersPageClient({
                   <td className="px-4 py-3">
                     <Badge variant={u.role === "admin" ? "info" : "default"}>{u.role}</Badge>
                   </td>
+                  <td className="px-4 py-3">
+                    {u.forcePasswordChange ? (
+                      <div className="space-y-1">
+                        <Badge variant="warning">Password setup required</Badge>
+                        <div className="text-xs text-muted">
+                          User must choose a new password at next sign-in.
+                        </div>
+                      </div>
+                    ) : (
+                      <Badge variant="success">Active</Badge>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-muted">
                     {formatDateAu(u.createdAt)}
                   </td>
                   <td className="px-4 py-3">
-                    <div className="flex justify-end gap-2">
+                    <div className="flex flex-wrap justify-end gap-2">
+                      {u.forcePasswordChange && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleResendInvitation(u)}
+                          disabled={resendingId === u.id}
+                        >
+                          {resendingId === u.id ? "Sending…" : "Resend setup email"}
+                        </Button>
+                      )}
                       <Button variant="secondary" size="sm" onClick={() => startEdit(u)}>
                         Edit
                       </Button>
@@ -320,11 +451,10 @@ export default function AdminUsersPageClient({
                       onClick={() => setPage(p as number)}
                       aria-label={`Page ${p}`}
                       aria-current={p === current ? "page" : undefined}
-                      className={`flex h-8 min-w-[2rem] items-center justify-center rounded-md border px-2 text-sm transition-colors ${
-                        p === current
+                      className={`flex h-8 min-w-[2rem] items-center justify-center rounded-md border px-2 text-sm transition-colors ${p === current
                           ? "border-primary bg-primary text-white"
                           : "border-border bg-surface text-ink hover:bg-page"
-                      }`}
+                        }`}
                     >
                       {p}
                     </button>
@@ -363,33 +493,59 @@ export default function AdminUsersPageClient({
       <Modal open={!!editing} onClose={() => setEditing(null)}>
         <h2 className="mb-4 text-lg font-semibold text-ink">Edit user</h2>
         <form onSubmit={handleEditSubmit} className="flex flex-col gap-4">
-          <Input
-            type="email"
-            placeholder="Email"
-            value={editForm.email}
-            onChange={(e) =>
-              setEditForm((f) => ({ ...f, email: e.target.value }))
-            }
-            required
-          />
-          <Input
-            type="password"
-            placeholder="New password (leave blank to keep)"
-            value={editForm.password}
-            onChange={(e) =>
-              setEditForm((f) => ({ ...f, password: e.target.value }))
-            }
-          />
-          <select
-            className="w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-ink min-h-[44px]"
-            value={editForm.role}
-            onChange={(e) =>
-              setEditForm((f) => ({ ...f, role: e.target.value }))
-            }
-          >
-            <option value="editor">editor</option>
-            <option value="admin">admin</option>
-          </select>
+          <label className="flex flex-col gap-1.5">
+            <span className="text-sm font-medium text-ink">Email</span>
+            <Input
+              type="email"
+              placeholder="Email"
+              value={editForm.email}
+              onChange={(e) =>
+                setEditForm((f) => ({ ...f, email: e.target.value }))
+              }
+              required
+            />
+          </label>
+
+          {isEditingSelf ? (
+            <div className="rounded-lg border border-border bg-page px-3 py-3 text-sm text-muted">
+              To change your own password with current-password verification, use
+              {" "}
+              <Link href="/admin/profile" className="font-medium text-primary hover:underline">
+                My profile
+              </Link>
+              .
+            </div>
+          ) : (
+            <label className="flex flex-col gap-1.5">
+              <span className="text-sm font-medium text-ink">New password</span>
+              <Input
+                type="password"
+                placeholder="Leave blank to keep the current password"
+                value={editForm.password}
+                onChange={(e) =>
+                  setEditForm((f) => ({ ...f, password: e.target.value }))
+                }
+              />
+              <span className="text-sm text-muted">
+                Setting a new password signs the user out, requires a password change on next
+                sign-in, and sends a security notification email when possible.
+              </span>
+            </label>
+          )}
+
+          <label className="flex flex-col gap-1.5">
+            <span className="text-sm font-medium text-ink">Role</span>
+            <select
+              className="w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-ink min-h-[44px]"
+              value={editForm.role}
+              onChange={(e) =>
+                setEditForm((f) => ({ ...f, role: e.target.value }))
+              }
+            >
+              <option value="editor">editor</option>
+              <option value="admin">admin</option>
+            </select>
+          </label>
           <div className="flex justify-end gap-2">
             <Button
               variant="secondary"

@@ -14,16 +14,9 @@ import {
   getLoginLockStatus,
   recordFailedLoginAttempt,
 } from "@/lib/login-security";
+import { getClientIp } from "@/lib/password-reset";
 import { RATE_LIMITS } from "@/lib/rate-limit";
 import { checkRateLimit } from "@/lib/rate-limit-server";
-
-function getClientIp(request: Request): string {
-  const forwardedFor = request.headers.get("x-forwarded-for");
-  if (forwardedFor) {
-    return forwardedFor.split(",")[0]?.trim() || "unknown";
-  }
-  return request.headers.get("x-real-ip") ?? "unknown";
-}
 
 async function POSTHandler(request: Request) {
   const ip = getClientIp(request);
@@ -107,7 +100,10 @@ async function POSTHandler(request: Request) {
   await clearFailedLoginAttempts(email);
 
   const { token, expiresAt } = await createSession(user.id);
-  const response = NextResponse.json({ ok: true });
+  const response = NextResponse.json({
+    ok: true,
+    forcePasswordChange: user.forcePasswordChange,
+  });
   response.cookies.set(getSessionCookieName(), token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
@@ -119,3 +115,4 @@ async function POSTHandler(request: Request) {
 }
 
 export const POST = withApiRouteErrorLogging("/api/auth/login", POSTHandler);
+
