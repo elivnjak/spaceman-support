@@ -18,7 +18,7 @@ const nextConfig: NextConfig = {
       "font-src 'self' data:",
       "style-src 'self' 'unsafe-inline'",
       "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://challenges.cloudflare.com",
-      "script-src-elem 'self' https://challenges.cloudflare.com",
+      "script-src-elem 'self' 'unsafe-inline' https://challenges.cloudflare.com",
       "frame-src 'self' https://challenges.cloudflare.com",
       "connect-src 'self' https:",
       "form-action 'self'",

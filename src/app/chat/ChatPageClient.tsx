@@ -871,8 +871,14 @@ export function ChatPageClient({
         setConnectionInterrupted(true);
       }
     } catch (err) {
-      if (isAuthenticated) {
-        setError(err instanceof Error ? err.message : String(err));
+      const message = err instanceof Error ? err.message : String(err);
+      const isConnectionClosed =
+        message === "Connection closed" || message.includes("Connection closed");
+      if (isConnectionClosed && sessionId) {
+        setConnectionInterrupted(true);
+        setError("");
+      } else if (isAuthenticated) {
+        setError(message);
       } else {
         setError("");
         let recovered = false;
