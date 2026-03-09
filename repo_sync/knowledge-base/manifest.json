@@ -1,0 +1,177 @@
+{
+  "bundleType": "knowledge-base",
+  "version": 1,
+  "exportedAt": "2026-03-09T21:39:54.722Z",
+  "scope": "Versionable knowledge-base content plus storage-backed files used by documents and admin content.",
+  "excludedTables": [
+    "users",
+    "sessions",
+    "password_reset_tokens",
+    "auth_password_reset_attempts",
+    "telegram_config",
+    "support_sessions",
+    "diagnostic_sessions",
+    "audit_logs",
+    "ticket_notes"
+  ],
+  "missingTables": [
+    "maintenance_config",
+    "intent_manifest"
+  ],
+  "tableCounts": {
+    "labels": 35,
+    "supportedModels": 51,
+    "productTypes": 4,
+    "actions": 75,
+    "documents": 43,
+    "docChunks": 181,
+    "playbooks": 31,
+    "playbookProductTypes": 1,
+    "referenceImages": 3,
+    "nameplateGuideImages": 2,
+    "clearanceGuideImages": 2,
+    "nameplateConfig": 1,
+    "clearanceConfig": 1,
+    "maintenanceConfig": 0,
+    "diagnosisModeConfig": 0,
+    "intentManifest": 0,
+    "machineSpecs": 1
+  },
+  "files": [
+    {
+      "relativePath": "clearance_guide_images/c6aa7b83a789_1771745945789.JPG",
+      "sha256": "c6aa7b83a789728a429fe34130756ddb606975553c6151ea473018d223a4b1cd",
+      "size": 219053
+    },
+    {
+      "relativePath": "clearance_guide_images/c7c63c4262fe_1771745932275.JPG",
+      "sha256": "c7c63c4262fe336699d31eb71a3c4b0afef5c56d5a4c834de4b3c2d8a31e9095",
+      "size": 194223
+    },
+    {
+      "relativePath": "documents/1771303405574_6220E.pdf",
+      "sha256": "1e628741b59ba9816c7377ae2aea287ef91f9fa878d3a87d4e87e7e983cda786",
+      "size": 1509437
+    },
+    {
+      "relativePath": "documents/1771326853971_machine-installation-clearance.pdf",
+      "sha256": "a07e414291534da138c2aea9c688e2efb84a7ce9456f9a4c8f9020f7793ae793",
+      "size": 152377
+    },
+    {
+      "relativePath": "documents/1771336881583_Gravity_Fed_Machine_Setup_Guide.pdf",
+      "sha256": "bcf7414e1ac9980a6a6363dd86667322b1c1ef27b2e51b28205367f0251dd378",
+      "size": 32252
+    },
+    {
+      "relativePath": "documents/1771391056211_Manual_Soft Serve 2025.pdf",
+      "sha256": "d3d6fd7698c9aa24d8325df7afa3b840fd69651c0f4fd9d5298b042560f05e09",
+      "size": 8526726
+    },
+    {
+      "relativePath": "documents/1771391071223_Manual_Frozen Drink 2025.pdf",
+      "sha256": "fd3101fec74bbc102c41aa224c9cc8102f191b324a519b23cd23d8f31f491653",
+      "size": 5304703
+    },
+    {
+      "relativePath": "documents/1771392294261_6795-C.pdf",
+      "sha256": "6f4d11df004f4aa44726c82d1bd953bb146e56aef9f0e27aa24243f9eb01bcd3",
+      "size": 1009244
+    },
+    {
+      "relativePath": "documents/1771392311780_6455-C.pdf",
+      "sha256": "ebc771076b3fc26d21a54b7ab70dac70014821434607c5200acd4bf8718c74d0",
+      "size": 1477553
+    },
+    {
+      "relativePath": "documents/1771392358130_6695-C.pdf",
+      "sha256": "42066bd032513a35cba8e890bb6ed6114a99158f952f0bfbd3bd3098f973a758",
+      "size": 1048865
+    },
+    {
+      "relativePath": "documents/1771392376400_6690-CL.pdf",
+      "sha256": "b7a9beb79292b0ba8cbb58c75c2494413acd46f6632daad15e908425983c80a5",
+      "size": 1512714
+    },
+    {
+      "relativePath": "documents/1771392390662_6450-C.pdf",
+      "sha256": "29e093a7efa90375b4d769da46b20a20111afec2befa8d214dca38e56d418920",
+      "size": 951106
+    },
+    {
+      "relativePath": "documents/1771392409729_6338AB-C.pdf",
+      "sha256": "6dbf8bfd14dfc9f77592101fb311dd969655e6f5e67fed749655667f28fcda39",
+      "size": 981864
+    },
+    {
+      "relativePath": "documents/1771392427378_6378AB-C.pdf",
+      "sha256": "64f887d3ff2da69a6da88febc6076fb6f0ca9233dab8a78cd19f837821611029",
+      "size": 960596
+    },
+    {
+      "relativePath": "documents/1771392445210_6225.pdf",
+      "sha256": "563ec996dc67ab3705797063525635562a9b7dfd8d569b823ee0dca45c40db01",
+      "size": 660737
+    },
+    {
+      "relativePath": "documents/1771392445672_6268.pdf",
+      "sha256": "53a6b14a02bca840c8b60897e79f1e9406a477b621808e0e89e2966ad02f3820",
+      "size": 746094
+    },
+    {
+      "relativePath": "documents/1771392467678_6240.pdf",
+      "sha256": "e1bead134f39fab59a031abb1d1ee307a4c99aa7f6b32b7f838ae5acfc26a99d",
+      "size": 1041041
+    },
+    {
+      "relativePath": "documents/1771392480447_6338-C.pdf",
+      "sha256": "15babf6c8cfd74012f29b1bbc9131b90243a2c1b2c5f719ccfe70ce0f866b36e",
+      "size": 982411
+    },
+    {
+      "relativePath": "documents/1771392501866_6368AB-C.pdf",
+      "sha256": "804294448a177139fb7007154c65a544893756361b3fc7fe0e99dd5451f16ed4",
+      "size": 530780
+    },
+    {
+      "relativePath": "documents/1771392515233_6235AB-C.pdf",
+      "sha256": "b851c851b9299f49f88a98152ea2cb4a1a11c9d51649a923aeaacc6a2d00b2f9",
+      "size": 958516
+    },
+    {
+      "relativePath": "documents/1771392528594_6236AB-C.pdf",
+      "sha256": "e70d0ff70affe9eb0a623de54ef516826bba57fd888261faeb5a7d69ac036ece",
+      "size": 936952
+    },
+    {
+      "relativePath": "documents/1771392528897_6234AB-C.pdf",
+      "sha256": "39e50017dfb3fd5343deed956b289f8a5a927d25e465a2613a5ac0e104d27978",
+      "size": 1006035
+    },
+    {
+      "relativePath": "nameplate_guide_images/975647eed937_1771666740626.JPG",
+      "sha256": "975647eed93780e8aa38f581c0a5ead76cee716e3e579c29fe73c8ec29546220",
+      "size": 373189
+    },
+    {
+      "relativePath": "nameplate_guide_images/c6aa7b83a789_1771666747689.JPG",
+      "sha256": "c6aa7b83a789728a429fe34130756ddb606975553c6151ea473018d223a4b1cd",
+      "size": 219053
+    },
+    {
+      "relativePath": "reference_images/too_runny/12a4416de30a_1771124598367.jpg",
+      "sha256": "12a4416de30a472bcd4f477b567f9f736d2440d3ddc40e74778bad09bf1a5611",
+      "size": 34233
+    },
+    {
+      "relativePath": "reference_images/too_runny/4c1610a2fe9d_1771124614222.jpg",
+      "sha256": "4c1610a2fe9d291b2a6c83bbe2994a1179e6085fbbbdefdee2a74c85bd7c1f5c",
+      "size": 11213
+    },
+    {
+      "relativePath": "reference_images/too_runny/67c2427eb743_1771124469739.png",
+      "sha256": "67c2427eb743e09392d45988f1aca4e2541858ad4b3d5f9c1c1e99d6d42f90bd",
+      "size": 29280
+    }
+  ]
+}
