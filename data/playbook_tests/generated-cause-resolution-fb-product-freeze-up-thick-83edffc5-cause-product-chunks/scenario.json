@@ -49,12 +49,12 @@
         "images": []
       },
       "ev_mix_level_ok": {
-        "user": "Unknown",
+        "user": "Near minimum line",
         "inputSource": "structured",
         "images": []
       },
       "check_mix_level": {
-        "user": "Unknown",
+        "user": "Near minimum line",
         "inputSource": "structured",
         "images": []
       },

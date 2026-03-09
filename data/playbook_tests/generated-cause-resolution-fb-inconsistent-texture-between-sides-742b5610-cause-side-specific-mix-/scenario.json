@@ -45,12 +45,12 @@
         "imageLabel": "Inconsistent texture between sides/bowls\nDisplay shows the affected side in the reported state with no extra details.\nTarget cause: Recipe or brix differs between sides, causing one side to freeze differently."
       },
       "ev_mix_level_comparison": {
-        "user": "Unknown",
+        "user": "One side lower or near low-mix",
         "inputSource": "structured",
         "images": []
       },
       "compare_mix_levels_between_sides": {
-        "user": "Unknown",
+        "user": "One side lower or near low-mix",
         "inputSource": "structured",
         "images": []
       },
@@ -65,12 +65,12 @@
         "images": []
       },
       "ev_airflow_load_comparison": {
-        "user": "Unknown",
+        "user": "Conditions look the same on both sides",
         "inputSource": "structured",
         "images": []
       },
       "compare_airflow_or_load_between_sides": {
-        "user": "Unknown",
+        "user": "Conditions look the same on both sides",
         "inputSource": "structured",
         "images": []
       }

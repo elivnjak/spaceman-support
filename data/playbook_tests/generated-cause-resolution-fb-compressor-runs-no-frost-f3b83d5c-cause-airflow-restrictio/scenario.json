@@ -23,12 +23,12 @@
         "images": []
       },
       "ev_compressor_fan_sound": {
-        "user": "Unsure",
+        "user": "Only one running",
         "inputSource": "structured",
         "images": []
       },
       "listen_for_compressor_fan": {
-        "user": "Unsure",
+        "user": "Only one running",
         "inputSource": "structured",
         "images": []
       },

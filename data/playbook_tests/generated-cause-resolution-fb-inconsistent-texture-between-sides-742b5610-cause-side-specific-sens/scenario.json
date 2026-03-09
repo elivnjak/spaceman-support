@@ -65,12 +65,12 @@
         "images": []
       },
       "ev_airflow_load_comparison": {
-        "user": "Unknown",
+        "user": "Conditions look the same on both sides",
         "inputSource": "structured",
         "images": []
       },
       "compare_airflow_or_load_between_sides": {
-        "user": "Unknown",
+        "user": "Conditions look the same on both sides",
         "inputSource": "structured",
         "images": []
       }

@@ -29,17 +29,17 @@
         "imageLabel": "Soft serve too airy/foamy (excess overrun)\nMix level too low causing air ingestion / sputtering.\nPhoto of product showing bubbles/foam."
       },
       "ev_air_tube_orientation": {
-        "user": "Unsure",
+        "user": "Incorrect orientation",
         "inputSource": "structured",
         "images": []
       },
       "inspect_air_tube_orientation": {
-        "user": "Unsure",
+        "user": "Incorrect orientation",
         "inputSource": "structured",
         "images": []
       },
       "ev_star_cap_installed": {
-        "user": "Unsure",
+        "user": "Incorrect, loose, or damaged",
         "inputSource": "structured",
         "images": []
       },

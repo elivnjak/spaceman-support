@@ -69,12 +69,12 @@
         "images": []
       },
       "ev_thick_product": {
-        "user": "Not sure",
+        "user": "No",
         "inputSource": "structured",
         "images": []
       },
       "confirm_thick_product_before_stop": {
-        "user": "Not sure",
+        "user": "No",
         "inputSource": "structured",
         "images": []
       }

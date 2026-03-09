@@ -292,6 +292,23 @@ function buildEvidenceText(item: EvidenceItem): string {
   return `${item.id} ${item.actionId ?? ""} ${item.description}`;
 }
 
+function isUnknownOptionForItem(item: EvidenceItem, option: string): boolean {
+  const normalized = normalizeOptionToken(option);
+  const configuredUnknowns = item.valueDefinition?.unknownValues ?? [];
+  const builtInUnknowns = new Set([
+    "unknown",
+    "unsure",
+    "not sure",
+    "skipped",
+    "unable to complete safely",
+    "unable to perform safely",
+  ]);
+  if (builtInUnknowns.has(normalized)) return true;
+  return configuredUnknowns.some(
+    (candidate) => normalizeOptionToken(candidate) === normalized
+  );
+}
+
 function matchesNormalizedPhrase(normalizedText: string, phrase: string): boolean {
   const normalizedPhrase = normalizeFreeform(phrase).replace(/\s+/g, "\\s+");
   return new RegExp(`\\b${normalizedPhrase}\\b`).test(normalizedText);
@@ -611,6 +628,7 @@ function chooseBestStructuredOptionAnswer(input: {
 
   const scored = input.options.map((option) => {
     let score = 0;
+    const unknownOption = isUnknownOptionForItem(input.item, option);
     const matchedTargetSupport = targetSupportRules.filter((rule) =>
       matchesOptionRule(option, rule)
     );
@@ -637,6 +655,13 @@ function chooseBestStructuredOptionAnswer(input: {
       score -= 120;
     }
 
+    if (unknownOption) {
+      score -= 35;
+      if (matchedTargetSupport.length > 0) {
+        score -= 20;
+      }
+    }
+
     for (const cause of input.competingCauses) {
       const supportRules = (cause.supportRules ?? []).filter(
         (rule) => rule.evidenceId === input.item.id
@@ -649,6 +674,9 @@ function chooseBestStructuredOptionAnswer(input: {
           ? matchedSupport.length > 0
           : matchedSupport.length === supportRules.length;
       if (!competitorSupported) continue;
+      if (cause.likelihood === "low") {
+        score -= 60;
+      }
       score -= likelihoodPenalty(cause.likelihood);
       if (isOperatorFixableCause(cause)) {
         score -= 15;
@@ -1331,6 +1359,29 @@ function inferEnumOptionAnswer(
       );
     }
     return findMatchingOption(options, "outlet on and plug secure");
+  }
+
+  if (
+    findMatchingOption(options, "visible bend or damage") ||
+    findMatchingOption(options, "stiff but no visible damage")
+  ) {
+    return causeMentionsAny(targetCause, [
+      "mechanical damage",
+      "damaged valve",
+      "damaged linkage",
+      "bent",
+      "broken",
+      "linkage",
+      "mechanical",
+    ])
+      ? (
+          findMatchingOption(options, "visible bend or damage") ??
+          findMatchingOption(options, "stiff but no visible damage")
+        )
+      : (
+          findMatchingOption(options, "stiff but no visible damage") ??
+          findMatchingOption(options, "visible bend or damage")
+        );
   }
 
   return null;

@@ -59,12 +59,12 @@
         "images": []
       },
       "ev_abnormal_noise": {
-        "user": "Unknown",
+        "user": "No strange noises",
         "inputSource": "structured",
         "images": []
       },
       "listen_auger_drive_noise": {
-        "user": "Unknown",
+        "user": "No strange noises",
         "inputSource": "structured",
         "images": []
       },

@@ -54,6 +54,66 @@ function normalizeAnswerToken(value: string): string {
     .trim();
 }
 
+function findSemanticFallbackOption(
+  answer: string,
+  options: string[]
+): string | null {
+  const normalizedAnswer = normalizeAnswerToken(answer);
+  const normalizedOptions = options.map((option) => ({
+    original: option,
+    normalized: normalizeAnswerToken(option),
+  }));
+
+  const pickFirst = (patterns: RegExp[]): string | null => {
+    for (const pattern of patterns) {
+      const matched = normalizedOptions.find((option) => pattern.test(option.normalized));
+      if (matched) return matched.original;
+    }
+    return null;
+  };
+
+  const soundsUnresolved =
+    normalizedAnswer.includes("still matches the issue") ||
+    normalizedAnswer.includes("still having issues") ||
+    normalizedAnswer.includes("issue persists") ||
+    normalizedAnswer.includes("still happening") ||
+    normalizedAnswer.includes("not fixed") ||
+    normalizedAnswer.includes("continue troubleshooting") ||
+    normalizedAnswer.includes("did not resolve");
+
+  if (soundsUnresolved) {
+    return pickFirst([
+      /continue troubleshooting/,
+      /issue persists/,
+      /attempted but issue persists/,
+      /not fixed/,
+      /^no$/,
+    ]);
+  }
+
+  const soundsResolved =
+    normalizedAnswer.includes("resolved") ||
+    normalizedAnswer.includes("fixed") ||
+    normalizedAnswer.includes("working now") ||
+    normalizedAnswer.includes("looks good now");
+
+  if (soundsResolved) {
+    return pickFirst([/^yes$/, /fixed/, /resolved/]);
+  }
+
+  const soundsLikeEscalation =
+    normalizedAnswer.includes("connect me") ||
+    normalizedAnswer.includes("human") ||
+    normalizedAnswer.includes("technician") ||
+    normalizedAnswer.includes("escalate");
+
+  if (soundsLikeEscalation) {
+    return pickFirst([/connect me/, /technician/, /escalat/, /^yes$/]);
+  }
+
+  return null;
+}
+
 function mapNumericValueToEnumOption(
   numericValue: number,
   options: string[]
@@ -110,6 +170,9 @@ export function coerceAutoAnswerForRequest(
       return normalizedOption.includes(normalized) || normalized.includes(normalizedOption);
     });
     if (loose) return loose;
+
+    const semanticFallback = findSemanticFallbackOption(trimmed, options);
+    if (semanticFallback) return semanticFallback;
 
     throw new Error(
       `Auto-answer "${trimmed}" does not match allowed options for request ${request.id}: ${options.join(", ")}`

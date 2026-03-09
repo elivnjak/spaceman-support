@@ -49,12 +49,12 @@
         "images": []
       },
       "ev_last_clean": {
-        "user": "Unknown",
+        "user": "Within last 72 hours",
         "inputSource": "structured",
         "images": []
       },
       "confirm_last_full_clean": {
-        "user": "Unknown",
+        "user": "Within last 72 hours",
         "inputSource": "structured",
         "images": []
       }

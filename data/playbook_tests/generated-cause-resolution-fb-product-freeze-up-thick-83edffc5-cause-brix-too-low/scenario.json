@@ -49,22 +49,22 @@
         "images": []
       },
       "ev_mix_level_ok": {
-        "user": "Unknown",
+        "user": "Near minimum line",
         "inputSource": "structured",
         "images": []
       },
       "check_mix_level": {
-        "user": "Unknown",
+        "user": "Near minimum line",
         "inputSource": "structured",
         "images": []
       },
       "ev_chunks": {
-        "user": "No",
+        "user": "Yes",
         "inputSource": "structured",
         "images": []
       },
       "confirm_no_frozen_chunks_added": {
-        "user": "No",
+        "user": "Yes",
         "inputSource": "structured",
         "images": []
       },

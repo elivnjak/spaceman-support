@@ -59,12 +59,12 @@
         "images": []
       },
       "ev_chunks": {
-        "user": "No",
+        "user": "Yes",
         "inputSource": "structured",
         "images": []
       },
       "confirm_no_frozen_chunks_added": {
-        "user": "No",
+        "user": "Yes",
         "inputSource": "structured",
         "images": []
       },

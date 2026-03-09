@@ -75,12 +75,12 @@
         "images": []
       },
       "ev_airflow_clearance": {
-        "user": "Partially obstructed or tight clearance",
+        "user": "Clear with adequate space",
         "inputSource": "structured",
         "images": []
       },
       "check_airflow_clearance": {
-        "user": "Partially obstructed or tight clearance",
+        "user": "Clear with adequate space",
         "inputSource": "structured",
         "images": []
       },

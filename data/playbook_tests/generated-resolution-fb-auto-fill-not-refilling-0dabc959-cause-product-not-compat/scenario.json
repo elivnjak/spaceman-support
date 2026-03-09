@@ -23,12 +23,12 @@
         "images": []
       },
       "ev_external_pump_state": {
-        "user": "Unknown",
+        "user": "Running and powered",
         "inputSource": "structured",
         "images": []
       },
       "inspect_external_pump_state": {
-        "user": "Unknown",
+        "user": "Running and powered",
         "inputSource": "structured",
         "images": []
       },

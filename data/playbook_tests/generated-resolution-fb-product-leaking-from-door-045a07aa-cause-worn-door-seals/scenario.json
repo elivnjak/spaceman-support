@@ -39,12 +39,12 @@
         "images": []
       },
       "ev_lubrication": {
-        "user": "Unable to complete safely",
+        "user": "Completed",
         "inputSource": "structured",
         "images": []
       },
       "lubricate_o_rings_gaskets": {
-        "user": "Unable to complete safely",
+        "user": "Completed",
         "inputSource": "structured",
         "images": []
       },

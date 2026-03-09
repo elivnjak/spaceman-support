@@ -73,3 +73,35 @@ test("coerceAutoAnswerForRequest maps numeric month answers onto enum age bucket
 
   assert.equal(normalized, "Less than 6 months ago");
 });
+
+test("coerceAutoAnswerForRequest maps generic unresolved fallback text onto live enum options", () => {
+  const normalized = coerceAutoAnswerForRequest(
+    "I checked that and it still matches the issue on the machine.",
+    {
+      id: "_escalation_offer",
+      type: "question",
+      expectedInput: {
+        type: "enum",
+        options: ["Yes, connect me", "No, continue troubleshooting"],
+      },
+    }
+  );
+
+  assert.equal(normalized, "No, continue troubleshooting");
+});
+
+test("coerceAutoAnswerForRequest maps generic unresolved fallback text onto persists-style options", () => {
+  const normalized = coerceAutoAnswerForRequest(
+    "I checked that and it still matches the issue on the machine.",
+    {
+      id: "ev_power_cycle",
+      type: "question",
+      expectedInput: {
+        type: "enum",
+        options: ["Completed", "Unable to perform safely", "Attempted but issue persists"],
+      },
+    }
+  );
+
+  assert.equal(normalized, "Attempted but issue persists");
+});

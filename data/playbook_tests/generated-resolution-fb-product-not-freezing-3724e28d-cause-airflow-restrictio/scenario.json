@@ -65,12 +65,12 @@
         "images": []
       },
       "ev_recipe_ratio": {
-        "user": "Unsure of ratio",
+        "user": "Incorrect ratio",
         "inputSource": "structured",
         "images": []
       },
       "check_product_recipe_ratio": {
-        "user": "Unsure of ratio",
+        "user": "Incorrect ratio",
         "inputSource": "structured",
         "images": []
       },

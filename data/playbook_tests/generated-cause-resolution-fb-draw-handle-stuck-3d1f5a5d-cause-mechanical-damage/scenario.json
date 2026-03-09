@@ -44,22 +44,22 @@
         "images": []
       },
       "ev_last_clean": {
-        "user": "Unknown",
+        "user": "Within last 72 hours",
         "inputSource": "structured",
         "images": []
       },
       "confirm_last_full_clean": {
-        "user": "Unknown",
+        "user": "Within last 72 hours",
         "inputSource": "structured",
         "images": []
       },
       "ev_lube_seals": {
-        "user": "Unsure",
+        "user": "Lubricated and moving freely",
         "inputSource": "structured",
         "images": []
       },
       "inspect_draw_valve_seal_condition": {
-        "user": "Unsure",
+        "user": "Lubricated and moving freely",
         "inputSource": "structured",
         "images": []
       }

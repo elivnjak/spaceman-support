@@ -39,12 +39,12 @@
         "images": []
       },
       "ev_leak_started_after_cleaning": {
-        "user": "Unknown",
+        "user": "Yes",
         "inputSource": "structured",
         "images": []
       },
       "confirm_leak_started_after_cleaning": {
-        "user": "Unknown",
+        "user": "Yes",
         "inputSource": "structured",
         "images": []
       },

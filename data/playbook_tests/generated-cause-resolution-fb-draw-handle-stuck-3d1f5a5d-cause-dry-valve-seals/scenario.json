@@ -29,12 +29,12 @@
         "imageLabel": "Draw handle stuck / hard to pull\nDry/dirty valve seals causing friction.\nPhoto of product thickness."
       },
       "ev_handle_photo": {
-        "user": "Unsure",
+        "user": "Stiff but no visible damage",
         "inputSource": "structured",
         "images": []
       },
       "inspect_handle_movement_condition": {
-        "user": "Unsure",
+        "user": "Stiff but no visible damage",
         "inputSource": "structured",
         "images": []
       },

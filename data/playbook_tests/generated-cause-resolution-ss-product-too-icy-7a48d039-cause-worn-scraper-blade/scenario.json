@@ -29,12 +29,12 @@
         "imageLabel": "Soft serve icy / too hard\nWorn scraper blades not scraping cylinder wall effectively, allowing crystals to grow.\nPhoto of the product showing icy/grainy texture."
       },
       "ev_idle_time": {
-        "user": "No",
+        "user": "Yes",
         "inputSource": "structured",
         "images": []
       },
       "confirm_idle_time": {
-        "user": "No",
+        "user": "Yes",
         "inputSource": "structured",
         "images": []
       },
@@ -74,12 +74,12 @@
         "images": []
       },
       "ev_mix_level_ok": {
-        "user": "Unknown",
+        "user": "Near minimum line",
         "inputSource": "structured",
         "images": []
       },
       "check_mix_level": {
-        "user": "Unknown",
+        "user": "Near minimum line",
         "inputSource": "structured",
         "images": []
       }

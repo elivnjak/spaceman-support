@@ -55,12 +55,12 @@
         "images": []
       },
       "ev_high_volume": {
-        "user": "No",
+        "user": "Yes",
         "inputSource": "structured",
         "images": []
       },
       "confirm_high_volume_serving": {
-        "user": "No",
+        "user": "Yes",
         "inputSource": "structured",
         "images": []
       },

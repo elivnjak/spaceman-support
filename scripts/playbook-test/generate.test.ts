@@ -213,6 +213,65 @@ test("cause-specific blueprint uses exact enum option values for action-backed e
   assert.equal(blueprint?.answers.inspect_scraper_blades?.user, "Clearly damaged/worn");
 });
 
+test("cause-specific blueprint prefers non-damage handle option for non-damage causes", () => {
+  const blueprint = buildFallbackResolutionBlueprintForCause(
+    {
+      id: "pb-handle-1",
+      labelId: "fb_draw_handle_stuck",
+      title: "Draw handle stuck / hard to pull",
+      enabled: true,
+      schemaVersion: 2,
+      symptoms: [{ id: "sym1", description: "Handle hard to pull." }],
+      evidenceChecklist: [
+        {
+          id: "ev_handle_photo",
+          type: "observation",
+          actionId: "inspect_handle_movement_condition",
+          required: false,
+          description: "Handle movement and visible damage condition.",
+          valueDefinition: {
+            kind: "enum",
+            options: ["Visible bend or damage", "Stiff but no visible damage", "Unsure"],
+            unknownValues: ["Unsure"],
+          },
+        },
+      ],
+      candidateCauses: [
+        {
+          id: "cause_product_overfrozen",
+          cause: "Product over-frozen making dispense difficult.",
+          likelihood: "high",
+          rulingEvidence: ["ev_handle_photo"],
+          supportMode: "all",
+          supportRules: [{ evidenceId: "ev_handle_photo", operator: "equals", values: ["Stiff but no visible damage"] }],
+        },
+        {
+          id: "cause_mechanical_damage",
+          cause: "Bent/sticky linkage or damaged valve components (technician).",
+          likelihood: "medium",
+          rulingEvidence: ["ev_handle_photo"],
+          supportMode: "all",
+          supportRules: [{ evidenceId: "ev_handle_photo", operator: "equals", values: ["Visible bend or damage"] }],
+        },
+      ],
+      escalationTriggers: [],
+      steps: [],
+      updatedAt: new Date(),
+    },
+    {
+      id: "cause_product_overfrozen",
+      cause: "Product over-frozen making dispense difficult.",
+      likelihood: "high",
+      rulingEvidence: ["ev_handle_photo"],
+      supportMode: "all",
+      supportRules: [{ evidenceId: "ev_handle_photo", operator: "equals", values: ["Stiff but no visible damage"] }],
+    }
+  );
+
+  assert.equal(blueprint?.answers.ev_handle_photo?.user, "Stiff but no visible damage");
+  assert.equal(blueprint?.answers.inspect_handle_movement_condition?.user, "Stiff but no visible damage");
+});
+
 test("legacy single-value boolean support rules still generate the matching boolean answer", () => {
   const blueprint = buildFallbackResolutionBlueprintForCause(
     {
@@ -285,6 +344,245 @@ test("legacy single-value boolean support rules still generate the matching bool
   assert.ok(blueprint);
   assert.equal(blueprint?.answers.ev_confirm_no_chunks?.user, "No");
   assert.equal(blueprint?.answers.confirm_no_frozen_chunks_added?.user, "No");
+});
+
+test("structured enum generation prefers concrete non-unknown answers over unsure for not-equals support", () => {
+  const blueprint = buildFallbackResolutionBlueprintForCause(
+    {
+      id: "pb-low-mix-sensor-fault",
+      labelId: "fb_low_mix_light_with_full_hopper",
+      title: "Low-mix light with hopper full",
+      enabled: true,
+      schemaVersion: 2,
+      symptoms: [{ id: "sym1", description: "Low-mix light on even when hopper is full." }],
+      evidenceChecklist: [
+        {
+          id: "ev_clean_sensor_area",
+          type: "confirmation",
+          required: false,
+          description: "Sensor area cleaned during last clean.",
+          valueDefinition: {
+            kind: "enum",
+            options: ["Yes", "No", "Unsure"],
+            unknownValues: ["Unsure"],
+          },
+        },
+        {
+          id: "ev_delay_observed",
+          type: "confirmation",
+          required: false,
+          description: "Observed short freeze delay before compressor stops.",
+          valueDefinition: {
+            kind: "enum",
+            options: ["Yes", "No", "Unsure"],
+            unknownValues: ["Unsure"],
+          },
+        },
+      ],
+      candidateCauses: [
+        {
+          id: "cause_sensor_fault",
+          cause: "Sensor fault",
+          likelihood: "medium",
+          rulingEvidence: ["ev_clean_sensor_area"],
+          supportMode: "all",
+          supportRules: [
+            {
+              evidenceId: "ev_clean_sensor_area",
+              operator: "not_equals",
+              values: ["Yes"],
+            },
+          ],
+          excludeRules: [
+            {
+              evidenceId: "ev_delay_observed",
+              operator: "equals",
+              values: ["Yes"],
+            },
+          ],
+        },
+        {
+          id: "cause_sensor_misaligned",
+          cause: "Sensor misaligned",
+          likelihood: "high",
+          rulingEvidence: ["ev_clean_sensor_area", "ev_delay_observed"],
+          supportMode: "all",
+          supportRules: [
+            {
+              evidenceId: "ev_clean_sensor_area",
+              operator: "equals",
+              values: ["Yes"],
+            },
+            {
+              evidenceId: "ev_delay_observed",
+              operator: "equals",
+              values: ["Yes"],
+            },
+          ],
+        },
+      ],
+      escalationTriggers: [],
+      steps: [],
+      updatedAt: new Date(),
+    },
+    {
+      id: "cause_sensor_fault",
+      cause: "Sensor fault",
+      likelihood: "medium",
+      rulingEvidence: ["ev_clean_sensor_area"],
+      supportMode: "all",
+      supportRules: [
+        {
+          evidenceId: "ev_clean_sensor_area",
+          operator: "not_equals",
+          values: ["Yes"],
+        },
+      ],
+      excludeRules: [
+        {
+          evidenceId: "ev_delay_observed",
+          operator: "equals",
+          values: ["Yes"],
+        },
+      ],
+    }
+  );
+
+  assert.ok(blueprint);
+  assert.equal(blueprint?.answers.ev_clean_sensor_area?.user, "No");
+});
+
+test("structured enum generation prefers concrete non-excluded answers over unknowns", () => {
+  const blueprint = buildFallbackResolutionBlueprintForCause(
+    {
+      id: "pb-warm-product",
+      labelId: "fb_product_not_freezing",
+      title: "Frozen beverage not freezing",
+      enabled: true,
+      schemaVersion: 2,
+      symptoms: [{ id: "sym1", description: "Product remains liquid/soupy." }],
+      evidenceChecklist: [
+        {
+          id: "ev_recipe_ratio",
+          type: "observation",
+          required: false,
+          description: "Recipe ratio confirmed.",
+          valueDefinition: {
+            kind: "enum",
+            options: ["Correct ratio", "Unsure of ratio", "Incorrect ratio"],
+            unknownValues: ["Unsure of ratio"],
+          },
+        },
+      ],
+      candidateCauses: [
+        {
+          id: "cause_warm_product_added",
+          cause: "Warm product added",
+          likelihood: "medium",
+          rulingEvidence: ["ev_recipe_ratio"],
+          supportMode: "all",
+          supportRules: [
+            {
+              evidenceId: "ev_recipe_ratio",
+              operator: "not_equals",
+              values: ["Incorrect ratio"],
+            },
+          ],
+        },
+        {
+          id: "cause_refrigeration_fault",
+          cause: "Refrigeration fault",
+          likelihood: "medium",
+          rulingEvidence: ["ev_recipe_ratio"],
+          supportMode: "all",
+          supportRules: [
+            {
+              evidenceId: "ev_recipe_ratio",
+              operator: "equals",
+              values: ["Correct ratio"],
+            },
+          ],
+        },
+      ],
+      escalationTriggers: [],
+      steps: [],
+      updatedAt: new Date(),
+    },
+    {
+      id: "cause_warm_product_added",
+      cause: "Warm product added",
+      likelihood: "medium",
+      rulingEvidence: ["ev_recipe_ratio"],
+      supportMode: "all",
+      supportRules: [
+        {
+          evidenceId: "ev_recipe_ratio",
+          operator: "not_equals",
+          values: ["Incorrect ratio"],
+        },
+      ],
+    }
+  );
+
+  assert.ok(blueprint);
+  assert.equal(blueprint?.answers.ev_recipe_ratio?.user, "Correct ratio");
+});
+
+test("structured enum generation prefers a less ambiguous target-supported option over a competing concrete option", () => {
+  const blueprint = buildFallbackResolutionBlueprintForCause(
+    {
+      id: "pb-sensor-1",
+      labelId: "fb_low_mix_light_with_full_hopper",
+      title: "Low-mix light with hopper full",
+      enabled: true,
+      schemaVersion: 2,
+      symptoms: [{ id: "sym1", description: "Low mix light with full hopper." }],
+      evidenceChecklist: [
+        {
+          id: "ev_clean_sensor_area",
+          type: "confirmation",
+          required: false,
+          description: "Sensor area cleaned during last clean.",
+          valueDefinition: {
+            kind: "enum",
+            options: ["Yes", "No", "Unsure"],
+            unknownValues: ["Unsure"],
+          },
+        },
+      ],
+      candidateCauses: [
+        {
+          id: "cause_sensor_fault",
+          cause: "The low-mix sensor itself is faulty or contaminated.",
+          likelihood: "medium",
+          rulingEvidence: ["ev_clean_sensor_area"],
+          supportMode: "all",
+          supportRules: [{ evidenceId: "ev_clean_sensor_area", operator: "not_equals", values: ["Yes"] }],
+        },
+        {
+          id: "cause_wiring_fault",
+          cause: "The low-mix sensor wiring or connector is intermittently faulty.",
+          likelihood: "low",
+          rulingEvidence: ["ev_clean_sensor_area"],
+          supportMode: "all",
+          supportRules: [{ evidenceId: "ev_clean_sensor_area", operator: "equals", values: ["No"] }],
+        },
+      ],
+      escalationTriggers: [],
+      steps: [],
+      updatedAt: new Date(),
+    },
+    {
+      id: "cause_sensor_fault",
+      cause: "The low-mix sensor itself is faulty or contaminated.",
+      likelihood: "medium",
+      rulingEvidence: ["ev_clean_sensor_area"],
+      supportMode: "all",
+      supportRules: [{ evidenceId: "ev_clean_sensor_area", operator: "not_equals", values: ["Yes"] }],
+    }
+  );
+
+  assert.equal(blueprint?.answers.ev_clean_sensor_area?.user, "Unsure");
 });
 
 test("cause-specific blueprint keeps numeric support answers away from overlapping boundaries", () => {

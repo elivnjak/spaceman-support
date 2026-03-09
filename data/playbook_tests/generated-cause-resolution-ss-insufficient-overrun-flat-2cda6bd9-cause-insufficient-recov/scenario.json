@@ -29,22 +29,22 @@
         "imageLabel": "Soft serve not fluffy (insufficient overrun)\nProduct looks runny, soft, and not setting properly.\nTarget cause: Not allowing machine to recover between pulls results in soft/flat product."
       },
       "ev_air_tube_orientation": {
-        "user": "Unsure",
+        "user": "Correct orientation",
         "inputSource": "structured",
         "images": []
       },
       "inspect_air_tube_orientation": {
-        "user": "Unsure",
+        "user": "Correct orientation",
         "inputSource": "structured",
         "images": []
       },
       "ev_air_tube_clean": {
-        "user": "Unsure",
+        "user": "Clear and correctly assembled",
         "inputSource": "structured",
         "images": []
       },
       "inspect_air_system_condition": {
-        "user": "Unsure",
+        "user": "Clear and correctly assembled",
         "inputSource": "structured",
         "images": []
       },

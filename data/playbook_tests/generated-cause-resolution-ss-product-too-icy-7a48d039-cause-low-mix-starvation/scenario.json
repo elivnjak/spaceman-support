@@ -29,12 +29,12 @@
         "imageLabel": "Soft serve icy / too hard\nLow mix/starved cylinder leading to over-freezing and ice crystals.\nPhoto of the product showing icy/grainy texture."
       },
       "ev_idle_time": {
-        "user": "No",
+        "user": "Yes",
         "inputSource": "structured",
         "images": []
       },
       "confirm_idle_time": {
-        "user": "No",
+        "user": "Yes",
         "inputSource": "structured",
         "images": []
       },
@@ -44,12 +44,12 @@
         "images": []
       },
       "ev_scraper_blades_age": {
-        "user": "Unknown",
+        "user": "Need replacement soon",
         "inputSource": "structured",
         "images": []
       },
       "confirm_scraper_blades_age": {
-        "user": "Unknown",
+        "user": "Need replacement soon",
         "inputSource": "structured",
         "images": []
       },

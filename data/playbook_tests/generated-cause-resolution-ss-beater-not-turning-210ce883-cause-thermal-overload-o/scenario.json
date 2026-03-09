@@ -59,22 +59,22 @@
         "images": []
       },
       "ev_recent_freeze_up": {
-        "user": "Not sure",
+        "user": "Yes",
         "inputSource": "structured",
         "images": []
       },
       "confirm_recent_freeze_up_event": {
-        "user": "Not sure",
+        "user": "Yes",
         "inputSource": "structured",
         "images": []
       },
       "ev_breaker": {
-        "user": "Unknown",
+        "user": "Breaker or RCD tripped",
         "inputSource": "structured",
         "images": []
       },
       "confirm_breaker_tripped": {
-        "user": "Unknown",
+        "user": "Breaker or RCD tripped",
         "inputSource": "structured",
         "images": []
       }
