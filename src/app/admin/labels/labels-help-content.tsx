@@ -28,13 +28,16 @@ export const LABELS_FORM_HELP: ReactNode = (
       <li>
         <strong>Description</strong> (optional) &mdash; a longer explanation of
         what this label covers. Helps other admin users understand the
-        category&apos;s scope when browsing the list.
+        category&apos;s scope when browsing the list. Use it for scope, not for
+        machine-specific thresholds or cause logic.
       </li>
     </ul>
     <p className="mt-2 text-sm">
       <strong>Tip:</strong> Each label can have one or more playbooks linked to
       it. If different product types need different diagnostic paths for the same
-      issue, create one label and multiple playbooks scoped by product type.
+      issue, create one label and multiple playbooks scoped by product type. In
+      the SaaS-grade model, labels stay stable while playbooks and actions carry
+      the business logic.
     </p>
   </>
 );
@@ -60,7 +63,8 @@ export function LabelsGuideIntro() {
         Labels sit at the top of the diagnostic hierarchy. The triage step
         picks <strong>one label</strong> based on the user&apos;s initial
         description, and that choice determines which playbook runs for the rest
-        of the conversation.
+        of the conversation. Labels should remain durable taxonomy identifiers
+        even as playbook logic evolves.
       </p>
     </section>
   );
@@ -100,6 +104,11 @@ export function LabelsGuideRole() {
           a different label, re-triaging the session.
         </li>
       </ol>
+      <p className="mt-3 text-sm text-ink/80">
+        Labels should describe <em>what kind of issue this is</em>, not the
+        detailed business logic for diagnosing it. Put thresholds, evidence
+        semantics, and resolution rules in playbooks and actions instead.
+      </p>
     </section>
   );
 }
@@ -208,6 +217,11 @@ export function LabelsGuideTips() {
           <strong>Use clear display names.</strong> They appear in the triage
           prompt and in admin &mdash; both the LLM and your team need to
           understand them at a glance.
+        </li>
+        <li>
+          <strong>Keep labels generic enough to scale.</strong> A label should
+          survive new models, industries, or tenants. Product-specific cause
+          logic belongs in the linked playbooks.
         </li>
         <li>
           <strong>Don&apos;t over-split.</strong> Create labels for genuinely

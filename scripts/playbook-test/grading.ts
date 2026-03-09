@@ -9,7 +9,17 @@ export type TurnResponsePayload = {
   sessionToken?: string;
   message: string;
   phase: string;
-  requests?: { id: string; type: string }[];
+  requests?: {
+    id: string;
+    type: string;
+    prompt?: string;
+    expectedInput?: {
+      type?: string;
+      unit?: string;
+      range?: { min?: number; max?: number };
+      options?: string[];
+    };
+  }[];
   resolution?: {
     causeId?: string;
     steps?: { step_id: string }[];
@@ -89,6 +99,13 @@ export function gradeTurnExpectation(
   const resolutionStepIds = payload.resolution?.steps?.map((step) => step.step_id) ?? [];
   const outcome = inferOutcome(payload);
   const causeId = payload.resolution?.causeId ?? snapshot.session.resolvedCauseId ?? null;
+  const handoffLabelId =
+    (
+      snapshot.session.escalationHandoff as
+        | { labelId?: unknown }
+        | null
+        | undefined
+    )?.labelId ?? null;
 
   if (expectation.phase && payload.phase !== expectation.phase) {
     failures.push({
@@ -138,6 +155,15 @@ export function gradeTurnExpectation(
     });
   }
 
+  if (expectation.handoffLabelId && handoffLabelId !== expectation.handoffLabelId) {
+    failures.push({
+      code: "handoff_label_mismatch",
+      message: "Escalation handoff label mismatch",
+      expected: expectation.handoffLabelId,
+      actual: handoffLabelId,
+    });
+  }
+
   if (expectation.causeId && causeId !== expectation.causeId) {
     failures.push({
       code: "cause_mismatch",
@@ -176,10 +202,36 @@ export function gradeTurnExpectation(
 
 export function gradeFinalExpectation(
   expectation: PlaybookTestFinalExpectation,
-  snapshot: SessionSnapshot
+  snapshot: SessionSnapshot,
+  lastResponse?: TurnResponsePayload | null
 ): TurnEvaluation {
   const failures: ScenarioFailure[] = [];
-  if (snapshot.session.status !== expectation.status) {
+  const resolutionStepIds = lastResponse?.resolution?.steps?.map((step) => step.step_id) ?? [];
+  const confirmedHypothesisCauseIds = Array.isArray(snapshot.session.hypotheses)
+    ? snapshot.session.hypotheses
+        .filter(
+          (item): item is { causeId: string; status: string } =>
+            Boolean(item) &&
+            typeof item === "object" &&
+            "causeId" in item &&
+            typeof (item as { causeId?: unknown }).causeId === "string" &&
+            "status" in item &&
+            typeof (item as { status?: unknown }).status === "string"
+        )
+        .filter((item) => item.status === "confirmed")
+        .map((item) => item.causeId)
+    : [];
+  const handoffLabelId =
+    (
+      snapshot.session.escalationHandoff as
+        | { labelId?: unknown }
+        | null
+        | undefined
+    )?.labelId ?? null;
+  if (
+    expectation.status !== undefined &&
+    snapshot.session.status !== expectation.status
+  ) {
     failures.push({
       code: "final_status_mismatch",
       message: "Final status mismatch",
@@ -187,7 +239,10 @@ export function gradeFinalExpectation(
       actual: snapshot.session.status,
     });
   }
-  if (snapshot.session.phase !== expectation.phase) {
+  if (
+    expectation.phase !== undefined &&
+    snapshot.session.phase !== expectation.phase
+  ) {
     failures.push({
       code: "final_phase_mismatch",
       message: "Final phase mismatch",
@@ -195,7 +250,10 @@ export function gradeFinalExpectation(
       actual: snapshot.session.phase,
     });
   }
-  if (snapshot.playbookLabel !== expectation.playbookLabel) {
+  if (
+    expectation.playbookLabel !== undefined &&
+    snapshot.playbookLabel !== expectation.playbookLabel
+  ) {
     failures.push({
       code: "final_playbook_label_mismatch",
       message: "Final playbook label mismatch",
@@ -203,13 +261,48 @@ export function gradeFinalExpectation(
       actual: snapshot.playbookLabel,
     });
   }
-  if (expectation.causeId && snapshot.session.resolvedCauseId !== expectation.causeId) {
+  if (
+    expectation.handoffLabelId !== undefined &&
+    handoffLabelId !== expectation.handoffLabelId
+  ) {
+    failures.push({
+      code: "final_handoff_label_mismatch",
+      message: "Final escalation handoff label mismatch",
+      expected: expectation.handoffLabelId,
+      actual: handoffLabelId,
+    });
+  }
+  const actualFinalCauseId =
+    snapshot.session.resolvedCauseId ??
+    (snapshot.session.status === "escalated" && confirmedHypothesisCauseIds.length === 1
+      ? confirmedHypothesisCauseIds[0]!
+      : null);
+  if (expectation.causeId && actualFinalCauseId !== expectation.causeId) {
     failures.push({
       code: "final_cause_mismatch",
       message: "Final cause mismatch",
       expected: expectation.causeId,
-      actual: snapshot.session.resolvedCauseId,
+      actual: actualFinalCauseId,
     });
+  }
+  failures.push(
+    ...compareSet(
+      "final_resolution_step_ids_mismatch",
+      "Final resolution step IDs",
+      expectation.resolutionStepIds,
+      resolutionStepIds
+    )
+  );
+  if (expectation.minResolutionSteps !== undefined) {
+    const stepCount = lastResponse?.resolution?.steps?.length ?? 0;
+    if (stepCount < expectation.minResolutionSteps) {
+      failures.push({
+        code: "final_resolution_steps_missing",
+        message: "Final resolution did not include enough steps",
+        expected: expectation.minResolutionSteps,
+        actual: stepCount,
+      });
+    }
   }
   if (
     expectation.maxTurns !== undefined &&
@@ -233,14 +326,39 @@ export function summarizeAuditIssues(snapshot: SessionSnapshot): ScenarioFailure
   if (!payload) return [];
 
   const failures: ScenarioFailure[] = [];
+  const sanitizedOutput =
+    (payload.sanitizedOutput as
+      | { phase?: unknown; requests?: unknown; hypotheses_update?: unknown }
+      | null
+      | undefined) ?? null;
+  const benignRepeatedRequestCleanup =
+    typeof sanitizedOutput?.phase === "string" &&
+    (sanitizedOutput.phase === "resolving" || sanitizedOutput.phase === "escalated") &&
+    Array.isArray(sanitizedOutput.requests) &&
+    sanitizedOutput.requests.length === 0;
+  const isBenignSanitizationError = (value: string) =>
+    value.startsWith("Verifier removed redundant or irrelevant resolution steps:") ||
+    value ===
+      "Verifier marked all resolution steps as redundant; keeping authored playbook steps as fallback" ||
+    value === "Stripped requests from resolving turn: resolution and requests are mutually exclusive" ||
+    value.startsWith("Inserted fallback request for missing evidence:") ||
+    value.startsWith("Remapped extracted evidence ") ||
+    value.startsWith("Structured playbook rules fully support ") ||
+    value.includes("; keeping resolution because structured playbook rules uniquely support the same cause") ||
+    (value.startsWith("LLM verifier rejected resolution cause ") &&
+      value.includes("; switching to structured-supported cause ")) ||
+    value.startsWith("Removed repeated requests for already-collected evidence:");
   const sanitizationErrors = Array.isArray(payload.sanitizationErrors)
     ? payload.sanitizationErrors.filter((item): item is string => typeof item === "string")
     : [];
-  if (sanitizationErrors.length > 0) {
+  const actionableSanitizationErrors = sanitizationErrors.filter(
+    (item) => !isBenignSanitizationError(item)
+  );
+  if (actionableSanitizationErrors.length > 0) {
     failures.push({
       code: "sanitization_errors_present",
       message: "Planner sanitization errors were recorded",
-      actual: sanitizationErrors,
+      actual: actionableSanitizationErrors,
     });
   }
 

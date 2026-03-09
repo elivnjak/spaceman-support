@@ -8,8 +8,10 @@ export const ACTIONS_FORM_HELP: ReactNode = (
   <>
     <p>
       An <strong>action</strong> provides step-by-step instructions for{" "}
-      <em>how to collect a specific piece of evidence</em> during diagnosis. When
-      a playbook&apos;s evidence checklist item has an{" "}
+      <em>how to collect a specific piece of evidence</em> during diagnosis. In
+      the schema-v2 model, actions are also the reusable <strong>collection
+      contract</strong> that tells the UI and runtime what exact input shape to
+      expect back. When a playbook&apos;s evidence checklist item has an{" "}
       <strong>Action link</strong>, the assistant shows these instructions to the
       user alongside the evidence request.
     </p>
@@ -45,9 +47,9 @@ export const ACTIONS_FORM_HELP: ReactNode = (
       </li>
     </ul>
     <p className="mt-2 text-sm">
-      <strong>Tip:</strong> Write instructions as if speaking directly to the
-      user. Be specific about what to look at, what tool to use, and what to
-      report back.
+      <strong>Tip:</strong> If diagnosis logic depends on a precise value, avoid
+      free text. Prefer enum, boolean, or number inputs whose options match the
+      values used in workbook-authored playbook rules.
     </p>
   </>
 );
@@ -64,7 +66,8 @@ export function ActionsGuideIntro() {
         An action is a <strong>reusable instruction record</strong> that tells
         the user exactly how to collect a specific piece of evidence. Actions
         live in a separate catalog so they can be shared across multiple
-        playbooks and evidence items.
+        playbooks and evidence items, and so schema-v2 playbooks can depend on a
+        stable input contract instead of freeform prompts.
       </p>
       <p className="mt-2 text-sm text-ink/80">
         When the assistant asks the user for an evidence item that has an action
@@ -112,6 +115,12 @@ export function ActionsGuideHowUsed() {
           <strong>applies to models</strong> is set, the action is only shown
           when the user&apos;s machine matches one of the listed models.
         </li>
+        <li>
+          <strong>Structured diagnosis</strong> &mdash; schema-v2 playbooks can
+          compare collected evidence against support and exclude rules. That only
+          works reliably when action inputs and playbook rule values use the same
+          semantics.
+        </li>
       </ol>
     </section>
   );
@@ -140,7 +149,8 @@ export function ActionsGuideFields() {
                 <code className="rounded bg-page px-1 py-0.5 text-xs">
                   actionId
                 </code>
-                . Lowercase, underscores OK.
+                . Lowercase, underscores OK. Keep this stable once playbooks are
+                linked.
               </td>
             </tr>
             <tr className="border-b border-border/50">
@@ -163,8 +173,9 @@ export function ActionsGuideFields() {
               <td className="py-2 pr-4 font-medium">Expected input</td>
               <td className="py-2 pr-4">No</td>
               <td className="py-2">
-                What type of response the UI should collect. Defaults to free
-                text if not set.
+                What type of response the UI should collect. This is the
+                authoritative value shape the runtime will try to normalize and
+                persist.
               </td>
             </tr>
             <tr className="border-b border-border/50">
@@ -257,6 +268,11 @@ export function ActionsGuideTips() {
           <strong>Set the right expected input type.</strong> A well-chosen type
           (e.g. number with unit and range) makes the chat UI more helpful and
           the collected data more consistent.
+        </li>
+        <li>
+          <strong>Match enum options to playbook semantics.</strong> If a
+          playbook rule expects `Blocked, dirty, or misassembled`, make that the
+          real enum option rather than relying on vague `Yes` or `No` values.
         </li>
         <li>
           <strong>Use safety levels appropriately.</strong> Mark actions that

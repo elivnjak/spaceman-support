@@ -5,6 +5,7 @@ import { getIntentManifest } from "@/lib/intent/loader";
 import { readStorageFile } from "@/lib/storage";
 import { sanitizeRichTextHtml } from "@/lib/rich-text";
 import { postTelegramJson } from "@/lib/telegram";
+import { buildAttemptedSteps } from "@/lib/escalation-handoff";
 
 function getBaseUrl(): string | null {
   const raw = process.env.NEXT_PUBLIC_BASE_URL?.trim();
@@ -155,10 +156,7 @@ export function buildEscalationHandoff(opts: {
     };
   }
 
-  const stepsAttempted = (opts.resolution?.steps ?? []).map((s) => ({
-    stepId: s.step_id,
-    instruction: s.instruction,
-  }));
+  const stepsAttempted = buildAttemptedSteps(opts.messages, opts.resolution);
 
   return {
     sessionId: opts.sessionId,
@@ -389,18 +387,6 @@ export async function sendEscalationTelegram(handoff: EscalationHandoff): Promis
       const confidenceLabel = escapeTelegramHtml(rec.confidence);
       return `- ${keyLabel}: ${valueLabel} (${confidenceLabel})`;
     });
-  const messageLines = handoff.recentUserMessages
-    .slice(-3)
-    .map((entry) => `- ${escapeTelegramHtml(entry)}`);
-  const qaLines = handoff.recentQuestionAnswers
-    .slice(-3)
-    .map((entry, idx) => {
-      const question = (entry.question ?? "").trim() || "(no captured assistant question)";
-      return (
-        `${idx + 1}) <b>Q:</b> ${escapeTelegramHtml(question)}\n` +
-        `   <b>A:</b> ${escapeTelegramHtml(entry.answer)}`
-      );
-    });
   const attemptedLines = handoff.stepsAttempted
     .slice(0, 5)
     .map((step) => `- ${escapeTelegramHtml(step.instruction)}`);
@@ -419,13 +405,6 @@ export async function sendEscalationTelegram(handoff: EscalationHandoff): Promis
     "",
     "<b>Evidence collected:</b>",
     evidenceLines.length > 0 ? evidenceLines.join("\n") : "- None",
-    "",
-    "<b>Recent Q&A:</b>",
-    qaLines.length > 0
-      ? qaLines.join("\n")
-      : messageLines.length > 0
-        ? messageLines.join("\n")
-        : "- None",
     "",
     "<b>Steps attempted:</b>",
     attemptedLines.length > 0 ? attemptedLines.join("\n") : "- None",

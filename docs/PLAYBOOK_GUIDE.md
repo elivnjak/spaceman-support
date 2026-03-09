@@ -1,20 +1,20 @@
 # Playbook guide — what each part does
 
-This guide explains the different sections of a **playbook** in plain language. Playbooks are the instructions the support assistant uses when helping users diagnose and fix a problem. If you edit playbooks in Admin, this document will help you understand what each part is for and how they work together.
+This guide explains the different sections of a **playbook** in plain language. Playbooks are the structured instructions the support assistant uses when helping users diagnose and fix a problem. If you edit playbooks in Admin, this document explains what each part is for, how the schema-v2 model works, and when to use workbook export/import instead of only editing inline.
 
 ---
 
 ## What is a playbook?
 
-A playbook is a **diagnostic guide** for one type of issue (for example "Texture too runny" or "Machine error X"). It tells the assistant:
+A playbook is a **diagnostic contract** for one type of issue (for example "Texture too runny" or "Machine error X"). It tells the system:
 
-- What kind of problem this is
-- What information to collect from the user
-- What the possible causes are
-- When to escalate to a person
-- What steps to suggest once a cause is found
+- What issue taxonomy and product scope this guide belongs to
+- What information must be collected from the user
+- What causes can be supported, excluded, or escalated
+- When to escalate immediately to a person
+- What steps to suggest once a cause is supported
 
-You build this guide by filling in the sections described below. The assistant then follows this guide during a chat with the user.
+You build and maintain this guide through the Admin playbook editor and, for full schema-v2 fields, through workbook export/import. The assistant then follows this guide during a chat with the user.
 
 ---
 
@@ -22,11 +22,11 @@ You build this guide by filling in the sections described below. The assistant t
 
 Before describing the playbook sections it helps to understand the difference between **labels** and **symptoms**, since they seem similar at first glance.
 
-A **label** is the issue category — a single identifier like `too_runny` or `too_thick`. Labels live in their own table and each playbook is linked to exactly one label. During triage (before any playbook is loaded), the system presents the list of labels to an LLM which picks **one** label based on the user's initial description. That choice decides **which playbook** runs. A single label can have multiple playbooks if different product types need different diagnostic paths (e.g. "too_runny" might have one playbook for gelato and a different one for soft serve). Labels are also used as stable identifiers across the system — ticket filters, audit logs, analytics, and escalation handoffs all reference labels, so they stay the same even when a playbook is rewritten.
+A **label** is the issue category — a single identifier like `too_runny` or `too_thick`. Labels live in their own table and each playbook is linked to exactly one label. During triage (before any playbook is loaded), the system first chooses **one** label based on the user's initial description, then loads the matching playbook for the current product context. A single label can have multiple playbooks if different product types need different diagnostic paths. Labels are also used as stable identifiers across the system — ticket filters, audit logs, analytics, and escalation handoffs all reference labels, so they stay the same even when a playbook is rewritten.
 
-**Symptoms** live inside a playbook and describe the different ways a user might phrase or experience that issue (e.g. "watery output", "melts too fast", "won't hold shape"). They are sent to the diagnostic LLM **after** a playbook has been selected, giving the assistant detailed context about what to look for. They also help the LLM detect when the user's actual problem doesn't match the playbook and a label switch should be suggested.
+**Symptoms** live inside a playbook and describe the different ways a user might phrase or experience that issue (e.g. "watery output", "melts too fast", "won't hold shape"). They are sent to the diagnostic flow **after** a playbook has been selected, giving the assistant detailed context about what to look for. They also help detect when the user's actual problem doesn't match the playbook and a label switch should be suggested.
 
-In short: labels answer "what category of problem?" and drive playbook selection; symptoms answer "what does this problem look like in the user's words?" and guide the diagnostic conversation.
+In short: labels answer "what category of problem?" and drive playbook selection; symptoms answer "what does this problem look like in the user's words?" and guide the diagnostic conversation. Detailed diagnosis logic belongs in actions and schema-v2 playbook rules, not in label names or symptom wording.
 
 ---
 
@@ -34,11 +34,11 @@ In short: labels answer "what category of problem?" and drive playbook selection
 
 ### Overview
 
-**What it is:** High-level information about this playbook — title, linked label, and optional product type scoping.
+**What it is:** High-level routing information about this playbook — title, linked label, optional product type scoping, and the schema version.
 
-**Why it matters:** It identifies _which_ diagnostic guide is in use. The title appears in the triage LLM prompt so the right playbook can be selected. The label links the playbook to the issue taxonomy. Product type scoping allows different playbooks for the same label when different products need different diagnostic paths.
+**Why it matters:** It identifies _which_ diagnostic guide is in use. The title appears in triage so the right playbook can be selected. The label links the playbook to the issue taxonomy. Product type scoping allows different playbooks for the same label when different products need different diagnostic paths.
 
-**Good to know:** This is the "cover page" of the playbook — short and descriptive.
+**Good to know:** This is the "cover page" of the playbook. Keep it short and descriptive. Schema-v2 structured cause fields are currently authored through workbook export/import rather than the inline editor alone.
 
 ---
 
@@ -63,11 +63,11 @@ Examples:
 - An observation (e.g. "Is the machine making a noise?")
 - A confirmation (e.g. "Did you follow the pre-heat step?")
 
-Each item has a short description, a type (photo, reading, observation, action, or confirmation), and you can mark whether it's required or optional. You can also link an item to an **Action** (a separate record that provides detailed instructions and expected input format for collecting that evidence).
+Each item has a short description, a type (photo, reading, observation, action, or confirmation), and you can mark whether it's required or optional. You can also link an item to an **Action** (a separate record that provides the reusable instructions and expected input contract for collecting that evidence).
 
-**Why it matters:** Evidence is _what we need to know_ before we can safely suggest a cause and fix. The assistant will ask the user for these one by one. As the user answers, the assistant fills in the checklist. When enough required evidence is collected, it can narrow down the cause and suggest steps. Evidence IDs are also used by the system to validate that the LLM only asks for things defined in the playbook, and to match photos and skipped answers to the right checklist items.
+**Why it matters:** Evidence is _what we need to know_ before we can safely support or exclude a cause. The assistant asks for these one by one. As the user answers, the system fills in the checklist and normalizes the values. Evidence IDs are also used to validate that the assistant only asks for things defined in the playbook, and to match photos, readings, and skipped answers to the right checklist items.
 
-**Good to know:** Order and describe evidence so that the most important or easiest-to-get items come first. Required items should be things you truly need before giving a resolution.
+**Good to know:** Order and describe evidence so that the most important or easiest-to-get items come first. Required items should be things you truly need before giving a resolution. If diagnosis depends on exact values, prefer action-backed enum, boolean, or number inputs rather than ambiguous text.
 
 ---
 
@@ -80,10 +80,11 @@ For each cause you can set:
 - A short name and description
 - Likelihood (high / medium / low) as a starting point
 - **Ruling evidence** — which evidence items from the checklist help confirm or rule out this cause
+- In schema v2, workbook-authored **support rules**, **exclude rules**, and optional **outcome** values
 
-**Why it matters:** Causes define _what we're trying to diagnose_. The assistant keeps a list of possible causes and updates confidence levels as evidence comes in. For example, if the user says the hopper temperature is -2°C and one of your causes is "Hopper temperature too high" with ruling evidence `hopper_temp`, that cause becomes more likely. When one cause is clearly best, the assistant moves to the resolution phase and selects the appropriate **Steps**.
+**Why it matters:** Causes define _what we're trying to diagnose_. The assistant keeps a list of possible causes and updates confidence levels as evidence comes in. In schema v2, deterministic cause evaluation is driven by the structured rule fields maintained in the workbook, while the inline "ruling evidence" list remains a quick reference and prompt hint.
 
-**Good to know:** The more clearly you link causes to evidence (ruling evidence), the more consistent the assistant's conclusions will be. The likelihood field gives the LLM a starting prior — `high` means "consider this cause even before much evidence is collected", `low` means "only consider this if evidence specifically points to it". Include the causes your support team actually sees in practice.
+**Good to know:** The more clearly you separate sibling causes with structured rules, the more consistent the assistant's conclusions will be. The likelihood field gives the system a starting prior, but it should not be the only thing distinguishing causes. If a cause should escalate instead of resolve, set that in the schema-v2 workbook fields.
 
 ---
 
@@ -109,7 +110,7 @@ Each step has:
 - An **instruction** — the full action text the user will see
 - A **check** (optional) — how the user can verify the step worked
 
-**Why it matters:** When the assistant has enough evidence and has confirmed a cause, it must give the user something to _do_. Steps are the resolution. The assistant is strictly required to use only the step IDs you define here — it cannot invent new steps. After the LLM produces a resolution, the system validates that every step ID exists in the playbook, checks that the LLM hasn't rewritten your instruction text, and if drift is detected, replaces the LLM's version with your exact authored text. This keeps advice consistent and safe.
+**Why it matters:** When the assistant has enough evidence and has confirmed a cause, it must give the user something to _do_. Steps are the resolution. The assistant is strictly required to use only the step IDs you define here — it cannot invent new steps. After the assistant produces a resolution, the system validates that every step ID exists in the playbook, checks that the instruction text hasn't drifted from what you authored, and if drift is detected, replaces the generated version with your exact authored text. This keeps advice consistent and safe.
 
 **Good to know:** Write steps in the order the user should do them. Use simple, actionable language. The "check" field is useful for helping the user know when a step actually worked (e.g. "Hopper display shows temperature within -8°C to -4°C").
 
@@ -119,30 +120,31 @@ Each step has:
 
 A simple way to see how it all fits:
 
-1. **Label + Title** → during triage, the system picks _which_ playbook to use for this user.
+1. **Label + Title + Product scope** → during triage, the system picks _which_ playbook to use for this user.
 2. **Symptoms** → once the playbook is loaded, the assistant knows _what the problem looks like_ in the user's words.
-3. **Evidence** → the assistant asks for the items on the checklist, one at a time.
-4. **Causes** → as evidence comes in, the assistant narrows down _what might be wrong_, using ruling evidence links.
+3. **Evidence + Actions** → the assistant asks for the items on the checklist, one at a time, using the linked action contracts to collect exact values.
+4. **Causes** → as evidence comes in, the system narrows down _what might be wrong_, using schema-v2 support and exclude rules where available.
 5. **Triggers** → every turn, the system checks the user's message; if it matches a trigger, we **escalate** immediately.
-6. When one **Cause** is confirmed → the assistant delivers the matching **Steps** as the resolution.
+6. When one **Cause** is supported → the assistant delivers the matching **Steps** as the resolution.
 
-So: **Symptoms** set the scene, **Evidence** is what we gather, **Causes** are what we choose between, **Triggers** tell us when to hand off, and **Steps** are the fix we deliver once we've diagnosed the issue.
+So: **Symptoms** set the scene, **Evidence** is what we gather, **Actions** define how we gather it, **Causes** are what we choose between, **Triggers** tell us when to hand off, and **Steps** are the fix we deliver once we've diagnosed the issue.
 
 ---
 
 ## Tips for maintaining playbooks
 
-- **Keep language consistent** with how your customers and support team talk (same terms, same tone).
-- **Update causes and ruling evidence** when you see new real cases or realise a cause was missing.
+- **Keep labels stable** and keep business logic out of label names. Labels are taxonomy, not diagnosis rules.
+- **Prefer structured action inputs** when business logic depends on exact values. Avoid vague free text where an enum, boolean, or number would be safer.
+- **Maintain support and exclude rules in the workbook** whenever sibling causes overlap or a cause should escalate instead of resolve.
 - **Review triggers** from time to time so escalation still matches your current policies.
-- **Test with real examples**: run through a few sample chats and check that the right evidence is asked for, the right cause is chosen, and the right steps are shown.
-- **Document changes**: when you change a playbook, note in your own process what you changed and why, so the next person can keep maintaining it.
+- **Test with real examples**: run through the generated scenario suite and a few sample chats and check that the right evidence is asked for, the right cause is chosen, and the right steps are shown.
+- **Export after stable updates** so the workbook matches the live DB state and the structured v2 rules are versioned outside the database.
 
 ---
 
 ## Where to edit playbooks
 
-Playbooks are edited in the Admin area of the app, under **Playbooks**. You can create new playbooks, link them to a label (category), and edit all the sections described above. For how to use the Admin UI day to day, see the [User Manual](./USER_MANUAL.md).
+Playbooks are edited in the Admin area of the app, under **Playbooks**. Use the inline editor for core fields like label, title, symptoms, evidence order, quick cause references, triggers, and steps. Use workbook export/import for full schema-v2 authoring such as support rules, exclude rules, value definitions, and cause outcomes. For how to use the Admin UI day to day, see the [User Manual](./USER_MANUAL.md).
 
 For a detailed technical reference of how each field is consumed in the LLM prompts and business logic, see [PLAYBOOK_REFERENCE.md](./PLAYBOOK_REFERENCE.md).
 

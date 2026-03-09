@@ -1,4 +1,8 @@
 import OpenAI from "openai";
+import {
+  estimateOpenAIRequestTokens,
+  withOpenAIRetry,
+} from "@/lib/openai/retry";
 
 export type SentimentSignal = {
   frustrationLevel: "none" | "mild" | "moderate" | "high";
@@ -14,6 +18,7 @@ export type SentimentClassifierInput = {
 };
 
 const SENTIMENT_MODEL = "gpt-4o-mini";
+const SENTIMENT_MAX_COMPLETION_TOKENS = 120;
 
 const OUTPUT_SCHEMA = `Respond with valid JSON only. Schema:
 {
@@ -59,20 +64,30 @@ ${JSON.stringify((input.latestMessage ?? "").replace(/\u0000/g, ""))}
 Rate the user's frustration level and whether they want to speak to a human. Output JSON only.`;
 
   const openai = getOpenAI();
-  const res = await openai.chat.completions.create({
-    model: SENTIMENT_MODEL,
-    messages: [
-      {
-        role: "system",
-        content: `You are a sentiment classifier for a technical support chat. Your job is to detect user frustration and whether they want to be connected to a human/technician.
+  const systemPrompt = `You are a sentiment classifier for a technical support chat. Your job is to detect user frustration and whether they want to be connected to a human/technician.
 
-${OUTPUT_SCHEMA}`,
-      },
-      { role: "user", content: userContent },
-    ],
-    response_format: { type: "json_object" },
-    max_tokens: 200,
+${OUTPUT_SCHEMA}`;
+  const estimatedTokens = estimateOpenAIRequestTokens({
+    texts: [systemPrompt, userContent],
+    maxCompletionTokens: SENTIMENT_MAX_COMPLETION_TOKENS,
   });
+  const res = await withOpenAIRetry(
+    "sentiment_classifier",
+    () =>
+      openai.chat.completions.create({
+        model: SENTIMENT_MODEL,
+        messages: [
+          {
+            role: "system",
+            content: systemPrompt,
+          },
+          { role: "user", content: userContent },
+        ],
+        response_format: { type: "json_object" },
+        max_completion_tokens: SENTIMENT_MAX_COMPLETION_TOKENS,
+      }),
+    { estimatedTokens }
+  );
 
   const raw = res.choices[0]?.message?.content?.trim();
   if (!raw) {

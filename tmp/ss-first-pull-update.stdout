@@ -1,0 +1,318 @@
+{
+  "id": "85ffe006-7aa7-44a1-ab7f-e01960f01ca7",
+  "labelId": "ss_first_pull_runny_after_idle",
+  "title": "First dispense runny after idle (hot-gas release / idle effects)",
+  "enabled": true,
+  "steps": [
+    {
+      "check": "Pattern confirmed (first runny, second better).",
+      "title": "Confirm pattern",
+      "step_id": "877f00b9-b0fe-437c-b32f-586cc89ff380",
+      "instruction": "Take photo/video of first pull and second pull after waiting ~30 seconds."
+    },
+    {
+      "check": "Served product holds shape.",
+      "title": "Refresh small amount after idle",
+      "step_id": "a71176ab-bf84-43b8-9f0b-6ba9ef761b87",
+      "instruction": "After long idle, pull a small amount to refresh product, wait ~30 seconds, then serve."
+    },
+    {
+      "check": "Support confirms recommended setting for your model.",
+      "title": "Do not change advanced settings blindly",
+      "step_id": "a255b86a-2a86-4a7f-8947-e12bd5e4fb68",
+      "instruction": "If hot-gas release is suspected, escalate to support/technician for guidance (settings are passcode protected)."
+    },
+    {
+      "check": "Reduces baseline runny behaviour.",
+      "title": "Check environment basics",
+      "step_id": "6f0a40d6-8ff9-4ff8-b6e7-6f2e56546c91",
+      "instruction": "Ensure clearance, avoid direct sun/heat sources, and confirm mix is cold."
+    }
+  ],
+  "schemaVersion": 2,
+  "symptoms": [
+    {
+      "id": "sym_first_pull_runny",
+      "description": "First pull after idle is runny; subsequent pulls improve."
+    },
+    {
+      "id": "sym_idle_related",
+      "description": "Issue correlates with long idle periods (overnight/slow times)."
+    },
+    {
+      "id": "sym_display_seems_ok",
+      "description": "Display temperatures/settings appear normal."
+    },
+    {
+      "id": "sym_only_first",
+      "description": "Only affects first 1–2 serves after idle."
+    }
+  ],
+  "evidenceChecklist": [
+    {
+      "id": "ev_product_photo",
+      "type": "photo",
+      "actionId": "take_photo_product",
+      "required": true,
+      "description": "Photo/video of first pull and second pull.",
+      "valueDefinition": {
+        "kind": "photo"
+      }
+    },
+    {
+      "id": "ev_idle_time",
+      "type": "confirmation",
+      "actionId": "confirm_idle_time",
+      "required": true,
+      "description": "Idle time >30 minutes confirmed.",
+      "valueDefinition": {
+        "kind": "boolean"
+      }
+    },
+    {
+      "id": "ev_hot_gas_setting_known",
+      "type": "confirmation",
+      "required": false,
+      "description": "Hot-gas release settings known/changed recently (if you have access).",
+      "valueDefinition": {
+        "kind": "boolean"
+      }
+    },
+    {
+      "id": "ev_freeze_mode",
+      "type": "confirmation",
+      "actionId": "check_mode_freeze",
+      "required": true,
+      "description": "Machine is in FREEZE mode.",
+      "valueDefinition": {
+        "kind": "boolean"
+      }
+    },
+    {
+      "id": "ev_airflow_clearance",
+      "type": "observation",
+      "actionId": "check_airflow_clearance",
+      "required": false,
+      "description": "Airflow/clearance is adequate.",
+      "valueDefinition": {
+        "kind": "enum",
+        "options": [
+          "Clear with adequate space",
+          "Partially obstructed or tight clearance",
+          "Blocked or no clearance"
+        ]
+      }
+    },
+    {
+      "id": "ev_viscosity_setting",
+      "type": "reading",
+      "actionId": "read_viscosity_setting",
+      "required": false,
+      "description": "Viscosity setting reported.",
+      "valueDefinition": {
+        "kind": "number",
+        "unit": "setting",
+        "notes": "min=0, max=100"
+      }
+    }
+  ],
+  "candidateCauses": [
+    {
+      "id": "cause_hot_gas_release",
+      "cause": "Hot-gas release feature softens the cylinder at stop, making first dispense runny.",
+      "outcome": "escalation",
+      "likelihood": "high",
+      "supportMode": "all",
+      "excludeRules": [
+        {
+          "values": [
+            "Partially obstructed or tight clearance",
+            "Blocked or no clearance"
+          ],
+          "operator": "in",
+          "evidenceId": "ev_airflow_clearance"
+        },
+        {
+          "values": [
+            "No",
+            "false"
+          ],
+          "operator": "equals",
+          "evidenceId": "ev_hot_gas_setting_known"
+        }
+      ],
+      "supportRules": [
+        {
+          "values": [
+            "Yes",
+            "true"
+          ],
+          "operator": "equals",
+          "evidenceId": "ev_idle_time"
+        },
+        {
+          "values": [
+            "Yes",
+            "true"
+          ],
+          "operator": "equals",
+          "evidenceId": "ev_freeze_mode"
+        },
+        {
+          "values": [
+            "Clear with adequate space"
+          ],
+          "operator": "equals",
+          "evidenceId": "ev_airflow_clearance"
+        },
+        {
+          "values": [
+            "Yes",
+            "true"
+          ],
+          "operator": "equals",
+          "evidenceId": "ev_hot_gas_setting_known"
+        }
+      ],
+      "rulingEvidence": [
+        "ev_idle_time",
+        "ev_freeze_mode",
+        "ev_airflow_clearance",
+        "ev_hot_gas_setting_known",
+        "ev_product_photo"
+      ]
+    },
+    {
+      "id": "cause_product_settled",
+      "cause": "Product in cylinder changes texture when sitting; first pull is denser/runny until refreshed.",
+      "outcome": "resolution",
+      "likelihood": "medium",
+      "supportMode": "all",
+      "excludeRules": [
+        {
+          "values": [
+            "Partially obstructed or tight clearance",
+            "Blocked or no clearance"
+          ],
+          "operator": "in",
+          "evidenceId": "ev_airflow_clearance"
+        },
+        {
+          "values": [
+            "Yes",
+            "true"
+          ],
+          "operator": "equals",
+          "evidenceId": "ev_hot_gas_setting_known"
+        }
+      ],
+      "supportRules": [
+        {
+          "values": [
+            "Yes",
+            "true"
+          ],
+          "operator": "equals",
+          "evidenceId": "ev_idle_time"
+        },
+        {
+          "values": [
+            "Yes",
+            "true"
+          ],
+          "operator": "equals",
+          "evidenceId": "ev_freeze_mode"
+        },
+        {
+          "values": [
+            "Clear with adequate space"
+          ],
+          "operator": "equals",
+          "evidenceId": "ev_airflow_clearance"
+        },
+        {
+          "values": [
+            "No",
+            "false"
+          ],
+          "operator": "equals",
+          "evidenceId": "ev_hot_gas_setting_known"
+        }
+      ],
+      "rulingEvidence": [
+        "ev_idle_time",
+        "ev_freeze_mode",
+        "ev_airflow_clearance",
+        "ev_hot_gas_setting_known",
+        "ev_product_photo"
+      ]
+    },
+    {
+      "id": "cause_environment_heat",
+      "cause": "High ambient heat increases melt/runny first pull.",
+      "outcome": "resolution",
+      "likelihood": "low",
+      "supportMode": "all",
+      "excludeRules": [
+        {
+          "values": [
+            "Clear with adequate space"
+          ],
+          "operator": "equals",
+          "evidenceId": "ev_airflow_clearance"
+        }
+      ],
+      "supportRules": [
+        {
+          "values": [
+            "Yes",
+            "true"
+          ],
+          "operator": "equals",
+          "evidenceId": "ev_idle_time"
+        },
+        {
+          "values": [
+            "Yes",
+            "true"
+          ],
+          "operator": "equals",
+          "evidenceId": "ev_freeze_mode"
+        },
+        {
+          "values": [
+            "Partially obstructed or tight clearance",
+            "Blocked or no clearance"
+          ],
+          "operator": "in",
+          "evidenceId": "ev_airflow_clearance"
+        }
+      ],
+      "rulingEvidence": [
+        "ev_idle_time",
+        "ev_freeze_mode",
+        "ev_airflow_clearance",
+        "ev_product_photo"
+      ]
+    }
+  ],
+  "escalationTriggers": [
+    {
+      "reason": "Turn machine OFF at the wall and escalate immediately (electrical hazard).",
+      "trigger": "electrical_smell_smoke_sparks"
+    },
+    {
+      "reason": "Stop using the machine; escalation to authorised technician required.",
+      "trigger": "repeated_breaker_or_rcd_trips"
+    },
+    {
+      "reason": "Any electrical/refrigeration work is technician-only; escalate.",
+      "trigger": "panel_removed_or_refrigeration_work_needed"
+    },
+    {
+      "reason": "Stop serving; discard product and follow food safety procedure.",
+      "trigger": "product_contamination_suspected"
+    }
+  ],
+  "updatedAt": "2026-03-09T05:36:33.339Z"
+}

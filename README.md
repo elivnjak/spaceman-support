@@ -99,8 +99,45 @@ Quality gates fail the command when:
 - `npm run build` / `npm run start` – Production
 - `npm run db:push` – Push Drizzle schema to DB
 - `npm run db:seed` – Seed labels and ensure vector extension + indexes
+- `npm run repo-sync:export` – Export the versionable knowledge-base DB content and referenced uploaded files to `repo_sync/knowledge-base/`
+- `npm run repo-sync:import` – Import `repo_sync/knowledge-base/` into the local instance and restore its uploaded files
 - `npm run eval` – Run evaluation script
 - `npm run playbook:test -- [--suite <name>] [--scenario <id>] [--fix]` – Run the sandboxed playbook regression harness
+
+Detailed usage, model comparison helpers, and tester workflow notes:
+
+- [docs/playbook-testing.md](/Users/elivnjak/Sites/ai-rag-saas/docs/playbook-testing.md)
+
+## Repo Sync
+
+Use the repo sync bundle when one person has updated documents, playbooks, labels, actions, or related admin content and another person needs to pull the repo and get the same knowledge base locally.
+
+Export the current instance into the repo:
+
+```bash
+npm run repo-sync:export
+```
+
+This writes a bundle to `repo_sync/knowledge-base/`:
+
+- `manifest.json` – export metadata, table counts, file hashes
+- `data.json` – the versionable knowledge-base rows
+- `files/` – copied storage-backed files referenced by those rows
+
+Commit that folder to git.
+
+On another machine, after pulling the repo and setting up the local database/schema, import it with:
+
+```bash
+npm run repo-sync:import
+```
+
+Important details:
+
+- Import rewrites storage-backed file paths for the local machine's `STORAGE_PATH`.
+- Import is intended for local/dev sync. It clears local support/ticket history so the content tables can be restored cleanly.
+- The bundle intentionally excludes auth/secrets/transient tables such as users, sessions, password reset state, Telegram config, and support/audit history.
+- If the source or target database is missing some sync tables, the scripts skip them and report that in the console and `manifest.json`.
 
 ## Playbook Regression Harness
 

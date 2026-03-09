@@ -5,13 +5,15 @@ import { eq, inArray } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { z } from "zod";
 import { withApiRouteErrorLogging } from "@/lib/error-logs";
+import {
+  CauseItemSchema,
+  EvidenceItemSchema,
+  StepSchema,
+  TriggerItemSchema,
+  playbookUsesStructuredSemantics,
+} from "@/lib/playbooks/schema";
 
-type Step = {
-  step_id: string;
-  title: string;
-  instruction: string;
-  check?: string;
-};
+type Step = z.infer<typeof StepSchema>;
 
 function ensureStepIds(steps: Step[]): Step[] {
   return steps.map((s) => ({
@@ -56,29 +58,6 @@ async function GETHandler() {
   );
 }
 
-type SymptomItem = { id: string; description: string };
-type EvidenceItem = {
-  id: string;
-  description: string;
-  actionId?: string;
-  type: "photo" | "reading" | "observation" | "action" | "confirmation";
-  required: boolean;
-};
-type CauseItem = {
-  id: string;
-  cause: string;
-  likelihood: "high" | "medium" | "low";
-  rulingEvidence: string[];
-};
-type TriggerItem = { trigger: string; reason: string };
-
-const StepSchema = z.object({
-  step_id: z.string().optional().default(""),
-  title: z.string().optional().default(""),
-  instruction: z.string().optional().default(""),
-  check: z.string().optional(),
-});
-
 const PlaybookSchema = z.object({
   id: z.string().uuid().optional(),
   labelId: z.string().min(1),
@@ -97,35 +76,15 @@ const PlaybookSchema = z.object({
     .nullable()
     .optional(),
   evidenceChecklist: z
-    .array(
-      z.object({
-        id: z.string().min(1),
-        description: z.string().min(1),
-        actionId: z.string().optional(),
-        type: z.enum(["photo", "reading", "observation", "action", "confirmation"]),
-        required: z.boolean(),
-      })
-    )
+    .array(EvidenceItemSchema)
     .nullable()
     .optional(),
   candidateCauses: z
-    .array(
-      z.object({
-        id: z.string().min(1),
-        cause: z.string().min(1),
-        likelihood: z.enum(["high", "medium", "low"]),
-        rulingEvidence: z.array(z.string()),
-      })
-    )
+    .array(CauseItemSchema)
     .nullable()
     .optional(),
   escalationTriggers: z
-    .array(
-      z.object({
-        trigger: z.string().min(1),
-        reason: z.string().min(1),
-      })
-    )
+    .array(TriggerItemSchema)
     .nullable()
     .optional(),
 });
@@ -154,6 +113,14 @@ async function POSTHandler(request: Request) {
   } = parsed.data;
   const stepsWithIds = ensureStepIds(steps || []);
   const nextProductTypeIds = Array.isArray(productTypeIds) ? productTypeIds : [];
+  const normalizedSchemaVersion =
+    schemaVersion ??
+    (playbookUsesStructuredSemantics({
+      evidenceChecklist: evidenceChecklist ?? [],
+      candidateCauses: candidateCauses ?? [],
+    })
+      ? 2
+      : 1);
 
   const payload = {
     labelId,
@@ -161,7 +128,7 @@ async function POSTHandler(request: Request) {
     enabled,
     steps: stepsWithIds,
     updatedAt: new Date(),
-    ...(schemaVersion != null && { schemaVersion }),
+    schemaVersion: normalizedSchemaVersion,
     ...(symptoms != null && { symptoms }),
     ...(evidenceChecklist != null && { evidenceChecklist }),
     ...(candidateCauses != null && { candidateCauses }),
@@ -205,7 +172,7 @@ async function POSTHandler(request: Request) {
         title,
         enabled,
         steps: stepsWithIds,
-        ...(schemaVersion != null && { schemaVersion }),
+        schemaVersion: normalizedSchemaVersion,
         ...(symptoms != null && { symptoms }),
         ...(evidenceChecklist != null && { evidenceChecklist }),
         ...(candidateCauses != null && { candidateCauses }),

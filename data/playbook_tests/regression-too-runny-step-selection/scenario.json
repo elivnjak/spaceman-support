@@ -1,0 +1,270 @@
+{
+  "id": "regression-too-runny-step-selection",
+  "suite": "regression",
+  "description": "Warm-hopper diagnosis should resolve with the authored hopper-cooling step only when clearance and pull rate are already normal.",
+  "tags": [
+    "regression",
+    "step-selection",
+    "diagnosis-consistency",
+    "playbook:3080dfb7-85ab-4292-a596-740e6e961de1",
+    "label:too_runny",
+    "cause:hopper_too_warm"
+  ],
+  "autoResponse": {
+    "targetCauseId": "hopper_too_warm",
+    "answers": {
+      "dispense_photo": {
+        "user": "I've attached the requested photo.",
+        "inputSource": "chat",
+        "images": [
+          "dispense-photo-placeholder.png"
+        ]
+      },
+      "photo_dispense_front": {
+        "user": "I've attached the requested photo.",
+        "inputSource": "chat",
+        "images": [
+          "photo-dispense-front-placeholder.png"
+        ]
+      },
+      "hopper_temp": {
+        "user": "2C",
+        "inputSource": "structured",
+        "images": []
+      },
+      "read_hopper_temp": {
+        "user": "2C",
+        "inputSource": "structured",
+        "images": []
+      },
+      "clearance_ok": {
+        "user": "Yes.",
+        "inputSource": "structured",
+        "images": []
+      },
+      "check_clearance": {
+        "user": "Yes.",
+        "inputSource": "structured",
+        "images": []
+      },
+      "last_clean": {
+        "user": "It was cleaned recently.",
+        "inputSource": "structured",
+        "images": []
+      },
+      "report_last_clean": {
+        "user": "It was cleaned recently.",
+        "inputSource": "structured",
+        "images": []
+      },
+      "mix_ratio": {
+        "user": "Correct ratio",
+        "inputSource": "structured",
+        "images": []
+      },
+      "check_mix_ratio": {
+        "user": "Correct ratio",
+        "inputSource": "structured",
+        "images": []
+      },
+      "pulls_per_hour": {
+        "user": "12 serves per hour",
+        "inputSource": "structured",
+        "images": []
+      },
+      "count_pulls_hour": {
+        "user": "12 serves per hour",
+        "inputSource": "structured",
+        "images": []
+      },
+      "scraper_condition": {
+        "user": "The scraper blades look fine.",
+        "inputSource": "structured",
+        "images": []
+      },
+      "inspect_scraper_blades": {
+        "user": "Good condition",
+        "inputSource": "structured",
+        "images": []
+      }
+    },
+    "defaultAnswer": {
+      "user": "I checked that and it still matches the issue on the machine.",
+      "images": []
+    }
+  },
+  "initialContext": {},
+  "turns": [
+    {
+      "user": "I need help with this machine. Watery texture",
+      "images": [],
+      "expect": {
+        "phase": "nameplate_check"
+      }
+    },
+    {
+      "user": "I don't have a photo.",
+      "images": [],
+      "expect": {
+        "phase": "nameplate_check",
+        "requestedIds": [
+          "nameplate_manual_known"
+        ]
+      }
+    },
+    {
+      "user": "Yes, I know both.",
+      "images": [],
+      "expect": {
+        "phase": "nameplate_check",
+        "requestedIds": [
+          "nameplate_manual_model"
+        ]
+      }
+    },
+    {
+      "user": "6210AB-C",
+      "images": [],
+      "expect": {
+        "phase": "nameplate_check",
+        "requestedIds": [
+          "nameplate_manual_serial"
+        ]
+      }
+    },
+    {
+      "user": "24SS00123",
+      "images": [],
+      "expect": {
+        "phase": "product_type_check",
+        "requestedIds": [
+          "product_type"
+        ]
+      }
+    },
+    {
+      "user": "Acai",
+      "images": [],
+      "expect": {
+        "phase": "clearance_check",
+        "requestedIds": [
+          "clearance_photos"
+        ]
+      }
+    },
+    {
+      "user": "Skip the clearance photos for now.",
+      "inputSource": "skip",
+      "images": [],
+      "expect": {
+        "playbookLabel": "too_runny"
+      }
+    },
+    {
+      "user": "__auto__",
+      "autoRespond": true,
+      "images": [],
+      "expect": {
+        "playbookLabel": "too_runny"
+      }
+    },
+    {
+      "user": "__auto__",
+      "autoRespond": true,
+      "images": [],
+      "expect": {
+        "playbookLabel": "too_runny"
+      }
+    },
+    {
+      "user": "__auto__",
+      "autoRespond": true,
+      "images": [],
+      "expect": {
+        "playbookLabel": "too_runny"
+      }
+    },
+    {
+      "user": "__auto__",
+      "autoRespond": true,
+      "images": [],
+      "expect": {
+        "playbookLabel": "too_runny"
+      }
+    },
+    {
+      "user": "__auto__",
+      "autoRespond": true,
+      "images": [],
+      "expect": {
+        "playbookLabel": "too_runny"
+      }
+    },
+    {
+      "user": "__auto__",
+      "autoRespond": true,
+      "images": [],
+      "expect": {
+        "playbookLabel": "too_runny"
+      }
+    },
+    {
+      "user": "__auto__",
+      "autoRespond": true,
+      "images": [],
+      "expect": {
+        "playbookLabel": "too_runny"
+      }
+    },
+    {
+      "user": "__auto__",
+      "autoRespond": true,
+      "images": [],
+      "expect": {
+        "playbookLabel": "too_runny"
+      }
+    },
+    {
+      "user": "__auto__",
+      "autoRespond": true,
+      "images": [],
+      "expect": {
+        "playbookLabel": "too_runny"
+      }
+    },
+    {
+      "user": "__auto__",
+      "autoRespond": true,
+      "images": [],
+      "expect": {
+        "playbookLabel": "too_runny"
+      }
+    },
+    {
+      "user": "__auto__",
+      "autoRespond": true,
+      "images": [],
+      "expect": {
+        "playbookLabel": "too_runny"
+      }
+    },
+    {
+      "user": "__auto__",
+      "autoRespond": true,
+      "images": [],
+      "expect": {
+        "playbookLabel": "too_runny"
+      }
+    }
+  ],
+  "finalExpect": {
+    "status": "resolved",
+    "phase": "resolving",
+    "playbookLabel": "too_runny",
+    "causeId": "hopper_too_warm",
+    "resolutionStepIds": [
+      "cool-hopper"
+    ],
+    "maxTurns": 19
+  }
+}

@@ -3,29 +3,32 @@ import { getDiagnosticConfig, getLlmConfig } from "@/lib/config";
 import { getIntentManifest } from "@/lib/intent/loader";
 import { validateGrounding, enforcePlaybookInstructions, type PlaybookStep, type LLMStep } from "./validate-grounding";
 import type { AuditLogger } from "@/lib/audit";
+import type {
+  CauseItem as CandidateCause,
+  EvidenceItem as EvidenceChecklistItem,
+  EvidenceRule,
+  SymptomItem,
+  TriggerItem as EscalationTriggerItem,
+} from "@/lib/playbooks/schema";
+import { playbookUsesStructuredSemantics } from "@/lib/playbooks/schema";
+import {
+  estimateOpenAIRequestTokens,
+  withOpenAIRetry,
+} from "@/lib/openai/retry";
+
+const DIAGNOSTIC_PLANNER_MAX_COMPLETION_TOKENS = 900;
+const FOLLOW_UP_ANSWER_MAX_COMPLETION_TOKENS = 450;
+const MAX_RECENT_MESSAGES_IN_PROMPT = 4;
+const DEFAULT_PLANNER_CHUNK_CHAR_LIMIT = 700;
+const DEFAULT_PLANNER_TOTAL_CHUNK_CHARS = 2000;
+const DEFAULT_FOLLOW_UP_CHUNK_CHAR_LIMIT = 900;
+const DEFAULT_FOLLOW_UP_TOTAL_CHUNK_CHARS = 2800;
 
 function getOpenAI() {
   const key = process.env.OPENAI_API_KEY;
   if (!key) throw new Error("OPENAI_API_KEY is not set");
   return new OpenAI({ apiKey: key });
 }
-
-// --- Types for diagnostic playbook (JSONB shapes) ---
-export type SymptomItem = { id: string; description: string };
-export type EvidenceChecklistItem = {
-  id: string;
-  description: string;
-  actionId?: string;
-  type: "photo" | "reading" | "observation" | "action" | "confirmation";
-  required: boolean;
-};
-export type CandidateCause = {
-  id: string;
-  cause: string;
-  likelihood: "high" | "medium" | "low";
-  rulingEvidence: string[];
-};
-export type EscalationTriggerItem = { trigger: string; reason: string };
 
 export type DiagnosticPlaybook = {
   id: string;
@@ -113,6 +116,41 @@ export type ActionRecord = {
   safetyLevel: string;
 };
 
+export type ResolutionVerification = {
+  verdict: "supported" | "unsupported" | "ambiguous";
+  confidence: number;
+  reasoning: string;
+  contradictedEvidenceIds: string[];
+  supportingEvidenceIds: string[];
+  competingCauseIds: string[];
+  preferredCauseId?: string;
+  applicableStepIds: string[];
+  redundantStepIds: string[];
+};
+
+type StructuredRuleEvaluation = {
+  matched: boolean;
+  uncertain: boolean;
+  evidenceId: string;
+  rationale?: string;
+};
+
+type StructuredCauseEvaluation = {
+  causeId: string;
+  supported: boolean;
+  excluded: boolean;
+  partial: boolean;
+  supportMatched: StructuredRuleEvaluation[];
+  supportUncertain: StructuredRuleEvaluation[];
+  excludeMatched: StructuredRuleEvaluation[];
+  score: number;
+};
+
+export type StructuredSupportedCause = {
+  cause: CandidateCause;
+  evaluation: StructuredCauseEvaluation;
+};
+
 export type DiagnosticPlannerInput = {
   playbook: DiagnosticPlaybook;
   evidence: Record<string, EvidenceRecord>;
@@ -138,6 +176,486 @@ export type DiagnosticPlannerInput = {
   };
 };
 
+function clamp01(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  if (value < 0) return 0;
+  if (value > 1) return 1;
+  return value;
+}
+
+function normalizeEvidenceText(value: unknown): string | null {
+  if (value == null) return null;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    return normalized.length > 0 ? normalized : null;
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value).trim().toLowerCase();
+  }
+  if (typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    for (const key of ["error", "code", "message", "value", "status", "state"]) {
+      const candidate = record[key];
+      if (typeof candidate === "string") {
+        const normalized = candidate.trim().toLowerCase();
+        if (normalized.length > 0) return normalized;
+      }
+      if (typeof candidate === "number" || typeof candidate === "boolean") {
+        return String(candidate).trim().toLowerCase();
+      }
+    }
+    const flattened = Object.values(record)
+      .map((candidate) => {
+        if (typeof candidate === "string") return candidate.trim().toLowerCase();
+        if (typeof candidate === "number" || typeof candidate === "boolean") {
+          return String(candidate).trim().toLowerCase();
+        }
+        return null;
+      })
+      .filter((candidate): candidate is string => Boolean(candidate))
+      .join(" ");
+    if (flattened.length > 0) return flattened;
+  }
+  return JSON.stringify(value).trim().toLowerCase() || null;
+}
+
+function extractNumericValue(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value !== "string") return null;
+  const match = value.match(/-?\d+(\.\d+)?/);
+  if (!match) return null;
+  const parsed = Number(match[0]);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function isUnknownEvidenceValue(
+  value: unknown,
+  checklistItem?: EvidenceChecklistItem | null,
+  confidence?: EvidenceRecord["confidence"]
+): boolean {
+  if (value == null) return true;
+  if (confidence === "uncertain") return true;
+  const normalized = normalizeEvidenceText(value);
+  if (!normalized) return true;
+  const builtInUnknowns = new Set([
+    "unknown",
+    "uncertain",
+    "not sure",
+    "unsure",
+    "unable",
+    "unable to complete safely",
+    "not provided",
+    "n/a",
+    "na",
+    "null",
+    "none",
+  ]);
+  if (builtInUnknowns.has(normalized)) return true;
+  const configuredUnknowns = checklistItem?.valueDefinition?.unknownValues ?? [];
+  return configuredUnknowns.some(
+    (candidate) => normalizeEvidenceText(candidate) === normalized
+  );
+}
+
+function matchesRuleValues(
+  normalizedValue: string | null,
+  values: string[] | undefined
+): boolean {
+  if (!normalizedValue || !values?.length) return false;
+  const expandComparableValue = (value: string): string[] => {
+    if (value === "true") return ["true", "yes"];
+    if (value === "false") return ["false", "no"];
+    if (value === "yes") return ["yes", "true"];
+    if (value === "no") return ["no", "false"];
+    return [value];
+  };
+  const normalizedValues = values
+    .map((value) => normalizeEvidenceText(value))
+    .filter((value): value is string => Boolean(value));
+  const normalizedValueVariants = new Set(expandComparableValue(normalizedValue));
+  return normalizedValues.some((candidate) =>
+    expandComparableValue(candidate).some((variant) =>
+      normalizedValueVariants.has(variant)
+    )
+  );
+}
+
+function evaluateEvidenceRule(
+  rule: EvidenceRule,
+  evidenceMap: Map<string, EvidenceChecklistItem>,
+  evidence: Record<string, EvidenceRecord>
+): StructuredRuleEvaluation {
+  const record = evidence[rule.evidenceId];
+  const checklistItem = evidenceMap.get(rule.evidenceId);
+  const operator = rule.operator ?? "equals";
+  const normalizedValue = normalizeEvidenceText(record?.value);
+  const unknown = isUnknownEvidenceValue(
+    record?.value,
+    checklistItem,
+    record?.confidence
+  );
+
+  if (operator === "missing") {
+    return {
+      matched: !record || unknown,
+      uncertain: false,
+      evidenceId: rule.evidenceId,
+      rationale: rule.rationale,
+    };
+  }
+
+  if (!record || unknown) {
+    if (
+      record &&
+      (operator === "equals" || operator === "in") &&
+      matchesRuleValues(normalizedValue, rule.values)
+    ) {
+      return {
+        matched: true,
+        uncertain: false,
+        evidenceId: rule.evidenceId,
+        rationale: rule.rationale,
+      };
+    }
+    return {
+      matched: false,
+      uncertain: true,
+      evidenceId: rule.evidenceId,
+      rationale: rule.rationale,
+    };
+  }
+
+  const numericValue = extractNumericValue(record.value);
+
+  switch (operator) {
+    case "exists":
+      return {
+        matched: true,
+        uncertain: false,
+        evidenceId: rule.evidenceId,
+        rationale: rule.rationale,
+      };
+    case "equals":
+    case "in":
+      return {
+        matched: matchesRuleValues(normalizedValue, rule.values),
+        uncertain: false,
+        evidenceId: rule.evidenceId,
+        rationale: rule.rationale,
+      };
+    case "not_equals":
+    case "not_in":
+      return {
+        matched:
+          normalizedValue != null &&
+          rule.values?.length
+            ? !matchesRuleValues(normalizedValue, rule.values)
+            : false,
+        uncertain: false,
+        evidenceId: rule.evidenceId,
+        rationale: rule.rationale,
+      };
+    case "between":
+      return {
+        matched:
+          numericValue != null &&
+          typeof rule.min === "number" &&
+          typeof rule.max === "number" &&
+          numericValue >= rule.min &&
+          numericValue <= rule.max,
+        uncertain:
+          numericValue == null &&
+          typeof rule.min === "number" &&
+          typeof rule.max === "number",
+        evidenceId: rule.evidenceId,
+        rationale: rule.rationale,
+      };
+    case "not_between":
+      return {
+        matched:
+          numericValue != null &&
+          typeof rule.min === "number" &&
+          typeof rule.max === "number" &&
+          (numericValue < rule.min || numericValue > rule.max),
+        uncertain:
+          numericValue == null &&
+          typeof rule.min === "number" &&
+          typeof rule.max === "number",
+        evidenceId: rule.evidenceId,
+        rationale: rule.rationale,
+      };
+    default:
+      return {
+        matched: false,
+        uncertain: true,
+        evidenceId: rule.evidenceId,
+        rationale: rule.rationale,
+      };
+  }
+}
+
+function evaluateStructuredCause(
+  cause: CandidateCause,
+  evidenceMap: Map<string, EvidenceChecklistItem>,
+  evidence: Record<string, EvidenceRecord>
+): StructuredCauseEvaluation | null {
+  const supportRules = cause.supportRules ?? [];
+  const excludeRules = cause.excludeRules ?? [];
+  if (supportRules.length === 0 && excludeRules.length === 0) {
+    return null;
+  }
+
+  const supportEvaluations = supportRules.map((rule) =>
+    evaluateEvidenceRule(rule, evidenceMap, evidence)
+  );
+  const excludeEvaluations = excludeRules.map((rule) =>
+    evaluateEvidenceRule(rule, evidenceMap, evidence)
+  );
+  const supportMatched = supportEvaluations.filter((result) => result.matched);
+  const supportUncertain = supportEvaluations.filter(
+    (result) => !result.matched && result.uncertain
+  );
+  const excludeMatched = excludeEvaluations.filter((result) => result.matched);
+  const supportMode = cause.supportMode ?? "all";
+  const supported =
+    supportRules.length === 0
+      ? excludeMatched.length === 0
+      : supportMode === "any"
+        ? supportMatched.length > 0
+        : supportMatched.length === supportRules.length;
+  const partial =
+    !supported && supportMatched.length > 0 && supportMatched.length < supportRules.length;
+  const score =
+    supportRules.length > 0 ? supportMatched.length / supportRules.length : 0;
+
+  return {
+    causeId: cause.id,
+    supported: supported && excludeMatched.length === 0,
+    excluded: excludeMatched.length > 0,
+    partial,
+    supportMatched,
+    supportUncertain,
+    excludeMatched,
+    score,
+  };
+}
+
+function buildStructuredCauseStateSummary(
+  playbook: DiagnosticPlaybook,
+  evidence: Record<string, EvidenceRecord>
+): string[] {
+  if (!playbookUsesStructuredSemantics(playbook)) {
+    return [];
+  }
+
+  const evidenceMap = new Map(
+    (playbook.evidenceChecklist ?? []).map((item) => [item.id, item] as const)
+  );
+  const evaluations = (playbook.candidateCauses ?? [])
+    .map((cause) => ({ cause, evaluation: evaluateStructuredCause(cause, evidenceMap, evidence) }))
+    .filter(
+      (
+        entry
+      ): entry is {
+        cause: CandidateCause;
+        evaluation: StructuredCauseEvaluation;
+      } => Boolean(entry.evaluation)
+    );
+
+  if (evaluations.length === 0) {
+    return [];
+  }
+
+  const supported = evaluations.filter((entry) => entry.evaluation.supported);
+  const lines: string[] = ["## Structured cause state"];
+  if (supported.length === 1) {
+    lines.push(
+      `Single supported structured cause: ${supported[0]!.cause.id}. Resolve now unless a safety escalation applies.`
+    );
+  } else if (supported.length > 1) {
+    lines.push(
+      `Multiple structured causes are currently supported: ${supported
+        .map((entry) => entry.cause.id)
+        .join(", ")}. Do not guess; resolve only if one is clearly best-supported or escalate.`
+    );
+  } else {
+    lines.push("No structured cause is fully supported yet.");
+  }
+
+  for (const { cause, evaluation } of evaluations) {
+    const state = evaluation.supported
+      ? "supported"
+      : evaluation.excluded
+        ? "excluded"
+        : evaluation.partial || evaluation.supportUncertain.length > 0
+          ? "ambiguous"
+          : "unsupported";
+    const matched = evaluation.supportMatched.map((item) => item.evidenceId);
+    const uncertain = evaluation.supportUncertain.map((item) => item.evidenceId);
+    const excludedBy = evaluation.excludeMatched.map((item) => item.evidenceId);
+    lines.push(
+      `- ${cause.id}: ${state}; matched=[${matched.join(", ")}]; uncertain=[${uncertain.join(", ")}]; excluded_by=[${excludedBy.join(", ")}]`
+    );
+  }
+
+  return lines;
+}
+
+export function findSingleStructuredSupportedCause(input: {
+  playbook: DiagnosticPlaybook;
+  evidence: Record<string, EvidenceRecord>;
+}): StructuredSupportedCause | null {
+  if (!playbookUsesStructuredSemantics(input.playbook)) {
+    return null;
+  }
+
+  const evidenceMap = new Map(
+    (input.playbook.evidenceChecklist ?? []).map((item) => [item.id, item] as const)
+  );
+  const supported = (input.playbook.candidateCauses ?? [])
+    .map((cause) => ({
+      cause,
+      evaluation: evaluateStructuredCause(cause, evidenceMap, input.evidence),
+    }))
+    .filter(
+      (
+        entry
+      ): entry is {
+        cause: CandidateCause;
+        evaluation: StructuredCauseEvaluation;
+      } => Boolean(entry.evaluation?.supported)
+    );
+
+  if (supported.length !== 1) {
+    return null;
+  }
+
+  return supported[0] ?? null;
+}
+
+export function verifyDiagnosticResolutionStructured(input: {
+  playbook: DiagnosticPlaybook;
+  evidence: Record<string, EvidenceRecord>;
+  resolution: NonNullable<PlannerOutput["resolution"]>;
+}): ResolutionVerification | null {
+  if (!playbookUsesStructuredSemantics(input.playbook)) {
+    return null;
+  }
+
+  const causes = input.playbook.candidateCauses ?? [];
+  const targetCause = causes.find((cause) => cause.id === input.resolution.causeId);
+  if (!targetCause) return null;
+
+  const evidenceMap = new Map(
+    (input.playbook.evidenceChecklist ?? []).map((item) => [item.id, item] as const)
+  );
+  const targetEvaluation = evaluateStructuredCause(
+    targetCause,
+    evidenceMap,
+    input.evidence
+  );
+  if (!targetEvaluation) return null;
+
+  const otherEvaluations = causes
+    .filter((cause) => cause.id !== targetCause.id)
+    .map((cause) => evaluateStructuredCause(cause, evidenceMap, input.evidence))
+    .filter((evaluation): evaluation is StructuredCauseEvaluation => Boolean(evaluation));
+  const supportedCompetitors = otherEvaluations.filter((evaluation) => evaluation.supported);
+  const strongerCompetitors = supportedCompetitors.filter(
+    (evaluation) => evaluation.score > targetEvaluation.score
+  );
+  const equalCompetitors = supportedCompetitors.filter(
+    (evaluation) => evaluation.score === targetEvaluation.score
+  );
+  const contradictedEvidenceIds = [
+    ...new Set(targetEvaluation.excludeMatched.map((item) => item.evidenceId)),
+  ];
+  const supportingEvidenceIds = [
+    ...new Set(targetEvaluation.supportMatched.map((item) => item.evidenceId)),
+  ];
+  const applicableStepIds = input.resolution.steps.map((step) => step.step_id);
+
+  if (targetEvaluation.excluded) {
+    return {
+      verdict: "unsupported",
+      confidence: 0.15,
+      reasoning:
+        "The proposed cause is excluded by explicit playbook rules for the collected evidence.",
+      contradictedEvidenceIds,
+      supportingEvidenceIds,
+      competingCauseIds: strongerCompetitors.map((item) => item.causeId),
+      preferredCauseId:
+        strongerCompetitors.length === 1 ? strongerCompetitors[0]!.causeId : undefined,
+      applicableStepIds,
+      redundantStepIds: [],
+    };
+  }
+
+  if (strongerCompetitors.length > 0) {
+    return {
+      verdict: "unsupported",
+      confidence: 0.2,
+      reasoning:
+        "A different cause is more strongly supported by the playbook's structured evidence rules.",
+      contradictedEvidenceIds,
+      supportingEvidenceIds,
+      competingCauseIds: strongerCompetitors.map((item) => item.causeId),
+      preferredCauseId:
+        strongerCompetitors.length === 1 ? strongerCompetitors[0]!.causeId : undefined,
+      applicableStepIds,
+      redundantStepIds: [],
+    };
+  }
+
+  if (!targetEvaluation.supported) {
+    return {
+      verdict:
+        targetEvaluation.partial || targetEvaluation.supportUncertain.length > 0
+          ? "ambiguous"
+          : "unsupported",
+      confidence: targetEvaluation.partial ? 0.35 : 0.2,
+      reasoning:
+        targetEvaluation.partial || targetEvaluation.supportUncertain.length > 0
+          ? "The proposed cause is only partially supported by the playbook's structured evidence rules."
+          : "The proposed cause does not satisfy the playbook's structured support rules.",
+      contradictedEvidenceIds,
+      supportingEvidenceIds,
+      competingCauseIds: equalCompetitors.map((item) => item.causeId),
+      preferredCauseId: undefined,
+      applicableStepIds,
+      redundantStepIds: [],
+    };
+  }
+
+  if (equalCompetitors.length > 0) {
+    return {
+      verdict: "ambiguous",
+      confidence: 0.45,
+      reasoning:
+        "More than one cause is equally supported by the playbook's structured evidence rules.",
+      contradictedEvidenceIds,
+      supportingEvidenceIds,
+      competingCauseIds: equalCompetitors.map((item) => item.causeId),
+      preferredCauseId: undefined,
+      applicableStepIds,
+      redundantStepIds: [],
+    };
+  }
+
+  return {
+    verdict: "supported",
+    confidence: clamp01(Math.max(0.55, 0.6 + targetEvaluation.score * 0.4)),
+    reasoning:
+      "The proposed cause satisfies the playbook's structured support rules and no competing cause is better supported.",
+    contradictedEvidenceIds,
+    supportingEvidenceIds,
+    competingCauseIds: [],
+    preferredCauseId: undefined,
+    applicableStepIds,
+    redundantStepIds: [],
+  };
+}
+
 function getChunkPromptContent(chunk: { content: string; metadata?: unknown }): string {
   if (chunk.metadata && typeof chunk.metadata === "object") {
     const kv = (chunk.metadata as Record<string, unknown>).kv_content;
@@ -150,7 +668,7 @@ function formatChunkForPrompt(chunk: {
   id: string;
   content: string;
   metadata?: unknown;
-}): string {
+}, maxChars = DEFAULT_PLANNER_CHUNK_CHAR_LIMIT): string {
   const lines: string[] = [`[${chunk.id}]`];
   if (chunk.metadata && typeof chunk.metadata === "object") {
     const meta = chunk.metadata as Record<string, unknown>;
@@ -163,7 +681,7 @@ function formatChunkForPrompt(chunk: {
     if (title) lines.push(`Title: ${title}`);
     if (tags.length > 0) lines.push(`Tags: ${tags.join(", ")}`);
   }
-  lines.push(getChunkPromptContent(chunk).slice(0, 2000));
+  lines.push(getChunkPromptContent(chunk).slice(0, maxChars));
   return lines.join("\n");
 }
 
@@ -180,13 +698,23 @@ function buildStateSummary(input: DiagnosticPlannerInput): string {
     lines.push("(none yet)");
   } else {
     for (const [eid, rec] of Object.entries(evidence)) {
-      const photoSuffix = rec.photoAnalysis ? `; photo_analysis=${rec.photoAnalysis}` : "";
-      lines.push(`- ${eid}: ${JSON.stringify(rec.value)} (${rec.confidence}${photoSuffix})`);
+      const photoSuffix = rec.photoAnalysis
+        ? `; photo_analysis=${rec.photoAnalysis.slice(0, 120)}`
+        : "";
+      const rawValueSummary =
+        JSON.stringify(rec.value) ??
+        (rec.value == null ? "null" : String(rec.value));
+      const valueSummary = rawValueSummary.slice(0, 140);
+      lines.push(`- ${eid}: ${valueSummary} (${rec.confidence}${photoSuffix})`);
     }
   }
   lines.push("\n## Current hypotheses");
-  for (const h of input.hypotheses) {
-    lines.push(`- ${h.causeId}: confidence ${(h.confidence * 100).toFixed(0)}%, status ${h.status}, reasoning: ${h.reasoning}`);
+  for (const h of input.hypotheses.slice(0, 5)) {
+    const reasoningSummary =
+      typeof h.reasoning === "string" ? h.reasoning.slice(0, 160) : "";
+    lines.push(
+      `- ${h.causeId}: confidence ${(h.confidence * 100).toFixed(0)}%, status ${h.status}, reasoning: ${reasoningSummary}`
+    );
   }
   lines.push(`\nPhase: ${input.phase}, Turn: ${input.turnCount}`);
   const checklist = input.playbook.evidenceChecklist ?? [];
@@ -194,10 +722,52 @@ function buildStateSummary(input: DiagnosticPlannerInput): string {
   if (missing.length) {
     lines.push(`Missing evidence IDs: ${missing.join(", ")}`);
   }
+  const structuredCauseState = buildStructuredCauseStateSummary(input.playbook, evidence);
+  if (structuredCauseState.length > 0) {
+    lines.push("");
+    lines.push(...structuredCauseState);
+  }
   return lines.join("\n");
 }
 
-function buildPlaybookBlock(playbook: DiagnosticPlaybook): string {
+function buildChunkPromptBlock(
+  chunks: { id: string; content: string; metadata?: unknown }[],
+  options?: {
+    maxChunks?: number;
+    maxCharsPerChunk?: number;
+    maxTotalChars?: number;
+  }
+): string {
+  const maxChunks = Math.max(1, options?.maxChunks ?? 4);
+  const maxCharsPerChunk = Math.max(
+    300,
+    options?.maxCharsPerChunk ?? DEFAULT_PLANNER_CHUNK_CHAR_LIMIT
+  );
+  const maxTotalChars = Math.max(
+    maxCharsPerChunk,
+    options?.maxTotalChars ?? DEFAULT_PLANNER_TOTAL_CHUNK_CHARS
+  );
+  const selected: string[] = [];
+  let usedChars = 0;
+
+  for (const chunk of chunks.slice(0, maxChunks)) {
+    const remainingChars = maxTotalChars - usedChars;
+    if (remainingChars <= 0) break;
+    const formatted = formatChunkForPrompt(
+      chunk,
+      Math.max(200, Math.min(maxCharsPerChunk, remainingChars))
+    );
+    selected.push(formatted);
+    usedChars += formatted.length;
+  }
+
+  return selected.join("\n\n") || "(No documentation available)";
+}
+
+function buildPlaybookBlock(
+  playbook: DiagnosticPlaybook,
+  options?: { includeResolutionInstructions?: boolean }
+): string {
   const lines: string[] = ["## Diagnostic playbook", `Title: ${playbook.title}`, `Label: ${playbook.labelId}`];
   const symptoms = playbook.symptoms ?? [];
   if (symptoms.length) {
@@ -208,13 +778,27 @@ function buildPlaybookBlock(playbook: DiagnosticPlaybook): string {
   if (checklist.length) {
     lines.push("\n### Evidence checklist");
     checklist.forEach((e) =>
-      lines.push(`- ${e.id}: ${e.description}, type=${e.type}, required=${e.required}${e.actionId ? `, actionId=${e.actionId}` : ""}`)
+      lines.push(
+        `- ${e.id}: ${e.description}, type=${e.type}, required=${e.required}${e.actionId ? `, actionId=${e.actionId}` : ""}${
+          e.valueDefinition
+            ? `, valueDefinition=${JSON.stringify(e.valueDefinition)}`
+            : ""
+        }`
+      )
     );
   }
   const causes = playbook.candidateCauses ?? [];
   if (causes.length) {
     lines.push("\n### Candidate causes");
-    causes.forEach((c) => lines.push(`- ${c.id}: ${c.cause}, likelihood=${c.likelihood}, rulingEvidence=[${c.rulingEvidence.join(", ")}]`));
+    causes.forEach((c) =>
+      lines.push(
+        `- ${c.id}: ${c.cause}, likelihood=${c.likelihood}, rulingEvidence=[${c.rulingEvidence.join(", ")}]${
+          c.supportRules?.length
+            ? `, supportMode=${c.supportMode ?? "all"}, supportRules=${JSON.stringify(c.supportRules)}`
+            : ""
+        }${c.excludeRules?.length ? `, excludeRules=${JSON.stringify(c.excludeRules)}` : ""}`
+      )
+    );
   }
   const triggers = playbook.escalationTriggers ?? [];
   if (triggers.length) {
@@ -223,7 +807,13 @@ function buildPlaybookBlock(playbook: DiagnosticPlaybook): string {
   }
   lines.push("\n### Resolution steps (use these step_ids when phase is resolving)");
   const steps = playbook.steps ?? [];
-  steps.forEach((s) => lines.push(`- step_id: ${s.step_id}, title: ${s.title ?? ""}, instruction: ${s.instruction ?? ""}`));
+  steps.forEach((s) =>
+    lines.push(
+      options?.includeResolutionInstructions
+        ? `- step_id: ${s.step_id}, title: ${s.title ?? ""}, instruction: ${s.instruction ?? ""}`
+        : `- step_id: ${s.step_id}, title: ${s.title ?? ""}`
+    )
+  );
   return lines.join("\n");
 }
 
@@ -232,8 +822,9 @@ function buildActionsBlock(actions: ActionRecord[]): string {
   const lines = ["## Allowed actions (reference by id in requests)"];
   actions.forEach((a) => {
     lines.push(`- id: ${a.id}, title: ${a.title}, safetyLevel: ${a.safetyLevel}`);
-    lines.push(`  instructions: ${a.instructions}`);
-    if (a.expectedInput) lines.push(`  expectedInput: ${JSON.stringify(a.expectedInput)}`);
+    if (a.expectedInput) {
+      lines.push(`  expectedInput: ${JSON.stringify(a.expectedInput)}`);
+    }
   });
   return lines.join("\n");
 }
@@ -241,7 +832,7 @@ function buildActionsBlock(actions: ActionRecord[]): string {
 const OUTPUT_SCHEMA = `
 You must respond with valid JSON only, no other text. Schema:
 {
-  "message": "string (short, user-facing reply: acknowledge their answer and say what happens next. Never use internal/meta phrases like 'we update the possible causes' or 'based on current evidence we revise'. If you have requests below, briefly introduce them (e.g. 'Next, please…'). If resolving, summarize the finding.)",
+  "message": "string (short, user-facing reply focused on the next step. Do not start every follow-up with stock acknowledgements like 'Thank you for confirming' or 'Thanks for checking'. If you have requests below, lead with the next step directly (for example 'Next: ...' or 'Please ...'). Never use internal/meta phrases like 'we update the possible causes' or 'based on current evidence we revise'. If resolving, summarize the finding.)",
   "phase": "gathering_info" | "diagnosing" | "resolving" | "escalated",
   "requests": [
     {
@@ -261,7 +852,9 @@ You must respond with valid JSON only, no other text. Schema:
   "escalation_reason": "string (only when phase is escalated)",
   "suggested_label_switch": "string (optional: if the user's symptoms clearly indicate a DIFFERENT issue category than this playbook covers, set this to the label_id that would be more appropriate. Only use this when evidence strongly contradicts the current playbook's scope.)"
 }
-Rules: Max 3 items in requests. When phase is "resolving", the requests array MUST be empty and resolution.steps must only use step_ids from the playbook. Do not ask follow-up questions in the same turn as a diagnosis. If you still need more evidence, keep phase as "gathering_info" or "diagnosing" and do not set a resolution. When phase is "escalated", set escalation_reason. Extract evidence from the user's last message into evidence_extracted when they answered a request. When you are still gathering info or diagnosing and there are more evidence items or checks from the playbook to do, always include at least one request and make the message lead into it (e.g. "Thanks for checking. Next, please…"). Do not end the turn with only a meta-comment about updating hypotheses.
+Rules: Max 1 item in requests. Ask exactly one evidence request or follow-up per turn. When phase is "resolving", the requests array MUST be empty and resolution.steps must only use step_ids from the playbook. Do not ask follow-up questions in the same turn as a diagnosis. If you still need more evidence, keep phase as "gathering_info" or "diagnosing" and do not set a resolution. When phase is "escalated", set escalation_reason. Extract evidence from the user's last message into evidence_extracted when they answered a request. When you are still gathering info or diagnosing and there are more evidence items or checks from the playbook to do, always include exactly one request and make the message lead into it directly (for example "Next: ..." or "Please ..."). Avoid repetitive gratitude or confirmation lead-ins unless they are genuinely needed for clarity. Do not end the turn with only a meta-comment about updating hypotheses. Do not mention or imply additional asks in the message beyond the single request you place in the requests array.
+When phase is "resolving", copy the selected step instruction and check text exactly from the playbook for each chosen step_id. Do not paraphrase or rewrite authored step instructions.
+When phase is "resolving", never use action IDs or evidence IDs as resolution step_ids. The "Allowed actions" block is only for requests during evidence gathering. Resolution step_ids must come only from the playbook's "Resolution steps" block.
 
 Critical: When you have gathered enough evidence (e.g. most of the evidence checklist is filled) and are ready to conclude, you MUST output either (a) phase "resolving" with a full "resolution" object (causeId, diagnosis, steps, why), or (b) phase "escalated" with escalation_reason. Never respond with phase "diagnosing" and empty "requests" and a message like "let's evaluate" or "we will evaluate causes"—deliver the actual conclusion (resolution or escalation) in this same response.`;
 
@@ -281,15 +874,31 @@ export async function runDiagnosticPlanner(
     : `If the latest user input came from the optional "Add a note" field and expresses frustration or asks for a human, avoid extra empathy phrasing and try up to ${frustrationHandling.alternatePathsBeforeEscalation} alternative troubleshooting path(s) before escalating, unless safety rules require immediate escalation.`;
 
   const stateSummary = buildStateSummary(input);
-  const playbookBlock = buildPlaybookBlock(input.playbook);
+  const playbookBlock = buildPlaybookBlock(input.playbook, {
+    includeResolutionInstructions: input.phase === "resolving",
+  });
   const actionsBlock = buildActionsBlock(input.actions);
+  const recentMessagesWindow = Math.min(
+    diagnosticConfig.recentMessagesWindow,
+    MAX_RECENT_MESSAGES_IN_PROMPT
+  );
   const recentConv = input.recentMessages
-    .slice(-diagnosticConfig.recentMessagesWindow)
+    .slice(-recentMessagesWindow)
     .map((m) => JSON.stringify({ role: m.role, content: (m.content ?? "").replace(/\u0000/g, "") }))
     .join("\n");
-  const chunksText = input.docChunks
-    .map((c) => formatChunkForPrompt(c))
-    .join("\n\n") || "(No documentation available)";
+  const chunkBudget =
+    input.phase === "resolving"
+      ? {
+          maxChunks: 4,
+          maxCharsPerChunk: 850,
+          maxTotalChars: 2600,
+        }
+      : {
+          maxChunks: 3,
+          maxCharsPerChunk: DEFAULT_PLANNER_CHUNK_CHAR_LIMIT,
+          maxTotalChars: DEFAULT_PLANNER_TOTAL_CHUNK_CHARS,
+        };
+  const chunksText = buildChunkPromptBlock(input.docChunks, chunkBudget);
 
   const systemPrompt = `You are a diagnostic support assistant. You help users troubleshoot issues by gathering evidence and narrowing down root causes. Use the diagnostic playbook to know what evidence to collect and what causes to consider. Output structured JSON every turn.
 
@@ -311,6 +920,16 @@ Grounding rules:
 - Only state technical facts, numbers, procedures, or specifications that are present in the provided document chunks or in the diagnostic playbook content included in the prompt.
 - If the document chunks are empty or do not contain enough information, say you do not have that information in the available documentation and continue with playbook-driven troubleshooting or escalate.
 - Never invent part numbers, measurements, thresholds, maintenance procedures, or documentation details. If uncertain, ask for more evidence or escalate.
+
+Evidence interpretation rules:
+- If a candidate cause includes structured supportRules or excludeRules, treat those rules as the authoritative business logic for whether that cause is supported, excluded, or ambiguous.
+- Do not pick a cause that fails its structured supportRules, and do not ignore a competing cause whose structured rules are more fully satisfied by the collected evidence.
+- If a cause's structured supportRules are already satisfied by collected evidence and no competing cause is better supported, conclude with a resolution now instead of asking for another checklist item or re-requesting already collected evidence.
+- If the state summary says there is a single supported structured cause, you must resolve in this turn unless a safety escalation applies. Do not continue asking optional evidence once that condition is met.
+- Treat values like "Skipped", "Unknown", "Unable to complete safely", "Not sure", or missing evidence as uncertain. These do not confirm a normal condition and cannot by themselves support a cause that depends on that condition being verified.
+- Distinguish "check performed" from "condition confirmed". A value like "Completed" only means the action was done unless the evidence explicitly states the resulting condition was normal, intact, clear, or otherwise confirmed.
+- A normal or neutral result on one component does not contradict a cause unless that cause specifically depends on the opposite condition for that same component.
+- If a cause explicitly involves missed, skipped, overdue, or incomplete maintenance/setup, evidence that the step was skipped, overdue, or not recently done is supportive of that cause.
 
 If the user's latest message includes a factual question (for example specs, capacities, or procedures), answer that question briefly using the documentation with citations, then continue the diagnostic workflow in the same user-facing message (for example by asking for the next required evidence item when needed).
 
@@ -352,7 +971,7 @@ ${stateSummary}
 
 ---
 
-## Recent conversation (last ${diagnosticConfig.recentMessagesWindow} messages)
+## Recent conversation (last ${recentMessagesWindow} messages)
 ${recentConv}
 
 ## Document chunks (for context and citations)
@@ -379,16 +998,27 @@ Respond with JSON only.`;
         { type: "text" as const, text: userPrompt },
       ]
     : [{ type: "text" as const, text: userPrompt }];
+  const estimatedTokens = estimateOpenAIRequestTokens({
+    texts: [systemPrompt, userPrompt],
+    imageCount: input.imageBuffers?.length ?? 0,
+    maxCompletionTokens: DIAGNOSTIC_PLANNER_MAX_COMPLETION_TOKENS,
+  });
 
   const llmStart = Date.now();
-  const res = await getOpenAI().chat.completions.create({
-    model: llmConfig.diagnosticPlannerModel,
-    messages: [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: userContent },
-    ],
-    response_format: { type: "json_object" },
-  });
+  const res = await withOpenAIRetry(
+    "diagnostic_planner",
+    () =>
+    getOpenAI().chat.completions.create({
+      model: llmConfig.diagnosticPlannerModel,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userContent },
+      ],
+      response_format: { type: "json_object" },
+      max_completion_tokens: DIAGNOSTIC_PLANNER_MAX_COMPLETION_TOKENS,
+    }),
+    { estimatedTokens }
+  );
   const text = res.choices[0]?.message?.content;
   if (!text) throw new Error("Empty diagnostic planner response");
   const parsed = JSON.parse(text) as PlannerOutput;
@@ -411,6 +1041,156 @@ Respond with JSON only.`;
     durationMs: Date.now() - llmStart,
   });
   return parsed;
+}
+
+export async function verifyDiagnosticResolution(input: {
+  playbook: DiagnosticPlaybook;
+  evidence: Record<string, EvidenceRecord>;
+  resolution: NonNullable<PlannerOutput["resolution"]>;
+}, audit?: AuditLogger): Promise<ResolutionVerification> {
+  const structuredVerification = verifyDiagnosticResolutionStructured(input);
+  if (structuredVerification) {
+    audit?.logLlmCall({
+      name: "diagnostic_resolution_verifier_structured",
+      parsedResponse: structuredVerification,
+    });
+    return structuredVerification;
+  }
+
+  const [llmConfig] = await Promise.all([getLlmConfig()]);
+  const evidenceBlock = (input.playbook.evidenceChecklist ?? [])
+    .map((item) => {
+      const record = input.evidence[item.id];
+      const value =
+        record == null
+          ? "(missing)"
+          : `${JSON.stringify(record.value)} | confidence=${record.confidence}${
+              record.photoAnalysis ? ` | photoAnalysis=${record.photoAnalysis}` : ""
+            }`;
+      return `- ${item.id}: ${item.description} => ${value}`;
+    })
+    .join("\n");
+  const causesBlock = (input.playbook.candidateCauses ?? [])
+    .map(
+      (cause) =>
+        `- ${cause.id}: ${cause.cause}; likelihood=${cause.likelihood}; rulingEvidence=[${cause.rulingEvidence.join(", ")}]`
+    )
+    .join("\n");
+  const stepsBlock = (input.resolution.steps ?? [])
+    .map(
+      (step) =>
+        `- ${step.step_id}: instruction=${JSON.stringify(step.instruction ?? "")}${
+          step.check ? `; check=${JSON.stringify(step.check)}` : ""
+        }`
+    )
+    .join("\n");
+  const systemPrompt = `You verify whether a proposed diagnostic cause is actually supported by collected evidence.
+
+Rules:
+- Be conservative. Only return verdict "supported" when the chosen cause is clearly consistent with the evidence and is the best-supported cause among the candidates.
+- Return "unsupported" when any collected evidence clearly contradicts the chosen cause, or a different cause is better supported.
+- Return "ambiguous" when the evidence is incomplete, mixed, or does not clearly support a single cause.
+- Treat evidence that describes a normal condition (for example clear airflow, no high volume, no visible build-up, no alarm, no unusual noise) as contradictory when the cause depends on the opposite condition.
+- Treat values like "Skipped", "Unknown", "Unable to complete safely", "Not sure", or missing evidence as uncertain rather than supportive. These values do not confirm a condition and cannot support a cause that depends on the check being verified.
+- Distinguish "action completed" from "condition confirmed". A value such as "Completed" only means the step was performed unless the evidence explicitly says the condition was normal/intact/clear afterward.
+- A normal or neutral result on one component does not contradict a cause unless that cause specifically depends on the opposite condition for that same component.
+- If a cause explicitly involves missed, skipped, overdue, or incomplete maintenance/setup, evidence that the step was skipped, overdue, or not recently done is supportive of that cause.
+- Do not prefer a competing cause that requires a check to be positively confirmed when that check is only skipped, unknown, unconfirmed, or uncertain.
+- Review the proposed resolution steps against the evidence. Keep only steps that are still needed. Mark a step redundant when the collected evidence already confirms that condition has been satisfied, or when it does not fit the supported cause.
+- Treat the playbook as the authority for step text. Evaluate which step_ids are applicable, but do not penalize a proposal solely because the instruction wording was paraphrased if the step_id matches.
+- Do not invent evidence. Use only the evidence provided.
+- Return JSON only.`;
+  const userPrompt = `Playbook: ${input.playbook.title} (${input.playbook.labelId})
+
+Candidate causes:
+${causesBlock || "(none)"}
+
+Collected evidence:
+${evidenceBlock || "(none)"}
+
+Proposed resolution:
+- causeId: ${input.resolution.causeId}
+- diagnosis: ${input.resolution.diagnosis}
+- why: ${input.resolution.why}
+- proposedSteps:
+${stepsBlock || "(none)"}
+
+Respond with JSON:
+{
+  "verdict": "supported" | "unsupported" | "ambiguous",
+  "confidence": number 0-1,
+  "reasoning": "string",
+  "contradictedEvidenceIds": ["evidence_id"],
+  "supportingEvidenceIds": ["evidence_id"],
+  "competingCauseIds": ["cause_id"],
+  "applicableStepIds": ["step_id"],
+  "redundantStepIds": ["step_id"]
+}`;
+  const llmStart = Date.now();
+  const res = await withOpenAIRetry("diagnostic_resolution_verifier", () =>
+    getOpenAI().chat.completions.create({
+      model: llmConfig.classificationModel || llmConfig.diagnosticPlannerModel,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      response_format: { type: "json_object" },
+    })
+  );
+  const text = res.choices[0]?.message?.content;
+  if (!text) {
+    throw new Error("Empty diagnostic resolution verifier response");
+  }
+  const parsed = JSON.parse(text) as Partial<ResolutionVerification>;
+  const verification: ResolutionVerification = {
+    verdict:
+      parsed.verdict === "supported" ||
+      parsed.verdict === "unsupported" ||
+      parsed.verdict === "ambiguous"
+        ? parsed.verdict
+        : "ambiguous",
+    confidence:
+      typeof parsed.confidence === "number" && Number.isFinite(parsed.confidence)
+        ? Math.min(1, Math.max(0, parsed.confidence))
+        : 0,
+    reasoning: typeof parsed.reasoning === "string" ? parsed.reasoning : "",
+    contradictedEvidenceIds: Array.isArray(parsed.contradictedEvidenceIds)
+      ? parsed.contradictedEvidenceIds.filter(
+          (value): value is string => typeof value === "string"
+        )
+      : [],
+    supportingEvidenceIds: Array.isArray(parsed.supportingEvidenceIds)
+      ? parsed.supportingEvidenceIds.filter(
+          (value): value is string => typeof value === "string"
+        )
+      : [],
+    competingCauseIds: Array.isArray(parsed.competingCauseIds)
+      ? parsed.competingCauseIds.filter(
+          (value): value is string => typeof value === "string"
+        )
+      : [],
+    applicableStepIds: Array.isArray(parsed.applicableStepIds)
+      ? parsed.applicableStepIds.filter(
+          (value): value is string => typeof value === "string"
+        )
+      : [],
+    redundantStepIds: Array.isArray(parsed.redundantStepIds)
+      ? parsed.redundantStepIds.filter(
+          (value): value is string => typeof value === "string"
+        )
+      : [],
+  };
+  audit?.logLlmCall({
+    name: "diagnostic_resolution_verifier",
+    model: llmConfig.classificationModel || llmConfig.diagnosticPlannerModel,
+    systemPrompt,
+    userPrompt,
+    rawResponse: text,
+    parsedResponse: verification,
+    tokensUsed: res.usage,
+    durationMs: Date.now() - llmStart,
+  });
+  return verification;
 }
 
 /** Answer a follow-up question after a diagnosis has been provided. Uses doc chunks and resolution context; returns plain text only. */
@@ -454,17 +1234,23 @@ Steps: ${(input.resolution.steps ?? []).map((s) => s.instruction).join("; ")}
 Why: ${input.resolution.why}
 `;
 
+  const recentMessagesWindow = Math.min(
+    diagnosticConfig.recentMessagesWindow,
+    MAX_RECENT_MESSAGES_IN_PROMPT
+  );
   const recentConv = input.recentMessages
-    .slice(-diagnosticConfig.recentMessagesWindow)
+    .slice(-recentMessagesWindow)
     .map((m) => JSON.stringify({ role: m.role, content: (m.content ?? "").replace(/\u0000/g, "") }))
     .join("\n");
 
-  const chunksText = input.docChunks
-    .map((c) => formatChunkForPrompt(c))
-    .join("\n\n") || "(No documentation available)";
+  const chunksText = buildChunkPromptBlock(input.docChunks, {
+    maxChunks: 3,
+    maxCharsPerChunk: DEFAULT_FOLLOW_UP_CHUNK_CHAR_LIMIT,
+    maxTotalChars: DEFAULT_FOLLOW_UP_TOTAL_CHUNK_CHARS,
+  });
 
   const userPrompt = `${resolutionBlock ?? ""}
-## Recent conversation (last ${diagnosticConfig.recentMessagesWindow} messages)
+## Recent conversation (last ${recentMessagesWindow} messages)
 ${recentConv}
 
 ## Documentation (use this to answer the question)
@@ -486,15 +1272,26 @@ Answer the user's question in one or two short paragraphs. Answer strictly from 
         { type: "text" as const, text: userPrompt },
       ]
     : [{ type: "text" as const, text: userPrompt }];
+  const estimatedTokens = estimateOpenAIRequestTokens({
+    texts: [systemPrompt, userPrompt],
+    imageCount: input.imageBuffers?.length ?? 0,
+    maxCompletionTokens: FOLLOW_UP_ANSWER_MAX_COMPLETION_TOKENS,
+  });
 
   const llmStart = Date.now();
-  const res = await getOpenAI().chat.completions.create({
-    model: llmConfig.diagnosticPlannerModel,
-    messages: [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: userContent },
-    ],
-  });
+  const res = await withOpenAIRetry(
+    "follow_up_answer",
+    () =>
+    getOpenAI().chat.completions.create({
+      model: llmConfig.diagnosticPlannerModel,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userContent },
+      ],
+      max_completion_tokens: FOLLOW_UP_ANSWER_MAX_COMPLETION_TOKENS,
+    }),
+    { estimatedTokens }
+  );
   const text = res.choices[0]?.message?.content?.trim();
   audit?.logLlmCall({
     name: "follow_up_answer",
@@ -516,7 +1313,9 @@ export function validateAndSanitizePlannerOutput(
   playbook: DiagnosticPlaybook,
   actionsById: Map<string, ActionRecord>,
   forEndUser: boolean,
-  options?: { maxRequestsPerTurn?: number }
+  options?: {
+    maxRequestsPerTurn?: number;
+  }
 ): { output: PlannerOutput; errors: string[] } {
   const errors: string[] = [];
   const sanitized = { ...output, requests: [...output.requests] };
@@ -627,25 +1426,65 @@ export function validateAndSanitizePlannerOutput(
     filtered.push(nextReq);
   }
   sanitized.requests = filtered;
+  sanitized.hypotheses_update = sanitized.hypotheses_update.map((hypothesis) => ({
+    ...hypothesis,
+    confidence: clamp01(Number(hypothesis.confidence ?? 0)),
+  }));
+  const evidenceIdAliases = new Map<string, string>();
+  playbook.evidenceChecklist?.forEach((item) => {
+    evidenceIdAliases.set(item.id, item.id);
+    if (item.actionId) {
+      evidenceIdAliases.set(item.actionId, item.id);
+    }
+  });
+  const remappedEvidence = new Map<
+    string,
+    (typeof sanitized.evidence_extracted)[number]
+  >();
+  for (const extracted of sanitized.evidence_extracted) {
+    const canonicalEvidenceId =
+      evidenceIdAliases.get(extracted.evidenceId) ?? extracted.evidenceId;
+    if (canonicalEvidenceId !== extracted.evidenceId) {
+      errors.push(
+        `Remapped extracted evidence ${extracted.evidenceId} to canonical checklist ID ${canonicalEvidenceId}`
+      );
+    }
+    remappedEvidence.set(canonicalEvidenceId, {
+      ...extracted,
+      evidenceId: canonicalEvidenceId,
+    });
+  }
+  sanitized.evidence_extracted = Array.from(remappedEvidence.values());
 
-  if (output.phase === "resolving" && output.resolution?.steps) {
+  if (
+    sanitized.phase === "escalated" &&
+    sanitized.resolution?.causeId &&
+    (sanitized.resolution.steps?.length ?? 0) > 0
+  ) {
+    sanitized.phase = "resolving";
+    sanitized.escalation_reason = undefined;
+  }
+
+  if (sanitized.phase === "resolving" && sanitized.resolution?.steps) {
     const playbookSteps = playbook.steps ?? [];
     const validation = validateGrounding(
-      output.resolution.steps as LLMStep[],
+      sanitized.resolution.steps as LLMStep[],
       playbookSteps
     );
     if (validation.invalidStepIds.length > 0) {
       errors.push(`Invalid step_ids: ${validation.invalidStepIds.join(", ")}`);
+    }
+    const validResolutionSteps = (sanitized.resolution!.steps as LLMStep[]).filter(
+      (step) => !validation.invalidStepIds.includes(step.step_id)
+    );
+    if (validResolutionSteps.length === 0) {
       sanitized.phase = "diagnosing";
       sanitized.resolution = undefined;
     } else {
-      if (validation.driftedStepIds.length > 0) {
-        errors.push(`Instruction drift detected on: ${validation.driftedStepIds.join(", ")}; enforcing playbook text`);
-      }
       sanitized.resolution = {
         ...sanitized.resolution!,
         steps: enforcePlaybookInstructions(
-          sanitized.resolution!.steps as LLMStep[],
+          validResolutionSteps,
           playbookSteps
         ).map((s) => ({
           step_id: s.step_id,
@@ -670,4 +1509,115 @@ export function checkEscalationTriggers(
     if (lower.includes(t.trigger.toLowerCase())) return { triggered: true, matched: t };
   }
   return { triggered: false };
+}
+
+export function applyResolutionVerificationStepSelection(input: {
+  steps: { step_id: string; instruction: string; check?: string }[];
+  verification: Pick<ResolutionVerification, "applicableStepIds" | "redundantStepIds">;
+}): {
+  steps: { step_id: string; instruction: string; check?: string }[];
+  removedStepIds: string[];
+} {
+  const validStepIds = new Set(input.steps.map((step) => step.step_id));
+  const applicableIds = input.verification.applicableStepIds.filter((id) =>
+    validStepIds.has(id)
+  );
+  const redundantIds = new Set(
+    input.verification.redundantStepIds.filter((id) => validStepIds.has(id))
+  );
+
+  if (applicableIds.length > 0) {
+    const applicableIdSet = new Set(applicableIds);
+    const kept = input.steps.filter((step) => applicableIdSet.has(step.step_id));
+    const removedStepIds = input.steps
+      .filter((step) => !applicableIdSet.has(step.step_id))
+      .map((step) => step.step_id);
+    return { steps: kept, removedStepIds };
+  }
+
+  if (redundantIds.size > 0) {
+    const kept = input.steps.filter((step) => !redundantIds.has(step.step_id));
+    const removedStepIds = input.steps
+      .filter((step) => redundantIds.has(step.step_id))
+      .map((step) => step.step_id);
+    return { steps: kept, removedStepIds };
+  }
+
+  return { steps: input.steps, removedStepIds: [] };
+}
+
+export function buildStructuredResolutionFallback(input: {
+  playbook: DiagnosticPlaybook;
+  verification: Pick<
+    ResolutionVerification,
+    "preferredCauseId" | "reasoning" | "applicableStepIds" | "redundantStepIds"
+  >;
+  rejectedResolution: NonNullable<PlannerOutput["resolution"]>;
+}): NonNullable<PlannerOutput["resolution"]> | null {
+  const preferredCauseId = input.verification.preferredCauseId;
+  if (!preferredCauseId) {
+    return null;
+  }
+
+  const preferredCause = (input.playbook.candidateCauses ?? []).find(
+    (cause) => cause.id === preferredCauseId
+  );
+  if (!preferredCause) {
+    return null;
+  }
+
+  const selectedSteps = applyResolutionVerificationStepSelection({
+    steps: input.rejectedResolution.steps,
+    verification: input.verification,
+  });
+  if (selectedSteps.steps.length === 0) {
+    return null;
+  }
+
+  return {
+    causeId: preferredCause.id,
+    diagnosis: preferredCause.cause,
+    why: input.verification.reasoning || preferredCause.cause,
+    steps: selectedSteps.steps,
+  };
+}
+
+export function buildSupportedStructuredResolution(input: {
+  playbook: DiagnosticPlaybook;
+  causeId: string;
+  why?: string;
+}): NonNullable<PlannerOutput["resolution"]> | null {
+  const cause = (input.playbook.candidateCauses ?? []).find(
+    (candidate) => candidate.id === input.causeId
+  );
+  if (!cause) {
+    return null;
+  }
+
+  const steps = (input.playbook.steps ?? [])
+    .filter(
+      (
+        step
+      ): step is {
+        step_id: string;
+        instruction: string;
+        check?: string;
+      } => Boolean(step.step_id && step.instruction)
+    )
+    .map((step) => ({
+      step_id: step.step_id,
+      instruction: step.instruction,
+      ...(step.check ? { check: step.check } : {}),
+    }));
+
+  if (steps.length === 0) {
+    return null;
+  }
+
+  return {
+    causeId: cause.id,
+    diagnosis: cause.cause,
+    why: input.why || cause.cause,
+    steps,
+  };
 }

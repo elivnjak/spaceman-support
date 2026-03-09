@@ -9,6 +9,7 @@ const turnExpectationSchema = z
     forbiddenRequestIds: z.array(z.string().min(1)).optional(),
     extractedEvidenceIds: z.array(z.string().min(1)).optional(),
     playbookLabel: z.string().min(1).optional(),
+    handoffLabelId: z.string().min(1).optional(),
     causeId: z.string().min(1).optional(),
     outcome: z.enum(["resolved", "escalated"]).optional(),
     resolutionStepIds: z.array(z.string().min(1)).optional(),
@@ -16,12 +17,26 @@ const turnExpectationSchema = z
   })
   .strict();
 
+const turnInputSourceSchema = z.enum(["chat", "structured", "skip", "note"]);
+
+const autoResponseAnswerSchema = z
+  .object({
+    user: z.string().min(1),
+    inputSource: turnInputSourceSchema.optional(),
+    images: z.array(z.string().min(1)).default([]),
+    imageLabel: z.string().min(1).optional(),
+  })
+  .strict();
+
 const finalExpectationSchema = z
   .object({
-    status: z.string().min(1),
-    phase: z.string().min(1),
-    playbookLabel: z.string().min(1),
+    status: z.string().min(1).optional(),
+    phase: z.string().min(1).optional(),
+    playbookLabel: z.string().min(1).optional(),
+    handoffLabelId: z.string().min(1).optional(),
     causeId: z.string().min(1).optional(),
+    resolutionStepIds: z.array(z.string().min(1)).optional(),
+    minResolutionSteps: z.number().int().positive().optional(),
     maxTurns: z.number().int().positive().optional(),
   })
   .strict();
@@ -32,6 +47,14 @@ export const playbookTestScenarioSchema = z
     description: z.string().min(1),
     suite: z.string().min(1).optional(),
     tags: z.array(z.string().min(1)).optional(),
+    autoResponse: z
+      .object({
+        targetCauseId: z.string().min(1).optional(),
+        answers: z.record(z.string().min(1), autoResponseAnswerSchema).default({}),
+        defaultAnswer: autoResponseAnswerSchema.optional(),
+      })
+      .strict()
+      .optional(),
     initialContext: z
       .object({
         machineModel: z.string().min(1).optional(),
@@ -44,6 +67,8 @@ export const playbookTestScenarioSchema = z
         z
           .object({
             user: z.string().min(1),
+            inputSource: turnInputSourceSchema.optional(),
+            autoRespond: z.boolean().optional(),
             images: z.array(z.string().min(1)).default([]),
             expect: turnExpectationSchema.default({}),
           })
@@ -69,16 +94,20 @@ export async function loadScenarioFile(scenarioPath: string): Promise<LoadedScen
   const parsed = playbookTestScenarioSchema.parse(JSON.parse(raw));
   const scenarioDir = path.dirname(scenarioPath);
 
-  for (const turn of parsed.turns) {
-    for (const imagePath of turn.images) {
-      const resolved = path.join(scenarioDir, "fixtures", imagePath);
-      try {
-        await access(resolved);
-      } catch {
-        throw new Error(
-          `Scenario ${parsed.id} references missing fixture "${imagePath}" at ${resolved}`
-        );
-      }
+  const fixtureReferences = [
+    ...parsed.turns.flatMap((turn) => turn.images),
+    ...Object.values(parsed.autoResponse?.answers ?? {}).flatMap((answer) => answer.images),
+    ...(parsed.autoResponse?.defaultAnswer?.images ?? []),
+  ];
+
+  for (const imagePath of fixtureReferences) {
+    const resolved = path.join(scenarioDir, "fixtures", imagePath);
+    try {
+      await access(resolved);
+    } catch {
+      throw new Error(
+        `Scenario ${parsed.id} references missing fixture "${imagePath}" at ${resolved}`
+      );
     }
   }
 

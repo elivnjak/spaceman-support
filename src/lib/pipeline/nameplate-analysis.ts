@@ -5,6 +5,12 @@ import { db } from "@/lib/db";
 import { supportedModels } from "@/lib/db/schema";
 import { toCanonicalModel } from "@/lib/ingestion/extract-machine-model";
 import type { AuditLogger } from "@/lib/audit";
+import {
+  estimateOpenAIRequestTokens,
+  withOpenAIRetry,
+} from "@/lib/openai/retry";
+
+const NAMEPLATE_ANALYSIS_MAX_COMPLETION_TOKENS = 400;
 
 export interface NameplateResult {
   modelNumber: string | null;
@@ -52,7 +58,7 @@ Rules:
 - Read only what is visible in the image.
 - Preserve punctuation and dashes in model_number and serial_number.
 - If uncertain, return null for that field and lower confidence.
-- raw_text should contain the important visible plate text in reading order.`;
+- Keep raw_text concise: include only the key identifying lines needed to justify the extraction, not the full plate OCR.`;
 
   const userContent: OpenAI.Chat.Completions.ChatCompletionContentPart[] = [
     ...imageBuffers.map((buf) => ({
@@ -63,14 +69,25 @@ Rules:
   ];
 
   const llmStart = Date.now();
-  const res = await getOpenAI().chat.completions.create({
-    model: llmConfig.visionModel,
-    messages: [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: userContent },
-    ],
-    response_format: { type: "json_object" },
+  const estimatedTokens = estimateOpenAIRequestTokens({
+    texts: [systemPrompt, "Extract model and serial number from this machine name plate."],
+    imageCount: imageBuffers.length,
+    maxCompletionTokens: NAMEPLATE_ANALYSIS_MAX_COMPLETION_TOKENS,
   });
+  const res = await withOpenAIRetry(
+    "nameplate_analysis",
+    () =>
+      getOpenAI().chat.completions.create({
+        model: llmConfig.visionModel,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userContent },
+        ],
+        response_format: { type: "json_object" },
+        max_completion_tokens: NAMEPLATE_ANALYSIS_MAX_COMPLETION_TOKENS,
+      }),
+    { estimatedTokens }
+  );
 
   const text = res.choices[0]?.message?.content ?? "{}";
   let parsed: {

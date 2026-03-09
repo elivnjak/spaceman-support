@@ -27,6 +27,15 @@ type CliOptions = {
   baseUrl?: string;
 };
 
+const DEFAULT_SCENARIO_RETRY_ATTEMPTS = Math.max(
+  1,
+  Number(process.env.PLAYBOOK_TEST_SCENARIO_RETRY_ATTEMPTS ?? 3) || 3
+);
+const DEFAULT_SCENARIO_RETRY_DELAY_MS = Math.max(
+  0,
+  Number(process.env.PLAYBOOK_TEST_SCENARIO_RETRY_DELAY_MS ?? 12_000) || 12_000
+);
+
 function parseArgs(argv: string[]): CliOptions {
   const options: CliOptions = {
     fix: false,
@@ -76,7 +85,9 @@ function parseArgs(argv: string[]): CliOptions {
 }
 
 function buildRunId() {
-  return new Date().toISOString().replace(/[:.]/g, "-");
+  return `${new Date().toISOString().replace(/[:.]/g, "-")}-${Math.random()
+    .toString(36)
+    .slice(2, 8)}`;
 }
 
 function filterScenarios(loadedScenarios: LoadedScenario[], options: CliOptions) {
@@ -85,6 +96,105 @@ function filterScenarios(loadedScenarios: LoadedScenario[], options: CliOptions)
     if (options.suite && item.scenario.suite !== options.suite) return false;
     return true;
   });
+}
+
+async function runScenarioSafely(options: {
+  loadedScenario: LoadedScenario;
+  baseUrl: string;
+  db: Parameters<typeof runScenario>[0]["db"];
+  scenarioOverride?: LoadedScenario["scenario"];
+}): Promise<ScenarioRunResult> {
+  let lastError: unknown = null;
+  let lastResult: ScenarioRunResult | null = null;
+
+  for (let attempt = 1; attempt <= DEFAULT_SCENARIO_RETRY_ATTEMPTS; attempt += 1) {
+    try {
+      const result = await runScenario(options);
+      if (!shouldRetryScenario(result) || attempt === DEFAULT_SCENARIO_RETRY_ATTEMPTS) {
+        return result;
+      }
+      lastResult = result;
+    } catch (error) {
+      if (!isTransientScenarioExecutionError(error) || attempt === DEFAULT_SCENARIO_RETRY_ATTEMPTS) {
+        const scenario = options.scenarioOverride ?? options.loadedScenario.scenario;
+        return {
+          scenarioId: scenario.id,
+          description: scenario.description,
+          scenarioPath: options.loadedScenario.scenarioPath,
+          passed: false,
+          failures: [
+            {
+              code: "scenario_execution_error",
+              message: error instanceof Error ? error.message : "Scenario execution failed",
+            },
+          ],
+          turnResults: [],
+          finalSnapshot: null,
+        };
+      }
+      lastError = error;
+    }
+
+    await sleep(DEFAULT_SCENARIO_RETRY_DELAY_MS * attempt);
+  }
+
+  if (lastResult) {
+    return lastResult;
+  }
+
+  const scenario = options.scenarioOverride ?? options.loadedScenario.scenario;
+  return {
+    scenarioId: scenario.id,
+    description: scenario.description,
+    scenarioPath: options.loadedScenario.scenarioPath,
+    passed: false,
+    failures: [
+      {
+        code: "scenario_execution_error",
+        message:
+          lastError instanceof Error ? lastError.message : "Scenario execution failed after retries",
+      },
+    ],
+    turnResults: [],
+    finalSnapshot: null,
+  };
+}
+
+function sleep(delayMs: number) {
+  return new Promise((resolve) => setTimeout(resolve, delayMs));
+}
+
+function matchesTransientRateLimitSignal(value: unknown): boolean {
+  if (typeof value === "string") {
+    const normalized = value.toLowerCase();
+    return (
+      normalized.includes("429 rate limit") ||
+      normalized.includes("rate limit reached") ||
+      normalized.includes("technical difficulties right now")
+    );
+  }
+
+  if (Array.isArray(value)) {
+    return value.some((item) => matchesTransientRateLimitSignal(item));
+  }
+
+  if (value && typeof value === "object") {
+    return Object.values(value).some((item) => matchesTransientRateLimitSignal(item));
+  }
+
+  return false;
+}
+
+function shouldRetryScenario(result: ScenarioRunResult): boolean {
+  return result.failures.some(
+    (failure) =>
+      matchesTransientRateLimitSignal(failure.actual) ||
+      matchesTransientRateLimitSignal(failure.message)
+  );
+}
+
+function isTransientScenarioExecutionError(error: unknown): boolean {
+  return error instanceof Error && matchesTransientRateLimitSignal(error.message);
 }
 
 async function executeSuiteRun(options: {
@@ -105,7 +215,7 @@ async function executeSuiteRun(options: {
       const results: ScenarioRunResult[] = [];
       for (const loadedScenario of options.loadedScenarios) {
         results.push(
-          await runScenario({
+          await runScenarioSafely({
             loadedScenario,
             baseUrl: options.baseUrl,
             db: liveDb.db,
@@ -134,7 +244,7 @@ async function executeSuiteRun(options: {
     const results: ScenarioRunResult[] = [];
     for (const loadedScenario of options.loadedScenarios) {
       results.push(
-        await runScenario({
+        await runScenarioSafely({
           loadedScenario,
           baseUrl: app.baseUrl,
           db: sandbox.db,
@@ -217,7 +327,7 @@ async function main() {
         const candidateResults: ScenarioRunResult[] = [];
         for (const loadedScenario of selectedScenarios) {
           candidateResults.push(
-            await runScenario({
+            await runScenarioSafely({
               loadedScenario,
               baseUrl: appHandle.baseUrl,
               db: sandbox.db,

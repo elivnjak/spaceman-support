@@ -21,8 +21,13 @@ import { and, asc, eq, inArray } from "drizzle-orm";
 import { openaiTextEmbedder } from "@/lib/embeddings/openai-text";
 import { searchDocChunks } from "@/lib/pipeline/text-retrieval";
 import {
+  applyResolutionVerificationStepSelection,
+  buildStructuredResolutionFallback,
+  buildSupportedStructuredResolution,
+  findSingleStructuredSupportedCause,
   runDiagnosticPlanner,
   runFollowUpAnswer,
+  verifyDiagnosticResolution,
   validateAndSanitizePlannerOutput,
   checkEscalationTriggers,
   type DiagnosticPlaybook,
@@ -32,6 +37,11 @@ import {
   type PlannerOutput,
   type ActionRecord,
 } from "@/lib/pipeline/diagnostic-planner";
+import { preventRepeatedChecklistRequests } from "@/lib/pipeline/request-dedup";
+import {
+  inferEvidenceFromOutstandingRequest,
+  mergeInferredEvidenceWithPlannerOutput,
+} from "@/lib/pipeline/request-inference";
 import {
   runSentimentClassifier,
   type SentimentSignal,
@@ -81,6 +91,7 @@ const DEFAULT_TECHNICAL_DIFFICULTIES_MESSAGE =
 const TECHNICAL_DIFFICULTIES_ESCALATION_REASON =
   "Technical difficulties while processing chat request.";
 const DUPLICATE_TURN_WINDOW_MS = 5000;
+const MAX_TRIAGE_IMAGES_FOR_LLM = 4;
 
 const inFlightTurnKeys = new Set<string>();
 const inFlightTurnTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -341,10 +352,12 @@ function releaseTurnKey(key: string | null): void {
 function findRecentDuplicateAssistantReply(
   messages: ChatMessage[],
   incomingUserMessage: string,
+  currentOutstandingRequestIds: string[],
   nowMs: number
 ): ReplayAssistantMessage | null {
   const normalizedIncoming = normalizeUserMessage(incomingUserMessage);
   if (!normalizedIncoming) return null;
+  const currentRequestSignature = [...currentOutstandingRequestIds].sort().join("|");
 
   for (let i = messages.length - 1; i >= 0; i--) {
     const msg = messages[i];
@@ -357,6 +370,19 @@ function findRecentDuplicateAssistantReply(
     for (let j = i + 1; j < messages.length; j++) {
       const next = messages[j];
       if (next.role === "assistant") {
+        const previousAssistant = messages[i - 1];
+        const previousOutstandingRequestIds =
+          previousAssistant?.role === "assistant"
+            ? (
+                previousAssistant as { requests?: { id: string }[] }
+              ).requests?.map((request) => request.id) ?? []
+            : [];
+        const previousRequestSignature = [...previousOutstandingRequestIds]
+          .sort()
+          .join("|");
+        if (previousRequestSignature !== currentRequestSignature) {
+          return null;
+        }
         return next as ReplayAssistantMessage;
       }
     }
@@ -449,126 +475,6 @@ function countConsecutiveSkipTurns(messages: ChatMessage[]): number {
   return count;
 }
 
-function mapChecklistTypeToPlannerRequestType(
-  type: "photo" | "reading" | "observation" | "action" | "confirmation"
-): PlannerOutput["requests"][number]["type"] {
-  if (type === "photo") return "photo";
-  if (type === "reading") return "reading";
-  if (type === "action") return "action";
-  return "question";
-}
-
-function preventRepeatedChecklistRequests(input: {
-  requests: PlannerOutput["requests"];
-  playbook: DiagnosticPlaybook;
-  evidence: Record<string, EvidenceRecord>;
-  evidenceExtracted: PlannerOutput["evidence_extracted"];
-  actionsById: Map<string, ActionRecord>;
-}): {
-  requests: PlannerOutput["requests"];
-  removedRequestIds: string[];
-  fallbackEvidenceId?: string;
-} {
-  const checklist = input.playbook.evidenceChecklist ?? [];
-  if (!checklist.length || input.requests.length === 0) {
-    return { requests: input.requests, removedRequestIds: [] };
-  }
-
-  const requestIdToEvidenceId = new Map<string, string>();
-  for (const item of checklist) {
-    requestIdToEvidenceId.set(item.id, item.id);
-    if (item.actionId) requestIdToEvidenceId.set(item.actionId, item.id);
-  }
-
-  const effectiveEvidenceIds = new Set<string>(Object.keys(input.evidence));
-  for (const extracted of input.evidenceExtracted) {
-    if (extracted?.evidenceId) effectiveEvidenceIds.add(extracted.evidenceId);
-  }
-
-  const removedRequestIds: string[] = [];
-  const filtered = input.requests.filter((req) => {
-    const evidenceId = requestIdToEvidenceId.get(req.id);
-    if (!evidenceId) {
-      if (effectiveEvidenceIds.has(req.id)) {
-        removedRequestIds.push(req.id);
-        return false;
-      }
-      return true;
-    }
-    if (!effectiveEvidenceIds.has(evidenceId)) return true;
-    removedRequestIds.push(req.id);
-    return false;
-  });
-
-  if (filtered.length > 0) {
-    return { requests: filtered, removedRequestIds };
-  }
-
-  const fallbackItem = checklist.find((item) => !effectiveEvidenceIds.has(item.id));
-  if (!fallbackItem) {
-    return { requests: filtered, removedRequestIds };
-  }
-
-  const mappedType = mapChecklistTypeToPlannerRequestType(fallbackItem.type);
-  const linkedAction = fallbackItem.actionId
-    ? input.actionsById.get(fallbackItem.actionId)
-    : undefined;
-  const actionExpectedInput =
-    linkedAction?.expectedInput &&
-    typeof linkedAction.expectedInput === "object"
-      ? (linkedAction.expectedInput as PlannerOutput["requests"][number]["expectedInput"])
-      : undefined;
-  const expectedInput =
-    fallbackItem.type === "confirmation"
-      ? ({ type: "boolean", options: ["Yes", "No"] } as PlannerOutput["requests"][number]["expectedInput"])
-      : actionExpectedInput;
-  const photoSuffix =
-    mappedType === "photo"
-      ? " Please upload a clear, close-up photo with good lighting from 2 angles."
-      : "";
-  const fallbackRequest: PlannerOutput["requests"][number] = {
-    type: mappedType,
-    id: fallbackItem.actionId ?? fallbackItem.id,
-    prompt: `${fallbackItem.description}${photoSuffix}`,
-    ...(expectedInput ? { expectedInput } : {}),
-  };
-
-  return {
-    requests: [fallbackRequest],
-    removedRequestIds,
-    fallbackEvidenceId: fallbackItem.id,
-  };
-}
-
-function inferEvidenceFromOutstandingRequest(input: {
-  message: string;
-  outstandingRequestIds: string[];
-  playbook: DiagnosticPlaybook;
-}): PlannerOutput["evidence_extracted"] {
-  if (input.outstandingRequestIds.length !== 1) return [];
-  const requestId = input.outstandingRequestIds[0];
-  if (!requestId) return [];
-
-  const checklistItem = (input.playbook.evidenceChecklist ?? []).find(
-    (item) => item.id === requestId || item.actionId === requestId
-  );
-  if (!checklistItem) return [];
-
-  if (checklistItem.type === "confirmation") {
-    const parsed = parseYesNoMessage(input.message);
-    if (parsed === null) return [];
-    return [
-      {
-        evidenceId: checklistItem.id,
-        value: parsed,
-        confidence: "exact",
-      },
-    ];
-  }
-
-  return [];
-}
-
 /** Pattern IDs that mean the user explicitly asked to speak to a human (not just frustration). */
 const EXPLICIT_ASK_PATTERN_IDS = ["talk_to_human", "connect_or_escalate"];
 
@@ -595,6 +501,30 @@ function messageExplicitlyAsksForHuman(
     .filter((p) => EXPLICIT_ASK_PATTERN_IDS.includes(p.id))
     .map((p) => p.pattern);
   return messageContainsEscalationIntent(content, explicitPatterns);
+}
+
+function findControlledSafetyMatch(
+  content: string,
+  controlledVocabulary: {
+    id: string;
+    terms: string[];
+    reason: string;
+    immediateEscalation: boolean;
+  }[]
+): { id: string; terms: string[]; reason: string; immediateEscalation: boolean } | null {
+  const normalized = normalizeUserMessage(content).toLowerCase();
+  if (!normalized) return null;
+
+  for (const item of controlledVocabulary) {
+    if (!item.immediateEscalation) continue;
+    for (const term of item.terms) {
+      if (normalized.includes(term.toLowerCase())) {
+        return item;
+      }
+    }
+  }
+
+  return null;
 }
 
 function prependSubstantiveUserHistory(
@@ -809,6 +739,9 @@ async function escalateOnTechnicalFailure(opts: {
 
 export async function POST(request: Request) {
   const formData = await request.formData();
+  const isPlaybookTestMode =
+    process.env.NODE_ENV !== "production" &&
+    request.headers.get("x-playbook-test-mode") === "true";
   const sessionIdRaw = (formData.get("sessionId") as string)?.trim() || null;
   const sessionTokenRaw = (formData.get("sessionToken") as string)?.trim() || null;
   const turnstileToken = (formData.get("cf-turnstile-response") as string)?.trim() || null;
@@ -853,7 +786,7 @@ export async function POST(request: Request) {
     );
   }
 
-  if (isNewSessionRequest && !isAdmin) {
+  if (isNewSessionRequest && !isAdmin && !isPlaybookTestMode) {
     const verification = await verifyTurnstileToken({
       token: turnstileToken,
       remoteIp: getClientIp(request),
@@ -879,7 +812,7 @@ export async function POST(request: Request) {
   }
 
   // Per-session rate limit (skip when admin is logged in, e.g. for testing)
-  if (sessionIdRaw && !isAdmin) {
+  if (sessionIdRaw && !isAdmin && !isPlaybookTestMode) {
     const { chatPerSession } = RATE_LIMITS;
     const result = await checkRateLimit(
       `session:${sessionIdRaw}`,
@@ -982,7 +915,10 @@ export async function POST(request: Request) {
               .limit(1)
               .then((rows) => rows[0] ?? null),
           ]);
-        const diagnosisModeEnabled = isAuthenticated ? true : (diagnosisModeRow?.enabled ?? true);
+        const diagnosisModeEnabled =
+          isAuthenticated || isPlaybookTestMode
+            ? true
+            : (diagnosisModeRow?.enabled ?? true);
         const shouldBypassDiagnosis = !diagnosisModeEnabled;
         const generalEscalationMessageHtml = intentManifest.communication.escalationTone;
         const generalEscalationMessage = toPlainEscalationText(
@@ -1104,6 +1040,89 @@ export async function POST(request: Request) {
         let imageBuffersForLlm = imageBuffers;
         let triageHistory = (session!.triageHistory as TriageHistoryItem[] | null) ?? [];
         let triageRound = session!.triageRound ?? 0;
+        const dispatchEscalation = async (input: {
+          sessionSnapshot: DiagnosticSessionRow;
+          messages: ChatMessage[];
+          playbookTitle: string;
+          labelId: string;
+          escalationReason: string;
+          escalationMessage: string;
+          escalationMessageHtml?: string;
+          resolution?: PlannerOutput["resolution"];
+          sessionPatch?: Partial<
+            Pick<
+              DiagnosticSessionRow,
+              | "machineModel"
+              | "serialNumber"
+              | "manufacturingYear"
+              | "resolutionOutcome"
+              | "verificationRespondedAt"
+            >
+          >;
+        }) => {
+          input.messages.push({
+            role: "assistant",
+            content: input.escalationMessage,
+            content_html: input.escalationMessageHtml,
+            timestamp: new Date().toISOString(),
+          });
+          const evidence =
+            (input.sessionSnapshot.evidence as Record<string, EvidenceRecord>) ?? {};
+          const hypotheses =
+            (input.sessionSnapshot.hypotheses as HypothesisState[]) ?? [];
+          const escalationHandoff = buildEscalationHandoff({
+            sessionId,
+            userName: input.sessionSnapshot.userName ?? null,
+            userPhone: input.sessionSnapshot.userPhone ?? null,
+            machineModel:
+              input.sessionPatch?.machineModel ?? input.sessionSnapshot.machineModel ?? null,
+            serialNumber:
+              input.sessionPatch?.serialNumber ?? input.sessionSnapshot.serialNumber ?? null,
+            productType: input.sessionSnapshot.productType ?? null,
+            manufacturingYear:
+              input.sessionPatch?.manufacturingYear ??
+              input.sessionSnapshot.manufacturingYear ??
+              null,
+            clearanceImagePaths: input.sessionSnapshot.clearanceImagePaths ?? [],
+            escalationReason: input.escalationReason,
+            playbookTitle: input.playbookTitle,
+            labelId: input.labelId,
+            turnCount: input.sessionSnapshot.turnCount ?? 0,
+            evidence,
+            hypotheses,
+            messages: input.messages,
+            resolution: input.resolution,
+          });
+
+          await db
+            .update(diagnosticSessions)
+            .set({
+              ...input.sessionPatch,
+              messages: input.messages,
+              phase: "escalated",
+              status: "escalated",
+              escalationReason: input.escalationReason,
+              escalationHandoff,
+              updatedAt: new Date(),
+            })
+            .where(eq(diagnosticSessions.id, sessionId));
+
+          sendEvent(
+            controller,
+            "message",
+            JSON.stringify({
+              sessionId,
+              message: input.escalationMessage,
+              message_html: input.escalationMessageHtml,
+              phase: "escalated",
+              requests: [],
+              escalation_reason: input.escalationReason,
+            })
+          );
+          sendEscalationWebhook(escalationHandoff).catch(() => {});
+          sendEscalationTelegram(escalationHandoff).catch(() => {});
+          closeController(controller);
+        };
         const imagePaths: string[] = [];
         if (imageBuffers.length > 0 && sessionId) {
           for (let i = 0; i < imageBuffers.length; i++) {
@@ -1118,10 +1137,16 @@ export async function POST(request: Request) {
 
         const hasUserInput = Boolean(message) || imagePaths.length > 0;
         const incomingUserMessage = message || "(sent photos)";
+        const lastAssistantBeforeInput = messages
+          .filter((m) => m.role === "assistant")
+          .pop() as ReplayAssistantMessage | undefined;
+        const currentOutstandingRequestIds =
+          lastAssistantBeforeInput?.requests?.map((request) => request.id) ?? [];
         if (sessionId && hasUserInput && imagePaths.length === 0) {
           const duplicateReply = findRecentDuplicateAssistantReply(
             messages,
             incomingUserMessage,
+            currentOutstandingRequestIds,
             Date.now()
           );
           if (duplicateReply) {
@@ -1157,6 +1182,42 @@ export async function POST(request: Request) {
           });
         }
 
+        const matchedControlledSafetyItem =
+          message && !isPlaceholderUserMessage(message)
+            ? findControlledSafetyMatch(
+                message,
+                intentManifest.safety.controlledVocabulary
+              )
+            : null;
+
+        if (matchedControlledSafetyItem) {
+          const playbookRow = session.playbookId
+            ? (
+                await db
+                  .select({
+                    id: playbooks.id,
+                    title: playbooks.title,
+                    labelId: playbooks.labelId,
+                  })
+                  .from(playbooks)
+                  .where(eq(playbooks.id, session.playbookId))
+                  .limit(1)
+              )[0] ?? null
+            : null;
+          const escalationReason = matchedControlledSafetyItem.reason;
+          const escalationMessage = generalEscalationMessage;
+          await dispatchEscalation({
+            sessionSnapshot: session,
+            messages,
+            playbookTitle: playbookRow?.title ?? "Safety escalation",
+            labelId: playbookRow?.labelId ?? matchedControlledSafetyItem.id,
+            escalationReason,
+            escalationMessage,
+            escalationMessageHtml: generalEscalationMessageHtml,
+          });
+          return;
+        }
+
         if (session.phase === "collecting_issue") {
           audit.logPhasePath("collecting_issue");
           const { instructionText, guideImages } = await getNameplatePrompt();
@@ -1174,59 +1235,15 @@ export async function POST(request: Request) {
           if (userExplicitlyAskedForHuman) {
             const escalationReason = "User asked to speak with a human";
             const escalationMessage = frustrationEscalationMessage;
-            messages.push({
-              role: "assistant",
-              content: escalationMessage,
-              content_html: frustrationEscalationMessageHtml,
-              timestamp: new Date().toISOString(),
-            });
-            const evidence = (session.evidence as Record<string, unknown>) ?? {};
-            const hypotheses = (session.hypotheses as unknown[]) ?? [];
-            const escalationHandoff = buildEscalationHandoff({
-              sessionId,
-              userName: session.userName ?? null,
-              userPhone: session.userPhone ?? null,
-              machineModel: session.machineModel ?? null,
-              serialNumber: session.serialNumber ?? null,
-              productType: session.productType ?? null,
-              manufacturingYear: session.manufacturingYear ?? null,
-              clearanceImagePaths: session.clearanceImagePaths ?? [],
-              escalationReason,
+            await dispatchEscalation({
+              sessionSnapshot: session,
+              messages,
               playbookTitle: "Pre-diagnosis",
               labelId: "collecting_issue_human_request",
-              turnCount: session.turnCount ?? 0,
-              evidence: evidence as Parameters<typeof buildEscalationHandoff>[0]["evidence"],
-              hypotheses: hypotheses as Parameters<typeof buildEscalationHandoff>[0]["hypotheses"],
-              messages,
+              escalationReason,
+              escalationMessage,
+              escalationMessageHtml: frustrationEscalationMessageHtml,
             });
-
-            await db
-              .update(diagnosticSessions)
-              .set({
-                messages,
-                phase: "escalated",
-                status: "escalated",
-                escalationReason,
-                escalationHandoff,
-                updatedAt: new Date(),
-              })
-              .where(eq(diagnosticSessions.id, sessionId));
-
-            sendEvent(
-              controller,
-              "message",
-              JSON.stringify({
-                sessionId,
-                message: escalationMessage,
-                message_html: frustrationEscalationMessageHtml,
-                phase: "escalated",
-                requests: [],
-                escalation_reason: escalationReason,
-              })
-            );
-            sendEscalationWebhook(escalationHandoff).catch(() => {});
-            sendEscalationTelegram(escalationHandoff).catch(() => {});
-            closeController(controller);
             return;
           }
 
@@ -1426,57 +1443,15 @@ export async function POST(request: Request) {
             labelId: string,
             escalationMessageHtml?: string
           ) => {
-            messages.push({
-              role: "assistant",
-              content: escalationMessage,
-              content_html: escalationMessageHtml,
-              timestamp: new Date().toISOString(),
-            });
-            const evidence = (activeSession.evidence as Record<string, unknown>) ?? {};
-            const hypotheses = (activeSession.hypotheses as unknown[]) ?? [];
-            const escalationHandoff = buildEscalationHandoff({
-              sessionId,
-              userName: activeSession.userName ?? null,
-              userPhone: activeSession.userPhone ?? null,
-              machineModel: activeSession.machineModel ?? null,
-              serialNumber: activeSession.serialNumber ?? null,
-              productType: activeSession.productType ?? null,
-              manufacturingYear: activeSession.manufacturingYear ?? null,
-              clearanceImagePaths: activeSession.clearanceImagePaths ?? [],
-              escalationReason,
+            await dispatchEscalation({
+              sessionSnapshot: activeSession,
+              messages,
               playbookTitle: "Pre-diagnosis",
               labelId,
-              turnCount: activeSession.turnCount ?? 0,
-              evidence: evidence as Parameters<typeof buildEscalationHandoff>[0]["evidence"],
-              hypotheses: hypotheses as Parameters<typeof buildEscalationHandoff>[0]["hypotheses"],
-              messages,
+              escalationReason,
+              escalationMessage,
+              escalationMessageHtml,
             });
-            await db
-              .update(diagnosticSessions)
-              .set({
-                messages,
-                phase: "escalated",
-                status: "escalated",
-                escalationReason,
-                escalationHandoff: escalationHandoff,
-                updatedAt: new Date(),
-              })
-              .where(eq(diagnosticSessions.id, sessionId));
-            sendEvent(
-              controller,
-              "message",
-              JSON.stringify({
-                sessionId,
-                message: escalationMessage,
-                message_html: escalationMessageHtml,
-                phase: "escalated",
-                requests: [],
-                escalation_reason: escalationReason,
-              })
-            );
-            sendEscalationWebhook(escalationHandoff).catch(() => {});
-            sendEscalationTelegram(escalationHandoff).catch(() => {});
-            closeController(controller);
           };
 
           const finalizeNameplateDetails = async (
@@ -1628,37 +1603,19 @@ export async function POST(request: Request) {
             if (isOlderThanFiveYears) {
               const escalationMessage =
                 `This machine appears to be more than ${intentManifest.safety.machineAgeThresholdYears} years old, so I'm connecting you with a technical specialist.`;
-              messages.push({
-                role: "assistant",
-                content: escalationMessage,
-                timestamp: new Date().toISOString(),
-              });
-              await db
-                .update(diagnosticSessions)
-                .set({
+              await dispatchEscalation({
+                sessionSnapshot: activeSession,
+                messages,
+                playbookTitle: "Pre-diagnosis",
+                labelId: "machine_age_exceeded",
+                escalationReason: `Machine is more than ${intentManifest.safety.machineAgeThresholdYears} years old based on serial number.`,
+                escalationMessage,
+                sessionPatch: {
                   machineModel: canonical,
                   serialNumber: extractedSerial,
                   manufacturingYear,
-                  messages,
-                  phase: "escalated",
-                  status: "escalated",
-                  escalationReason: `Machine is more than ${intentManifest.safety.machineAgeThresholdYears} years old based on serial number.`,
-                  updatedAt: new Date(),
-                })
-                .where(eq(diagnosticSessions.id, sessionId));
-
-              sendEvent(
-                controller,
-                "message",
-                JSON.stringify({
-                  sessionId,
-                  message: escalationMessage,
-                  phase: "escalated",
-                  requests: [],
-                  escalation_reason: `Machine is more than ${intentManifest.safety.machineAgeThresholdYears} years old based on serial number.`,
-                })
-              );
-              closeController(controller);
+                },
+              });
               return;
             }
 
@@ -2125,18 +2082,38 @@ export async function POST(request: Request) {
 
             await finalizeNameplateDetails(extractedModel, extractedSerial, "photo");
             return;
-          } catch {
-            messages.push({
+          } catch (error) {
+            const retryMessage =
+              "I couldn't analyse that name plate photo right now. Please try uploading the full name plate again.";
+            const assistantTurn: ChatMessage & {
+              requests?: PlannerOutput["requests"];
+              guideImages?: string[];
+            } = {
               role: "assistant",
-              content: unsupportedMessage,
+              content: retryMessage,
               timestamp: new Date().toISOString(),
-            });
+              requests: [
+                {
+                  type: "photo",
+                  id: "nameplate_photo_retry",
+                  prompt: "Please upload the full name plate photo again.",
+                  expectedInput: { type: "photo" },
+                },
+              ],
+              guideImages: guideImages.length > 0 ? guideImages : undefined,
+            };
+            audit.logError(
+              error instanceof Error
+                ? `nameplate_analysis_failed: ${error.message}`
+                : "nameplate_analysis_failed"
+            );
+            messages.push(assistantTurn);
             await db
               .update(diagnosticSessions)
               .set({
                 messages,
-                phase: "unsupported_model",
-                status: "resolved",
+                phase: "nameplate_check",
+                status: "active",
                 updatedAt: new Date(),
               })
               .where(eq(diagnosticSessions.id, sessionId));
@@ -2145,9 +2122,10 @@ export async function POST(request: Request) {
               "message",
               JSON.stringify({
                 sessionId,
-                message: unsupportedMessage,
-                phase: "unsupported_model",
-                requests: [],
+                message: retryMessage,
+                phase: "nameplate_check",
+                requests: assistantTurn.requests,
+                guideImages: guideImages.length > 0 ? guideImages : undefined,
               })
             );
             closeController(controller);
@@ -2583,57 +2561,15 @@ export async function POST(request: Request) {
         if (isTriageFlow && shouldBypassDiagnosis) {
           const escalationReason =
             "Diagnosis mode is disabled for public users; escalating after intake collection.";
-          messages.push({
-            role: "assistant",
-            content: generalEscalationMessage,
-            content_html: generalEscalationMessageHtml,
-            timestamp: new Date().toISOString(),
-          });
-          const evidence = (session.evidence as Record<string, unknown>) ?? {};
-          const hypotheses = (session.hypotheses as unknown[]) ?? [];
-          const escalationHandoff = buildEscalationHandoff({
-            sessionId,
-            userName: session.userName ?? null,
-            userPhone: session.userPhone ?? null,
-            machineModel: session.machineModel ?? null,
-            serialNumber: session.serialNumber ?? null,
-            productType: session.productType ?? null,
-            manufacturingYear: session.manufacturingYear ?? null,
-            clearanceImagePaths: session.clearanceImagePaths ?? [],
-            escalationReason,
+          await dispatchEscalation({
+            sessionSnapshot: session,
+            messages,
             playbookTitle: "Pre-diagnosis",
             labelId: "diagnosis_mode_disabled",
-            turnCount: session.turnCount ?? 0,
-            evidence: evidence as Parameters<typeof buildEscalationHandoff>[0]["evidence"],
-            hypotheses: hypotheses as Parameters<typeof buildEscalationHandoff>[0]["hypotheses"],
-            messages,
+            escalationReason,
+            escalationMessage: generalEscalationMessage,
+            escalationMessageHtml: generalEscalationMessageHtml,
           });
-          await db
-            .update(diagnosticSessions)
-            .set({
-              messages,
-              phase: "escalated",
-              status: "escalated",
-              escalationReason,
-              escalationHandoff,
-              updatedAt: new Date(),
-            })
-            .where(eq(diagnosticSessions.id, sessionId));
-          sendEvent(
-            controller,
-            "message",
-            JSON.stringify({
-              sessionId,
-              message: generalEscalationMessage,
-              message_html: generalEscalationMessageHtml,
-              phase: "escalated",
-              requests: [],
-              escalation_reason: escalationReason,
-            })
-          );
-          sendEscalationWebhook(escalationHandoff).catch(() => {});
-          sendEscalationTelegram(escalationHandoff).catch(() => {});
-          closeController(controller);
           return;
         }
         if (isTriageFlow) {
@@ -2647,6 +2583,7 @@ export async function POST(request: Request) {
               id: playbooks.id,
               labelId: playbooks.labelId,
               title: playbooks.title,
+              symptoms: playbooks.symptoms,
             })
             .from(playbooks)
             .where(eq(playbooks.enabled, true));
@@ -2679,15 +2616,31 @@ export async function POST(request: Request) {
               displayName: string;
               description: string | null;
               productTypes: Set<string>;
+              symptoms: Set<string>;
             }
           >();
           for (const pb of allPlaybooks) {
             const labelMeta = labelsById.get(pb.labelId);
             const existing = triageLabelsByLabel.get(pb.labelId);
             const playbookProductTypesForLabel = productTypesByPlaybookId.get(pb.id) ?? [];
+            const playbookSymptoms = Array.isArray(pb.symptoms)
+              ? pb.symptoms
+                  .map((item) =>
+                    typeof item === "object" &&
+                    item !== null &&
+                    "description" in item &&
+                    typeof item.description === "string"
+                      ? item.description.trim()
+                      : ""
+                  )
+                  .filter(Boolean)
+              : [];
             if (existing) {
               for (const name of playbookProductTypesForLabel) {
                 existing.productTypes.add(name);
+              }
+              for (const symptom of playbookSymptoms) {
+                existing.symptoms.add(symptom);
               }
               continue;
             }
@@ -2697,6 +2650,7 @@ export async function POST(request: Request) {
               displayName: labelMeta?.displayName ?? pb.labelId,
               description: labelMeta?.description ?? null,
               productTypes: new Set(playbookProductTypesForLabel),
+              symptoms: new Set(playbookSymptoms),
             });
           }
           const triageLabels = Array.from(triageLabelsByLabel.values()).map((item) => ({
@@ -2705,6 +2659,7 @@ export async function POST(request: Request) {
             displayName: item.displayName,
             description: item.description,
             productTypes: Array.from(item.productTypes),
+            symptoms: Array.from(item.symptoms),
           }));
 
           triageRound += 1;
@@ -2727,7 +2682,9 @@ export async function POST(request: Request) {
           }
           const allTriageImageBuffers =
             sessionImageBuffers.length > 0 || imageBuffersForLlm.length > 0
-              ? [...sessionImageBuffers, ...imageBuffersForLlm]
+              ? [...sessionImageBuffers, ...imageBuffersForLlm].slice(
+                  -MAX_TRIAGE_IMAGES_FOR_LLM
+                )
               : undefined;
           const triageResult = await withKeepalive(
             controller,
@@ -2913,11 +2870,8 @@ export async function POST(request: Request) {
         let newFrustrationTurnCount: number | null = null;
         let newEscalationContextTurnCount: number | null = null;
 
-        const lastAssistantMessage = messages.filter((m) => m.role === "assistant").pop();
-        const outstandingRequestIds =
-          (lastAssistantMessage as { requests?: { id: string }[] } | undefined)?.requests?.map(
-            (r) => r.id
-          ) ?? [];
+        const lastAssistantMessage = lastAssistantBeforeInput;
+        const outstandingRequestIds = currentOutstandingRequestIds;
         const explicitIdkMessage =
           message.trim().length > 0 && isIdontKnowMessage(message);
         const lastUserWasSkip =
@@ -3023,44 +2977,45 @@ export async function POST(request: Request) {
                 .where(eq(diagnosticSessions.id, sessionId));
 
               if (outcome === "not_fixed") {
+                const playbookRow = session.playbookId
+                  ? (
+                      await db
+                        .select({
+                          id: playbooks.id,
+                          title: playbooks.title,
+                          labelId: playbooks.labelId,
+                        })
+                        .from(playbooks)
+                        .where(eq(playbooks.id, session.playbookId))
+                        .limit(1)
+                    )[0] ?? null
+                  : null;
+                const escalationReason = "Resolution did not fix the issue";
+                const escalationMessage = generalEscalationMessage;
                 phase = "escalated";
                 plannerOutput = {
-                  message: responseMessage,
+                  message: escalationMessage,
+                  message_html: generalEscalationMessageHtml,
                   phase: "escalated",
                   requests: [],
                   hypotheses_update: hypotheses,
                   evidence_extracted: [],
-                  escalation_reason: "Resolution did not fix the issue",
+                  escalation_reason: escalationReason,
                 };
-
-                messages.push({
-                  role: "assistant",
-                  content: responseMessage,
-                  timestamp: new Date().toISOString(),
+                await dispatchEscalation({
+                  sessionSnapshot: session,
+                  messages,
+                  playbookTitle: playbookRow?.title ?? "Resolved flow escalation",
+                  labelId: playbookRow?.labelId ?? "resolution_not_fixed",
+                  escalationReason,
+                  escalationMessage,
+                  escalationMessageHtml: generalEscalationMessageHtml,
+                  resolution: lastResolution,
+                  sessionPatch: {
+                    resolutionOutcome: outcome,
+                    verificationRespondedAt: new Date(),
+                  },
                 });
-                await db
-                  .update(diagnosticSessions)
-                  .set({
-                    messages,
-                    phase: "escalated",
-                    status: "escalated",
-                    escalationReason: "Resolution did not fix the issue",
-                    updatedAt: new Date(),
-                  })
-                  .where(eq(diagnosticSessions.id, sessionId));
-
-                sendEvent(
-                  controller,
-                  "message",
-                  JSON.stringify({
-                    sessionId,
-                    message: responseMessage,
-                    phase: "escalated",
-                    requests: [],
-                    escalation_reason: "Resolution did not fix the issue",
-                  })
-                );
-                closeController(controller);
                 return;
               }
 
@@ -3329,7 +3284,9 @@ export async function POST(request: Request) {
                   ? prevEscalationContextTurns + 1
                   : prevEscalationContextTurns;
             const plannerLastUserMessage = lastUserWasSkip
-              ? `User replied "I don't know" and skipped answering outstanding request IDs: ${outstandingRequestIds.join(", ") || "(none)"}.`
+              ? skipEvidenceIds.length > 0
+                ? `User replied "I don't know" and skipped answering outstanding request IDs: ${outstandingRequestIds.join(", ") || "(none)"}.`
+                : "User skipped a non-diagnostic intake request. Do not infer any playbook evidence from that skip; continue with the next diagnostic request."
               : userExpressedEscalationIntent
                 ? `${plannerUserMessage}\n\n[Context: user appears to be asking for human help. ${intentManifest.frustrationHandling.empathyAcknowledgment ? "Show empathy and " : ""}try up to ${intentManifest.frustrationHandling.alternatePathsBeforeEscalation} alternate troubleshooting path(s) before escalating unless unsafe.]`
                 : plannerUserMessage;
@@ -3373,16 +3330,26 @@ export async function POST(request: Request) {
               message,
               outstandingRequestIds,
               playbook,
+              previousRequests: lastAssistantMessage?.requests,
             });
-            if (inferredEvidence.length > 0) {
-              const existing = new Set(
-                plannerOutput.evidence_extracted.map((item) => item.evidenceId)
-              );
-              for (const item of inferredEvidence) {
-                if (!existing.has(item.evidenceId)) {
-                  plannerOutput.evidence_extracted.push(item);
-                }
-              }
+            plannerOutput.evidence_extracted = mergeInferredEvidenceWithPlannerOutput({
+              plannerEvidence: plannerOutput.evidence_extracted,
+              inferredEvidence,
+            });
+
+            const projectedEvidence: Record<string, EvidenceRecord> = {
+              ...evidence,
+            };
+            const projectedEvidenceCollectedAt = new Date().toISOString();
+            for (const item of plannerOutput.evidence_extracted) {
+              projectedEvidence[item.evidenceId] = {
+                value: item.value,
+                type: typeof item.value,
+                confidence: item.confidence,
+                photoAnalysis: item.photoAnalysis,
+                collectedAt: projectedEvidenceCollectedAt,
+                turn: turnCount,
+              };
             }
 
             const { output: sanitized, errors: sanitizeErrors } = validateAndSanitizePlannerOutput(
@@ -3390,13 +3357,15 @@ export async function POST(request: Request) {
               playbook,
               actionsById,
               true,
-              { maxRequestsPerTurn: diagnosticConfig.maxRequestsPerTurn }
+              {
+                maxRequestsPerTurn: diagnosticConfig.maxRequestsPerTurn,
+              }
             );
             const requestsBeforeDedup = [...sanitized.requests];
             const dedupedRequests = preventRepeatedChecklistRequests({
               requests: sanitized.requests,
               playbook,
-              evidence,
+              evidence: projectedEvidence,
               evidenceExtracted: sanitized.evidence_extracted,
               actionsById,
             });
@@ -3419,16 +3388,224 @@ export async function POST(request: Request) {
               });
             if (requestsChanged) {
               if (sanitized.requests.length > 0) {
-                sanitized.message = `Thanks for the update. Next, please: ${sanitized.requests[0].prompt}`;
+                sanitized.message = `Next: ${sanitized.requests[0].prompt}`;
               } else if (
                 sanitized.phase === "gathering_info" ||
                 sanitized.phase === "diagnosing"
               ) {
                 sanitized.message =
-                  "Thanks for the update. I have enough from this step and will continue with the next analysis.";
+                  "I have enough from this step and will continue with the next check.";
               }
               if ("message_html" in sanitized) {
                 delete (sanitized as { message_html?: string }).message_html;
+              }
+            }
+            const supportedStructuredCause = findSingleStructuredSupportedCause({
+              playbook,
+              evidence: projectedEvidence,
+            });
+            if (
+              supportedStructuredCause &&
+              supportedStructuredCause.cause.outcome === "escalation" &&
+              sanitized.phase !== "resolving"
+            ) {
+              sanitized.phase = "escalated";
+              sanitized.requests = [];
+              sanitized.resolution = undefined;
+              sanitized.escalation_reason =
+                sanitized.escalation_reason ??
+                `Collected evidence supports ${supportedStructuredCause.cause.cause}`;
+              sanitized.message = `The checks indicate ${supportedStructuredCause.cause.cause} This requires technician service, so I'm connecting you with a technician.`;
+              const confirmedCauseId = supportedStructuredCause.cause.id;
+              const existingHypothesis = sanitized.hypotheses_update.find(
+                (hypothesis) => hypothesis.causeId === confirmedCauseId
+              );
+              sanitized.hypotheses_update = [
+                ...sanitized.hypotheses_update
+                  .filter((hypothesis) => hypothesis.causeId !== confirmedCauseId)
+                  .map((hypothesis) =>
+                    hypothesis.status === "confirmed"
+                      ? { ...hypothesis, status: "active" as const }
+                      : hypothesis
+                  ),
+                {
+                  causeId: confirmedCauseId,
+                  confidence: Math.max(
+                    existingHypothesis?.confidence ?? 0,
+                    supportedStructuredCause.evaluation.score || 0.8
+                  ),
+                  reasoning:
+                    existingHypothesis?.reasoning ||
+                    `Structured playbook rules support ${confirmedCauseId}.`,
+                  status: "confirmed",
+                },
+              ];
+            }
+            if (
+              supportedStructuredCause &&
+              supportedStructuredCause.cause.outcome !== "escalation" &&
+              sanitized.phase !== "resolving"
+            ) {
+              const fallbackResolution = buildSupportedStructuredResolution({
+                playbook,
+                causeId: supportedStructuredCause.cause.id,
+                why:
+                  `Structured playbook rules support ${supportedStructuredCause.cause.id}.`,
+              });
+              if (fallbackResolution) {
+                sanitizeErrors.push(
+                  `Structured playbook rules fully support ${supportedStructuredCause.cause.id}; switching to fallback resolution`
+                );
+                sanitized.phase = "resolving";
+                sanitized.requests = [];
+                delete sanitized.escalation_reason;
+                sanitized.resolution = fallbackResolution;
+                sanitized.message = `The evidence points to ${fallbackResolution.diagnosis} Please try these steps.`;
+                const confirmedCauseId = supportedStructuredCause.cause.id;
+                const existingHypothesis = sanitized.hypotheses_update.find(
+                  (hypothesis) => hypothesis.causeId === confirmedCauseId
+                );
+                sanitized.hypotheses_update = [
+                  ...sanitized.hypotheses_update
+                    .filter((hypothesis) => hypothesis.causeId !== confirmedCauseId)
+                    .map((hypothesis) =>
+                      hypothesis.status === "confirmed"
+                        ? { ...hypothesis, status: "active" as const }
+                        : hypothesis
+                    ),
+                  {
+                    causeId: confirmedCauseId,
+                    confidence: Math.max(
+                      existingHypothesis?.confidence ?? 0,
+                      supportedStructuredCause.evaluation.score || 0.8
+                    ),
+                    reasoning:
+                      existingHypothesis?.reasoning ||
+                      `Structured playbook rules support ${confirmedCauseId}.`,
+                    status: "confirmed",
+                  },
+                ];
+              }
+            }
+            if (sanitized.phase === "resolving" && sanitized.resolution) {
+              const verification = await withKeepalive(
+                controller,
+                verifyDiagnosticResolution(
+                  {
+                    playbook,
+                    evidence: projectedEvidence,
+                    resolution: sanitized.resolution,
+                  },
+                  audit
+                )
+              );
+              const selectedSteps = applyResolutionVerificationStepSelection({
+                steps: sanitized.resolution.steps,
+                verification,
+              });
+              if (selectedSteps.removedStepIds.length > 0) {
+                sanitizeErrors.push(
+                  `Verifier removed redundant or irrelevant resolution steps: ${selectedSteps.removedStepIds.join(", ")}`
+                );
+              }
+              if (verification.verdict !== "supported") {
+                const rejectedCauseId = sanitized.resolution.causeId;
+                const supportedCauseAtVerification = findSingleStructuredSupportedCause({
+                  playbook,
+                  evidence: projectedEvidence,
+                });
+                if (supportedCauseAtVerification?.cause.id === rejectedCauseId) {
+                  sanitizeErrors.push(
+                    `LLM verifier rejected resolution cause ${rejectedCauseId}: ${verification.verdict}${
+                      verification.reasoning ? ` (${verification.reasoning})` : ""
+                    }; keeping resolution because structured playbook rules uniquely support the same cause`
+                  );
+                  if (selectedSteps.steps.length > 0) {
+                    sanitized.resolution = {
+                      ...sanitized.resolution,
+                      steps: selectedSteps.steps,
+                    };
+                  }
+                } else {
+                  const fallbackResolution = buildStructuredResolutionFallback({
+                    playbook,
+                    verification,
+                    rejectedResolution: sanitized.resolution,
+                  });
+                  if (fallbackResolution) {
+                    sanitizeErrors.push(
+                      `LLM verifier rejected resolution cause ${rejectedCauseId}: ${verification.verdict}${
+                        verification.reasoning ? ` (${verification.reasoning})` : ""
+                      }; switching to structured-supported cause ${fallbackResolution.causeId}`
+                    );
+                    sanitized.phase = "resolving";
+                    sanitized.requests = [];
+                    delete sanitized.escalation_reason;
+                    sanitized.resolution = fallbackResolution;
+                    sanitized.message = `The evidence points to ${fallbackResolution.diagnosis} Please try these steps.`;
+                    const updatedHypotheses = sanitized.hypotheses_update.map((hypothesis) => {
+                      if (hypothesis.causeId !== rejectedCauseId) {
+                        return hypothesis;
+                      }
+                      return {
+                        ...hypothesis,
+                        status: "ruled_out" as const,
+                        confidence: Math.min(hypothesis.confidence, 0.2),
+                        reasoning: `${hypothesis.reasoning} This cause was ruled out because the diagnostic verifier marked it ${verification.verdict}.${verification.reasoning ? ` ${verification.reasoning}` : ""}`.trim(),
+                      };
+                    });
+                    if (!updatedHypotheses.some((hypothesis) => hypothesis.causeId === fallbackResolution.causeId)) {
+                      updatedHypotheses.push({
+                        causeId: fallbackResolution.causeId,
+                        status: "confirmed",
+                        confidence: Math.max(verification.confidence, 0.6),
+                        reasoning:
+                          verification.reasoning ||
+                          `Structured playbook rules support ${fallbackResolution.causeId}.`,
+                      });
+                    }
+                    sanitized.hypotheses_update = updatedHypotheses;
+                  } else {
+                    sanitizeErrors.push(
+                      `LLM verifier rejected resolution cause ${rejectedCauseId}: ${verification.verdict}${
+                        verification.reasoning ? ` (${verification.reasoning})` : ""
+                      }`
+                    );
+                    sanitized.phase = "escalated";
+                    sanitized.resolution = undefined;
+                    sanitized.requests = [];
+                    sanitized.escalation_reason =
+                      "Collected evidence did not clearly support a single cause.";
+                    sanitized.message =
+                      "I couldn't determine a reliable cause from the checks we've completed, so I'm connecting you with a technician.";
+                    sanitized.hypotheses_update = sanitized.hypotheses_update.map(
+                      (hypothesis) => {
+                        if (hypothesis.causeId !== rejectedCauseId) {
+                          return hypothesis;
+                        }
+                        return {
+                          ...hypothesis,
+                          status: "ruled_out",
+                          confidence: Math.min(hypothesis.confidence, 0.2),
+                          reasoning: `${hypothesis.reasoning} This cause was ruled out because the diagnostic verifier marked it ${verification.verdict}.${verification.reasoning ? ` ${verification.reasoning}` : ""}`.trim(),
+                        };
+                      }
+                    );
+                  }
+                }
+              } else {
+                if (selectedSteps.steps.length > 0) {
+                  sanitized.resolution = {
+                    ...sanitized.resolution,
+                    steps: selectedSteps.steps,
+                  };
+                } else if (
+                  selectedSteps.removedStepIds.length === sanitized.resolution.steps.length
+                ) {
+                  sanitizeErrors.push(
+                    "Verifier marked all resolution steps as redundant; keeping authored playbook steps as fallback"
+                  );
+                }
               }
             }
             audit.logPlannerOutput(plannerOutput, sanitized, sanitizeErrors);
@@ -3467,15 +3644,21 @@ export async function POST(request: Request) {
           audit.logPlannerOutput(plannerOutput);
         }
 
-        if (lastUserWasSkip && skipEvidenceIds.length > 0) {
-          const extractedIds = new Set(plannerOutput.evidence_extracted.map((item) => item.evidenceId));
-          for (const evidenceId of skipEvidenceIds) {
-            if (extractedIds.has(evidenceId)) continue;
-            plannerOutput.evidence_extracted.push({
-              evidenceId,
-              value: null,
-              confidence: "uncertain",
-            });
+        if (lastUserWasSkip) {
+          if (skipEvidenceIds.length > 0) {
+            const extractedIds = new Set(plannerOutput.evidence_extracted.map((item) => item.evidenceId));
+            for (const evidenceId of skipEvidenceIds) {
+              if (extractedIds.has(evidenceId)) continue;
+              plannerOutput.evidence_extracted.push({
+                evidenceId,
+                value: null,
+                confidence: "uncertain",
+              });
+            }
+          } else if (plannerOutput.evidence_extracted.length > 0) {
+            plannerOutput.evidence_extracted = plannerOutput.evidence_extracted.filter(
+              (item) => item.confidence !== "uncertain"
+            );
           }
         }
 

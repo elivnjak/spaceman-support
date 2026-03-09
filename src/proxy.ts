@@ -49,6 +49,9 @@ function getAllowedOrigins(request: NextRequest): Set<string> {
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  const isPlaybookTestMode =
+    process.env.NODE_ENV !== "production" &&
+    request.headers.get("x-playbook-test-mode") === "true";
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-pathname", pathname);
   const nextWithPathHeader = () =>
@@ -114,7 +117,7 @@ export async function proxy(request: NextRequest) {
       }
 
       // Rate limit by IP (skip when admin is logged in, e.g. for testing)
-      if (!sessionToken) {
+      if (!sessionToken && !isPlaybookTestMode) {
         const ip = getClientIp(request);
         const limit = RATE_LIMITS.chatPerIp;
         const result = await checkRateLimit(

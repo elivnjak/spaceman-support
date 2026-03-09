@@ -654,7 +654,7 @@ export default function AdminPlaybooksPage() {
             />
           </div>
           <p className="mt-2 text-xs text-muted">
-            Export an existing playbook to get a prefilled workbook for edits/re-import.
+            Export an existing playbook to get a prefilled workbook for edits and re-import. Use the workbook path for schema-v2 fields such as support rules, exclude rules, value definitions, and cause outcomes.
           </p>
           <p className="mt-1 text-xs text-muted">
             In the template Overview sheet, use <code>product_type_ids</code> for comma-separated IDs or{" "}
@@ -782,7 +782,7 @@ export default function AdminPlaybooksPage() {
                 <label className="group/tip relative inline-block text-sm font-medium text-muted cursor-help">
                   Label <span className="text-muted" aria-hidden>ⓘ</span>
                   <span className="pointer-events-none absolute left-0 top-full z-50 mt-1 hidden max-w-sm rounded bg-gray-800 px-2 py-1.5 text-xs font-normal text-white shadow-lg group-hover/tip:block">
-                    The category this playbook belongs to (e.g. Too runny, Too thick). The assistant uses this to pick the right playbook for the user&apos;s issue. Create labels in Admin → Labels first.
+                    The stable issue taxonomy this playbook belongs to. Triage selects a label first, then loads the matching playbook for the product context. Keep cause logic in the playbook, not in the label itself.
                   </span>
                 </label>
                 <select
@@ -858,7 +858,7 @@ export default function AdminPlaybooksPage() {
                 <span className="group/tip relative inline cursor-help border-b border-dotted border-gray-400">
                   ⓘ
                   <span className="pointer-events-none absolute left-0 top-full z-50 mt-1 hidden max-w-sm rounded bg-gray-800 px-2 py-1.5 text-xs font-normal text-white shadow-lg group-hover/tip:block">
-                    Phrases or descriptions the user might say (e.g. &quot;watery&quot;, &quot;won&apos;t hold shape&quot;). These help the assistant recognise that this playbook applies.
+                    Phrases or descriptions the user might say (e.g. &quot;watery&quot;, &quot;won&apos;t hold shape&quot;). Symptoms guide the conversation after selection; they are not the place for deterministic cause rules.
                   </span>
                 </span>
               </p>
@@ -938,7 +938,7 @@ export default function AdminPlaybooksPage() {
                 <span className="group/tip relative inline cursor-help border-b border-dotted border-gray-400">
                   ⓘ
                   <span className="pointer-events-none absolute left-0 top-full z-50 mt-1 hidden max-w-sm rounded bg-gray-800 px-2 py-1.5 text-xs font-normal text-white shadow-lg group-hover/tip:block">
-                    Each item is something the assistant should try to collect (photo, reading, observation, etc.). Required items must be gathered before the assistant can suggest a cause and steps.
+                    Each item is something the assistant should try to collect (photo, reading, observation, etc.). Use action-backed exact inputs whenever diagnosis depends on specific values. Required items should represent the minimum trusted evidence needed before a cause can be supported.
                   </span>
                 </span>
               </p>
@@ -972,7 +972,7 @@ export default function AdminPlaybooksPage() {
                       <label className="group/tip relative inline-block text-xs font-medium text-muted cursor-help">
                         Evidence ID <span className="text-muted" aria-hidden>ⓘ</span>
                         <span className="pointer-events-none absolute left-0 top-full z-50 mt-1 hidden max-w-sm rounded bg-gray-800 px-2 py-1.5 text-xs font-normal text-white shadow-lg group-hover/tip:block">
-                          Unique slug (e.g. hopper_temp, dispense_photo). Used when linking causes to this evidence.
+                          Unique slug (e.g. hopper_temp, dispense_photo). Keep it stable because workbook-authored schema-v2 rules, scenario generators, and exports reference this ID directly.
                         </span>
                       </label>
                       <input
@@ -987,7 +987,7 @@ export default function AdminPlaybooksPage() {
                       <label className="group/tip relative inline-block text-xs font-medium text-muted cursor-help">
                         Type <span className="text-muted" aria-hidden>ⓘ</span>
                         <span className="pointer-events-none absolute left-0 top-full z-50 mt-1 hidden max-w-sm rounded bg-gray-800 px-2 py-1.5 text-xs font-normal text-white shadow-lg group-hover/tip:block">
-                          photo = user sends image; reading = numeric/value; observation = user describes; action = they perform a task; confirmation = yes/no.
+                          photo = user sends image; reading = numeric/value; observation = user describes; action = they perform a task; confirmation = yes/no. Match this to the real input shape you want persisted.
                         </span>
                       </label>
                       <select
@@ -1000,7 +1000,7 @@ export default function AdminPlaybooksPage() {
                         ))}
                       </select>
                     </div>
-                    <label className="flex items-center gap-1 text-sm cursor-help" title="Must be collected before suggesting a cause">
+                    <label className="flex items-center gap-1 text-sm cursor-help" title="Required evidence gates diagnosis. Use this only when the value is truly needed before a cause can be safely supported or excluded.">
                       <input
                         type="checkbox"
                         checked={e.required}
@@ -1016,7 +1016,7 @@ export default function AdminPlaybooksPage() {
                     <label className="group/tip relative inline-block text-xs font-medium text-muted cursor-help">
                       Description <span className="text-muted" aria-hidden>ⓘ</span>
                       <span className="pointer-events-none absolute left-0 top-full z-50 mt-1 hidden max-w-sm rounded bg-gray-800 px-2 py-1.5 text-xs font-normal text-white shadow-lg group-hover/tip:block">
-                        What to ask for in plain language (e.g. &quot;Hopper temperature reading&quot;).
+                        What to ask for in plain language (e.g. &quot;Hopper temperature reading&quot;). Keep the wording user-facing; put deterministic value semantics in the linked action and workbook rules.
                       </span>
                     </label>
                     <input
@@ -1031,7 +1031,7 @@ export default function AdminPlaybooksPage() {
                     <label className="group/tip relative inline-block text-xs font-medium text-muted cursor-help">
                       Action (optional) <span className="text-muted" aria-hidden>ⓘ</span>
                       <span className="pointer-events-none absolute left-0 top-full z-50 mt-1 hidden max-w-sm rounded bg-gray-800 px-2 py-1.5 text-xs font-normal text-white shadow-lg group-hover/tip:block">
-                        Link to an Action to show the user step-by-step instructions for collecting this evidence (e.g. how to read the display).
+                        Link to an Action to show the user step-by-step instructions and define the exact expected input. Prefer linking actions whenever schema-v2 rules depend on a specific enum, boolean, or number value.
                       </span>
                     </label>
                     <select
@@ -1062,7 +1062,7 @@ export default function AdminPlaybooksPage() {
                 <span className="group/tip relative inline cursor-help border-b border-dotted border-gray-400">
                   ⓘ
                   <span className="pointer-events-none absolute left-0 top-full z-50 mt-1 hidden max-w-sm rounded bg-gray-800 px-2 py-1.5 text-xs font-normal text-white shadow-lg group-hover/tip:block">
-                    List the possible underlying problems the assistant will choose between. For each cause, set likelihood and which evidence helps confirm or rule it out.
+                    List the possible underlying problems the assistant will choose between. The inline editor manages the core fields; use workbook export/import to maintain full schema-v2 support rules, exclude rules, value definitions, and technician-only outcomes.
                   </span>
                 </span>
               </p>
@@ -1111,7 +1111,7 @@ export default function AdminPlaybooksPage() {
                       <label className="group/tip relative inline-block text-xs font-medium text-muted cursor-help">
                         Likelihood <span className="text-muted" aria-hidden>ⓘ</span>
                         <span className="pointer-events-none absolute left-0 top-full z-50 mt-1 hidden max-w-sm rounded bg-gray-800 px-2 py-1.5 text-xs font-normal text-white shadow-lg group-hover/tip:block">
-                          Starting priority before any evidence is collected. The assistant uses this to order and update hypotheses as evidence comes in.
+                          Starting prior before much evidence is collected. In schema v2, this complements structured cause rules; it should not be the only thing separating sibling causes.
                         </span>
                       </label>
                       <select
@@ -1132,7 +1132,7 @@ export default function AdminPlaybooksPage() {
                     <label className="group/tip relative inline-block text-xs font-medium text-muted cursor-help">
                       Cause description <span className="text-muted" aria-hidden>ⓘ</span>
                       <span className="pointer-events-none absolute left-0 top-full z-50 mt-1 hidden max-w-sm rounded bg-gray-800 px-2 py-1.5 text-xs font-normal text-white shadow-lg group-hover/tip:block">
-                        Plain-language explanation of this root cause. Shown in the diagnosis and used by the assistant when explaining to the user.
+                        Plain-language explanation of this root cause. Keep it readable for users and admins, but maintain deterministic support/exclude semantics in the workbook-backed schema-v2 fields.
                       </span>
                     </label>
                     <input
@@ -1147,7 +1147,7 @@ export default function AdminPlaybooksPage() {
                     <label className="group/tip relative inline-block text-xs font-medium text-muted mb-1 cursor-help">
                       Ruling evidence <span className="text-muted" aria-hidden>ⓘ</span>
                       <span className="pointer-events-none absolute left-0 top-full z-50 mt-1 hidden max-w-sm rounded bg-gray-800 px-2 py-1.5 text-xs font-normal text-white shadow-lg group-hover/tip:block">
-                        Check the evidence items that help confirm or rule out this cause. When the user provides a value for checked evidence, the assistant uses it to update whether this cause is likely or ruled out.
+                        Check the evidence items most relevant to this cause. This inline list is a quick reference and prompt hint. For deterministic schema-v2 diagnosis, maintain the authoritative support and exclude rules in the workbook.
                       </span>
                     </label>
                     <p className="text-xs text-muted mb-1">

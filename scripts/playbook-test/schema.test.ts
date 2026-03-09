@@ -20,13 +20,12 @@ test("loadScenarioFile validates and resolves fixture references", async () => {
           turns: [
             {
               user: "hello",
+              inputSource: "skip",
               images: ["example.png"],
               expect: {},
             },
           ],
           finalExpect: {
-            status: "active",
-            phase: "triaging",
             playbookLabel: "too_runny",
           },
         },
@@ -38,7 +37,52 @@ test("loadScenarioFile validates and resolves fixture references", async () => {
 
     const loaded = await loadScenarioFile(path.join(scenarioDir, "scenario.json"));
     assert.equal(loaded.scenario.id, "scenario-a");
+    assert.equal(loaded.scenario.turns[0]?.inputSource, "skip");
     assert.equal(loaded.scenario.turns[0]?.images[0], "example.png");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("loadScenarioFile validates auto-response fixture references", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "playbook-schema-test-"));
+  try {
+    const scenarioDir = path.join(root, "scenario-b");
+    await mkdir(path.join(scenarioDir, "fixtures"), { recursive: true });
+    await writeFile(
+      path.join(scenarioDir, "scenario.json"),
+      JSON.stringify(
+        {
+          id: "scenario-b",
+          description: "Missing auto-response fixture",
+          autoResponse: {
+            answers: {
+              request_photo: {
+                user: "Attached.",
+                images: ["missing.png"],
+              },
+            },
+          },
+          turns: [
+            {
+              user: "hello",
+              expect: {},
+            },
+          ],
+          finalExpect: {
+            playbookLabel: "too_runny",
+          },
+        },
+        null,
+        2
+      ),
+      "utf-8"
+    );
+
+    await assert.rejects(
+      () => loadScenarioFile(path.join(scenarioDir, "scenario.json")),
+      /references missing fixture "missing\.png"/
+    );
   } finally {
     await rm(root, { recursive: true, force: true });
   }

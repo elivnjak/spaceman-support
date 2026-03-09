@@ -89,16 +89,18 @@ export function PlaybookGuideModal({ open, onClose, scrollToTab }: PlaybookGuide
 
           <GuideSectionDetail id="overview" title="Overview">
             <p>
-              High-level information about this playbook &mdash; title, linked
-              label, and optional product type scoping. This is the &quot;cover
-              page&quot; of the playbook.
+              High-level routing and scope information for this playbook &mdash;
+              title, linked label, optional product type scoping, and the schema
+              version currently stored for this guide.
             </p>
             <p className="mt-2">
               The <strong>title</strong> appears in the triage prompt so the
               right playbook can be selected. The <strong>label</strong> links
               the playbook to the issue taxonomy. <strong>Product type</strong>{" "}
               scoping allows different playbooks for the same label when
-              different products need different diagnostic paths.
+              different products need different diagnostic paths. Full schema-v2
+              rule authoring is currently maintained through workbook export and
+              re-import.
             </p>
           </GuideSectionDetail>
 
@@ -124,13 +126,13 @@ export function PlaybookGuideModal({ open, onClose, scrollToTab }: PlaybookGuide
               assistant should try to collect during the conversation. Each item
               has a short description, a type, and whether it&apos;s required or
               optional. You can also link an item to an <strong>Action</strong>{" "}
-              for detailed collection instructions.
+              for the exact collection contract and expected input shape.
             </p>
             <p className="mt-2">
               Evidence is <em>what we need to know</em> before we can safely
-              suggest a cause and fix. The assistant asks for these one by one.
-              Required items must be gathered before the assistant will narrow
-              down a cause.
+              support or exclude a cause. The assistant asks for these one by
+              one. Required items should represent the minimum trustworthy
+              evidence needed before structured diagnosis can continue.
             </p>
             <div className="mt-3 overflow-x-auto">
               <table className="w-full text-left text-xs">
@@ -171,7 +173,7 @@ export function PlaybookGuideModal({ open, onClose, scrollToTab }: PlaybookGuide
               The candidate causes &mdash; the possible root causes the assistant
               is trying to choose between. For each cause you set a short name,
               description, likelihood, and which evidence items help confirm or
-              rule it out.
+              rule it out in the inline editor.
             </p>
             <p className="mt-2">
               <strong>Likelihood</strong> gives the assistant a starting prior.{" "}
@@ -179,10 +181,11 @@ export function PlaybookGuideModal({ open, onClose, scrollToTab }: PlaybookGuide
               <em>low</em> = only if evidence specifically points to it.
             </p>
             <p className="mt-2">
-              <strong>Ruling evidence</strong> is the core cross-reference: the
-              evidence checklist drives what to collect, and the causes describe
-              what to conclude from what was collected. The more clearly you link
-              causes to evidence, the more consistent the diagnosis will be.
+              <strong>Ruling evidence</strong> is the quick inline cross-reference.
+              In schema v2, the authoritative cause semantics are workbook-backed{" "}
+              <strong>support rules</strong>, <strong>exclude rules</strong>, and
+              optional <strong>outcome</strong> fields. Use the workbook path when
+              sibling causes need deterministic separation.
             </p>
           </GuideSectionDetail>
 
@@ -213,7 +216,7 @@ export function PlaybookGuideModal({ open, onClose, scrollToTab }: PlaybookGuide
               that each step ID exists and that the instruction text hasn&apos;t
               drifted from what you wrote. If drift is detected, your exact
               authored text replaces the assistant&apos;s version. This keeps
-              advice consistent and safe.
+              the playbook as the canonical source of resolution wording.
             </p>
             <p className="mt-2">
               The optional <strong>How to verify</strong> field tells the user

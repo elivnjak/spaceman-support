@@ -43,6 +43,7 @@ export const MANIFEST_DEFAULTS: IntentManifest = {
       {
         id: "electrical_hazard",
         terms: [
+          "electrical smell",
           "electrical shock",
           "got shocked",
           "live wire",

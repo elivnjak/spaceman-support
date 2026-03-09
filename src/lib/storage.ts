@@ -44,6 +44,14 @@ export async function deleteStorageDirectory(relativePath: string): Promise<void
   await rm(fullPath, { recursive: true, force: true });
 }
 
+export function getStorageRoot(): string {
+  return STORAGE_ROOT;
+}
+
+export function resolveStoragePath(relativePath: string): string {
+  return path.join(STORAGE_ROOT, relativePath);
+}
+
 export function getStorageRelativePath(fullPath: string): string {
   const root = path.resolve(STORAGE_ROOT);
   const resolved = path.resolve(fullPath);
@@ -51,6 +59,13 @@ export function getStorageRelativePath(fullPath: string): string {
     return path.relative(process.cwd(), resolved);
   }
   return path.relative(root, resolved);
+}
+
+export function normalizeStorageRelativePath(filePath: string): string {
+  if (!path.isAbsolute(filePath)) {
+    return filePath.replace(/\\/g, "/").replace(/^\/+/, "");
+  }
+  return getStorageRelativePath(filePath).replace(/\\/g, "/");
 }
 
 export const REFERENCE_IMAGES_DIR = "reference_images";

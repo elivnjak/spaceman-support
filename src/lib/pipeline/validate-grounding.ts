@@ -20,6 +20,67 @@ export type ValidationResult = {
   driftedStepIds: string[];
 };
 
+function normaliseAlias(text: string | undefined | null): string {
+  if (!text) return "";
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function buildStepAliasMap(playbookSteps: PlaybookStep[]): Map<string, string> {
+  const aliasCandidates = new Map<string, Set<string>>();
+  for (const step of playbookSteps) {
+    const aliases = [step.step_id, step.title, step.instruction, step.check]
+      .map((value) => normaliseAlias(value))
+      .filter(Boolean);
+    for (const alias of aliases) {
+      const existing = aliasCandidates.get(alias) ?? new Set<string>();
+      existing.add(step.step_id);
+      aliasCandidates.set(alias, existing);
+    }
+  }
+
+  const aliasMap = new Map<string, string>();
+  for (const [alias, stepIds] of aliasCandidates.entries()) {
+    if (stepIds.size === 1) {
+      aliasMap.set(alias, [...stepIds][0]!);
+    }
+  }
+  return aliasMap;
+}
+
+function resolveStepIdFromAliases(
+  step: LLMStep,
+  aliasMap: Map<string, string>
+): string | null {
+  const aliases = [step.step_id, step.instruction, step.check]
+    .map((value) => normaliseAlias(value))
+    .filter(Boolean);
+
+  for (const alias of aliases) {
+    const remappedStepId = aliasMap.get(alias);
+    if (remappedStepId) {
+      return remappedStepId;
+    }
+  }
+
+  return null;
+}
+
+function remapLlMSteps(llmSteps: LLMStep[], playbookSteps: PlaybookStep[]): LLMStep[] {
+  const aliasMap = buildStepAliasMap(playbookSteps);
+  return llmSteps.map((step) => {
+    const remappedStepId = resolveStepIdFromAliases(step, aliasMap);
+    if (!remappedStepId) return step;
+    return {
+      ...step,
+      step_id: remappedStepId,
+    };
+  });
+}
+
 /**
  * Normalise text for comparison: lowercase, collapse whitespace, strip punctuation.
  */
@@ -53,11 +114,12 @@ export function validateGrounding(
   llmSteps: LLMStep[],
   playbookSteps: PlaybookStep[]
 ): ValidationResult {
+  const normalizedLlMSteps = remapLlMSteps(llmSteps, playbookSteps);
   const stepMap = new Map(playbookSteps.map((s) => [s.step_id, s]));
   const invalidStepIds: string[] = [];
   const driftedStepIds: string[] = [];
 
-  for (const ls of llmSteps) {
+  for (const ls of normalizedLlMSteps) {
     const pb = stepMap.get(ls.step_id);
     if (!pb) {
       invalidStepIds.push(ls.step_id);
@@ -87,8 +149,9 @@ export function enforcePlaybookInstructions(
   llmSteps: LLMStep[],
   playbookSteps: PlaybookStep[]
 ): LLMStep[] {
+  const normalizedLlMSteps = remapLlMSteps(llmSteps, playbookSteps);
   const stepMap = new Map(playbookSteps.map((s) => [s.step_id, s]));
-  return llmSteps
+  return normalizedLlMSteps
     .filter((ls) => stepMap.has(ls.step_id))
     .map((ls) => {
       const pb = stepMap.get(ls.step_id)!;

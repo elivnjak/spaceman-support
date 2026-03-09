@@ -1,6 +1,12 @@
 import OpenAI from "openai";
 import { getLlmConfig } from "@/lib/config";
 import type { AuditLogger } from "@/lib/audit";
+import {
+  estimateOpenAIRequestTokens,
+  withOpenAIRetry,
+} from "@/lib/openai/retry";
+
+const PLAYBOOK_TRIAGE_MAX_COMPLETION_TOKENS = 250;
 
 export type TriageLabelOption = {
   labelId: string;
@@ -8,6 +14,7 @@ export type TriageLabelOption = {
   description?: string | null;
   playbookTitle: string;
   productTypes?: string[];
+  symptoms?: string[];
 };
 
 export type TriageHistoryItem = {
@@ -47,6 +54,59 @@ function quoteUntrustedText(value: string | null | undefined): string {
   return JSON.stringify((value ?? "").replace(/\u0000/g, ""));
 }
 
+function normalizeText(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function findSymptomMatchedLabel(input: PlaybookTriageInput): PlaybookTriageResult | null {
+  const normalizedUserHistory = input.triageHistory
+    .filter((item) => item.role === "user")
+    .map((item) => normalizeText(item.content))
+    .filter(Boolean);
+  if (normalizedUserHistory.length === 0) {
+    return null;
+  }
+
+  const scoredLabels = input.labels
+    .map((label) => {
+      const matchedSymptoms = (label.symptoms ?? []).filter((symptom) => {
+        const normalizedSymptom = normalizeText(symptom);
+        return (
+          normalizedSymptom.length >= 8 &&
+          normalizedUserHistory.some(
+            (entry) =>
+              entry.includes(normalizedSymptom) || normalizedSymptom.includes(entry)
+          )
+        );
+      });
+      return {
+        label,
+        matchedSymptoms,
+      };
+    })
+    .filter((item) => item.matchedSymptoms.length > 0)
+    .sort((left, right) => right.matchedSymptoms.length - left.matchedSymptoms.length);
+
+  const best = scoredLabels[0];
+  const second = scoredLabels[1];
+  if (!best) return null;
+  if (second && second.matchedSymptoms.length === best.matchedSymptoms.length) {
+    return null;
+  }
+
+  return {
+    selectedLabelId: best.label.labelId,
+    confidence: 0.98,
+    reasoning: `Matched playbook symptom text: ${best.matchedSymptoms[0]}`,
+    followUpQuestion: null,
+    candidateLabels: [best.label.labelId],
+  };
+}
+
 export async function runPlaybookTriage(
   input: PlaybookTriageInput,
   audit?: AuditLogger
@@ -62,13 +122,22 @@ export async function runPlaybookTriage(
     };
   }
 
+  const symptomMatchedLabel = findSymptomMatchedLabel(input);
+  if (symptomMatchedLabel) {
+    return symptomMatchedLabel;
+  }
+
   const labelBlock = input.labels
     .map((l) => {
       const productTypeSummary =
         l.productTypes && l.productTypes.length > 0
           ? l.productTypes.join(", ")
           : "all product types";
-      return `- ${l.labelId}: ${l.displayName}${l.description ? ` (${l.description})` : ""}; playbook="${l.playbookTitle}"; applies_to="${productTypeSummary}"`;
+      const symptomsSummary =
+        l.symptoms && l.symptoms.length > 0
+          ? `; symptoms="${l.symptoms.join(" | ")}"`
+          : "";
+      return `- ${l.labelId}: ${l.displayName}${l.description ? ` (${l.description})` : ""}; playbook="${l.playbookTitle}"; applies_to="${productTypeSummary}"${symptomsSummary}`;
     })
     .join("\n");
 
@@ -124,14 +193,25 @@ Return JSON only.`;
     : [{ type: "text" as const, text: userPrompt }];
 
   const llmStart = Date.now();
-  const res = await getOpenAI().chat.completions.create({
-    model: llmConfig.triageModel,
-    messages: [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: userContent },
-    ],
-    response_format: { type: "json_object" },
+  const estimatedTokens = estimateOpenAIRequestTokens({
+    texts: [systemPrompt, userPrompt],
+    imageCount: input.imageBuffers?.length ?? 0,
+    maxCompletionTokens: PLAYBOOK_TRIAGE_MAX_COMPLETION_TOKENS,
   });
+  const res = await withOpenAIRetry(
+    "playbook_triage",
+    () =>
+      getOpenAI().chat.completions.create({
+        model: llmConfig.triageModel,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userContent },
+        ],
+        response_format: { type: "json_object" },
+        max_completion_tokens: PLAYBOOK_TRIAGE_MAX_COMPLETION_TOKENS,
+      }),
+    { estimatedTokens }
+  );
 
   const text = res.choices[0]?.message?.content;
   if (!text) {

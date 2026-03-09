@@ -3,6 +3,22 @@ import ExcelJS from "exceljs";
 import { eq, inArray } from "drizzle-orm";
 import { db, type Action, type Label, type Playbook, type ProductType } from "@/lib/db";
 import { actions, labels, playbookProductTypes, playbooks, productTypes } from "@/lib/db/schema";
+import {
+  CauseItemSchema,
+  EVIDENCE_TYPES,
+  EvidenceItemSchema,
+  LIKELIHOODS,
+  type CauseItem,
+  type EvidenceItem,
+  type StepItem,
+  type SymptomItem,
+  type TriggerItem,
+  parseRulesJsonCell,
+  parseStringArrayCell,
+  playbookUsesStructuredSemantics,
+  serializeRulesForWorkbook,
+  serializeStringArrayForWorkbook,
+} from "./schema";
 
 type DatabaseLike = typeof db;
 
@@ -20,46 +36,6 @@ const LIGHT_BLUE: ExcelJS.FillPattern = {
   fgColor: { argb: "FFD6EAF8" },
 };
 const HEADER_FONT: Partial<ExcelJS.Font> = { bold: true, size: 11 };
-const EVIDENCE_TYPES = new Set([
-  "photo",
-  "reading",
-  "observation",
-  "action",
-  "confirmation",
-]);
-const LIKELIHOODS = new Set(["high", "medium", "low"]);
-
-type SymptomItem = {
-  id: string;
-  description: string;
-};
-
-type EvidenceItem = {
-  id: string;
-  description: string;
-  actionId?: string;
-  type: "photo" | "reading" | "observation" | "action" | "confirmation";
-  required: boolean;
-};
-
-type CauseItem = {
-  id: string;
-  cause: string;
-  likelihood: "high" | "medium" | "low";
-  rulingEvidence: string[];
-};
-
-type TriggerItem = {
-  trigger: string;
-  reason: string;
-};
-
-type StepItem = {
-  step_id: string;
-  title: string;
-  instruction: string;
-  check?: string;
-};
 
 export type PlaybookWorkbookPayload = {
   playbookId?: string;
@@ -67,6 +43,7 @@ export type PlaybookWorkbookPayload = {
   labelId: string;
   productTypeIds: string[];
   productTypeNames: string[];
+  schemaVersion?: number;
   symptoms: SymptomItem[];
   evidenceChecklist: EvidenceItem[];
   candidateCauses: CauseItem[];
@@ -275,6 +252,7 @@ export async function buildPlaybookWorkbookBuffer(
       { header: "playbook_id", key: "playbook_id", width: 40 },
       { header: "title", key: "title", width: 40 },
       { header: "label_id", key: "label_id", width: 30 },
+      { header: "schema_version", key: "schema_version", width: 16 },
       { header: "product_type_ids", key: "product_type_ids", width: 52 },
       { header: "product_type_names", key: "product_type_names", width: 40 },
     ],
@@ -283,6 +261,7 @@ export async function buildPlaybookWorkbookBuffer(
         playbook_id: playbook.id,
         title: playbook.title ?? "",
         label_id: playbook.labelId ?? "",
+        schema_version: String(playbook.schemaVersion ?? 1),
         product_type_ids: productTypeIds.join(", "),
         product_type_names: productTypeNames.join(", "),
       },
@@ -304,13 +283,17 @@ export async function buildPlaybookWorkbookBuffer(
   addSheet(
     wb,
     "Evidence",
-    'Evidence to gather. "action_id" is optional and must exist in Admin -> Actions. Required is yes/no.',
+    'Evidence to gather. "action_id" is optional and must exist in Admin -> Actions. Required is yes/no. Optional v2 fields: value_kind, value_options, value_unit, unknown_values.',
     [
       { header: "id", key: "id", width: 25 },
       { header: "description", key: "description", width: 50 },
       { header: "action_id", key: "action_id", width: 30 },
       { header: "type", key: "type", width: 18 },
       { header: "required", key: "required", width: 12 },
+      { header: "value_kind", key: "value_kind", width: 18 },
+      { header: "value_options", key: "value_options", width: 34 },
+      { header: "value_unit", key: "value_unit", width: 16 },
+      { header: "unknown_values", key: "unknown_values", width: 28 },
     ],
     evidenceChecklist.map((item) => ({
       id: item.id ?? "",
@@ -318,29 +301,42 @@ export async function buildPlaybookWorkbookBuffer(
       action_id: item.actionId ?? "",
       type: item.type ?? "",
       required: item.required ? "yes" : "no",
+      value_kind: item.valueDefinition?.kind ?? "",
+      value_options: serializeStringArrayForWorkbook(item.valueDefinition?.options),
+      value_unit: item.valueDefinition?.unit ?? "",
+      unknown_values: serializeStringArrayForWorkbook(item.valueDefinition?.unknownValues),
     })),
     {
       type: [...EVIDENCE_TYPES],
       required: ["yes", "no"],
+      value_kind: ["photo", "boolean", "enum", "number", "text"],
     }
   );
   addSheet(
     wb,
     "Causes",
-    "Possible root causes. ruling_evidence is a comma-separated list of Evidence IDs.",
+    "Possible root causes. ruling_evidence is a comma-separated list of Evidence IDs. Optional v2 fields: outcome, support_mode, support_rules_json, exclude_rules_json.",
     [
       { header: "id", key: "id", width: 25 },
       { header: "cause", key: "cause", width: 54 },
       { header: "likelihood", key: "likelihood", width: 14 },
       { header: "ruling_evidence", key: "ruling_evidence", width: 40 },
+      { header: "outcome", key: "outcome", width: 16 },
+      { header: "support_mode", key: "support_mode", width: 16 },
+      { header: "support_rules_json", key: "support_rules_json", width: 52 },
+      { header: "exclude_rules_json", key: "exclude_rules_json", width: 52 },
     ],
     candidateCauses.map((item) => ({
       id: item.id ?? "",
       cause: item.cause ?? "",
       likelihood: item.likelihood ?? "",
       ruling_evidence: toStringArray(item.rulingEvidence).join(", "),
+      outcome: item.outcome ?? "",
+      support_mode: item.supportMode ?? "",
+      support_rules_json: serializeRulesForWorkbook(item.supportRules),
+      exclude_rules_json: serializeRulesForWorkbook(item.excludeRules),
     })),
-    { likelihood: [...LIKELIHOODS] }
+    { likelihood: [...LIKELIHOODS], outcome: ["resolution", "escalation"], support_mode: ["all", "any"] }
   );
   addSheet(
     wb,
@@ -414,6 +410,7 @@ export async function parsePlaybookWorkbookBuffer(
   const title = overviewRows[0]?.title ?? "";
   const labelId = overviewRows[0]?.label_id ?? "";
   const playbookId = overviewRows[0]?.playbook_id ?? "";
+  const schemaVersionRaw = overviewRows[0]?.schema_version ?? "";
   const productTypeIdsCsv = overviewRows[0]?.product_type_ids ?? "";
   const productTypeNamesCsv =
     overviewRows[0]?.product_type_names ?? overviewRows[0]?.product_types ?? "";
@@ -427,6 +424,15 @@ export async function parsePlaybookWorkbookBuffer(
     )
   ) {
     errors.push("Overview sheet: playbook_id must be a valid UUID when provided.");
+  }
+  const parsedSchemaVersion = schemaVersionRaw ? Number(schemaVersionRaw) : null;
+  if (
+    schemaVersionRaw &&
+    (parsedSchemaVersion == null ||
+      !Number.isInteger(parsedSchemaVersion) ||
+      parsedSchemaVersion < 1)
+  ) {
+    errors.push("Overview sheet: schema_version must be a whole number greater than or equal to 1.");
   }
 
   const selectedProductTypeIds = new Set(
@@ -487,30 +493,67 @@ export async function parsePlaybookWorkbookBuffer(
 
   const evidenceChecklist = readRows(wb.getWorksheet("Evidence")).map((row, index) => {
     const type = (row.type ?? "").toLowerCase();
-    if (type && !EVIDENCE_TYPES.has(type)) {
+    if (type && !new Set(EVIDENCE_TYPES).has(type as EvidenceItem["type"])) {
       errors.push(
         `Evidence sheet row ${index + 3}: invalid type "${row.type}". Must be one of: ${[
           ...EVIDENCE_TYPES,
         ].join(", ")}.`
       );
     }
-    return {
+    const valueDefinition =
+      row.value_kind || row.value_options || row.value_unit || row.unknown_values
+        ? {
+            ...(row.value_kind ? { kind: row.value_kind as NonNullable<EvidenceItem["valueDefinition"]>["kind"] } : {}),
+            ...(row.value_options ? { options: parseStringArrayCell(row.value_options) } : {}),
+            ...(row.value_unit ? { unit: row.value_unit } : {}),
+            ...(row.unknown_values ? { unknownValues: parseStringArrayCell(row.unknown_values) } : {}),
+          }
+        : undefined;
+    const candidate = {
       id: row.id || `evidence_${index + 1}`,
       description: row.description ?? "",
       ...(row.action_id ? { actionId: row.action_id } : {}),
       type: (type || "observation") as EvidenceItem["type"],
       required: ["yes", "true", "1"].includes((row.required ?? "").toLowerCase()),
+      ...(valueDefinition ? { valueDefinition } : {}),
     };
+    const parsed = EvidenceItemSchema.safeParse(candidate);
+    if (!parsed.success) {
+      errors.push(
+        `Evidence sheet row ${index + 3}: ${parsed.error.issues.map((issue) => issue.message).join("; ")}`
+      );
+    }
+    return candidate;
   });
 
   const candidateCauses = readRows(wb.getWorksheet("Causes")).map((row, index) => {
     const likelihood = (row.likelihood ?? "").toLowerCase();
-    if (likelihood && !LIKELIHOODS.has(likelihood)) {
+    if (likelihood && !new Set(LIKELIHOODS).has(likelihood as CauseItem["likelihood"])) {
       errors.push(
         `Causes sheet row ${index + 3}: invalid likelihood "${row.likelihood}". Must be one of: high, medium, low.`
       );
     }
-    return {
+    let supportRules: CauseItem["supportRules"] | undefined;
+    let excludeRules: CauseItem["excludeRules"] | undefined;
+    try {
+      supportRules = row.support_rules_json
+        ? parseRulesJsonCell(row.support_rules_json)
+        : undefined;
+    } catch (error) {
+      errors.push(
+        `Causes sheet row ${index + 3}: invalid support_rules_json. ${error instanceof Error ? error.message : "Expected JSON array of rules."}`
+      );
+    }
+    try {
+      excludeRules = row.exclude_rules_json
+        ? parseRulesJsonCell(row.exclude_rules_json)
+        : undefined;
+    } catch (error) {
+      errors.push(
+        `Causes sheet row ${index + 3}: invalid exclude_rules_json. ${error instanceof Error ? error.message : "Expected JSON array of rules."}`
+      );
+    }
+    const candidate = {
       id: row.id || `cause_${index + 1}`,
       cause: row.cause ?? "",
       likelihood: (likelihood || "medium") as CauseItem["likelihood"],
@@ -518,7 +561,18 @@ export async function parsePlaybookWorkbookBuffer(
         .split(",")
         .map((item) => item.trim())
         .filter(Boolean),
+      ...(row.outcome ? { outcome: row.outcome as CauseItem["outcome"] } : {}),
+      ...(row.support_mode ? { supportMode: row.support_mode as CauseItem["supportMode"] } : {}),
+      ...(supportRules ? { supportRules } : {}),
+      ...(excludeRules ? { excludeRules } : {}),
     };
+    const parsed = CauseItemSchema.safeParse(candidate);
+    if (!parsed.success) {
+      errors.push(
+        `Causes sheet row ${index + 3}: ${parsed.error.issues.map((issue) => issue.message).join("; ")}`
+      );
+    }
+    return candidate;
   });
 
   const escalationTriggers = readRows(wb.getWorksheet("Triggers")).map((row) => ({
@@ -584,6 +638,11 @@ export async function parsePlaybookWorkbookBuffer(
       labelId,
       productTypeIds: Array.from(selectedProductTypeIds),
       productTypeNames: requestedProductTypeNames,
+      schemaVersion:
+        parsedSchemaVersion ??
+        (playbookUsesStructuredSemantics({ evidenceChecklist, candidateCauses })
+          ? 2
+          : 1),
       symptoms,
       evidenceChecklist,
       candidateCauses,
@@ -615,6 +674,9 @@ export async function savePlaybookWorkbookPayload(
     labelId: payload.labelId,
     title: payload.title,
     steps: payload.steps,
+    schemaVersion:
+      payload.schemaVersion ??
+      (playbookUsesStructuredSemantics(payload) ? 2 : 1),
     updatedAt: new Date(),
     ...(payload.symptoms.length > 0 ? { symptoms: payload.symptoms } : { symptoms: null }),
     ...(payload.evidenceChecklist.length > 0

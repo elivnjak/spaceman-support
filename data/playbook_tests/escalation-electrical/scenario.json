@@ -8,14 +8,15 @@
       "user": "The product is runny and there is a weird electrical smell from the back of the machine.",
       "expect": {
         "outcome": "escalated",
-        "phase": "escalated"
+        "phase": "escalated",
+        "handoffLabelId": "electrical_hazard"
       }
     }
   ],
   "finalExpect": {
     "status": "escalated",
     "phase": "escalated",
-    "playbookLabel": "too_runny",
+    "handoffLabelId": "electrical_hazard",
     "maxTurns": 1
   }
 }

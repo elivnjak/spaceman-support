@@ -1,0 +1,14 @@
+file:///Users/elivnjak/Sites/ai-rag-saas/[eval1]:24
+  causeIds: Array.isArray(pb.candidateCauses) ? pb.candidateCause  causeIds: Arraid  causeIds:, null, 2));
+                                                                   ^^^^^^^^
+
+Expected ':', got 'causeIds'
+
+SyntaxError: Unexpected identifier 'causeIds'
+    at compileSourceTextModule (node:internal/modules/esm/utils:357:16)
+    at ModuleLoader.createModuleWrap (node:internal/modules/esm/loader:256:12)
+    at node:internal/process/execution:321:29
+    at asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+
+Node.js v24.6.0

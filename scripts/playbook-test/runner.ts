@@ -15,6 +15,9 @@ import {
 } from "./grading";
 import { getLastEventData, parseSsePayload } from "./sse";
 
+const TURN_TIMEOUT_MS = Number(process.env.PLAYBOOK_TEST_TURN_TIMEOUT_MS ?? 120_000);
+type RequestPayload = NonNullable<TurnResponsePayload["requests"]>[number];
+
 export type ScenarioTurnResult = {
   turnIndex: number;
   response: TurnResponsePayload;
@@ -41,6 +44,127 @@ async function appendImageToForm(
   const buffer = await readFile(absolutePath);
   const blob = new Blob([buffer], { type: mimeTypeForFile(fileName) });
   formData.append("images", blob, fileName);
+}
+
+function normalizeAnswerToken(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function mapNumericValueToEnumOption(
+  numericValue: number,
+  options: string[]
+): string | null {
+  for (const option of options) {
+    const normalized = normalizeAnswerToken(option);
+    const lessThan = normalized.match(/^less than (\d+(?:\.\d+)?) months?(?: ago)?$/);
+    if (lessThan && numericValue < Number(lessThan[1])) {
+      return option;
+    }
+
+    const moreThan = normalized.match(/^(?:more than|over) (\d+(?:\.\d+)?) months?(?: ago)?$/);
+    if (moreThan && numericValue > Number(moreThan[1])) {
+      return option;
+    }
+
+    const between = normalized.match(
+      /^(\d+(?:\.\d+)?) (?:to|-) (\d+(?:\.\d+)?) months?(?: ago)?$/
+    );
+    if (
+      between &&
+      numericValue >= Number(between[1]) &&
+      numericValue <= Number(between[2])
+    ) {
+      return option;
+    }
+  }
+
+  return null;
+}
+
+export function coerceAutoAnswerForRequest(
+  user: string,
+  request?: RequestPayload
+): string {
+  const trimmed = user.trim();
+  if (!request?.expectedInput) return trimmed;
+
+  const expectedInput = request.expectedInput;
+  const options = expectedInput.options ?? [];
+  if (options.length > 0) {
+    const numericMatch = trimmed.match(/-?\d+(?:\.\d+)?/);
+    if (numericMatch) {
+      const numericOption = mapNumericValueToEnumOption(Number(numericMatch[0]), options);
+      if (numericOption) return numericOption;
+    }
+
+    const normalized = normalizeAnswerToken(trimmed);
+    const exact = options.find((option: string) => normalizeAnswerToken(option) === normalized);
+    if (exact) return exact;
+
+    const loose = options.find((option: string) => {
+      const normalizedOption = normalizeAnswerToken(option);
+      return normalizedOption.includes(normalized) || normalized.includes(normalizedOption);
+    });
+    if (loose) return loose;
+
+    throw new Error(
+      `Auto-answer "${trimmed}" does not match allowed options for request ${request.id}: ${options.join(", ")}`
+    );
+  }
+
+  const inputType = expectedInput.type?.toLowerCase();
+  if (inputType === "boolean") {
+    const normalized = normalizeAnswerToken(trimmed);
+    if (["yes", "y", "true"].includes(normalized)) return "Yes";
+    if (["no", "n", "false"].includes(normalized)) return "No";
+    throw new Error(
+      `Auto-answer "${trimmed}" is not a valid boolean answer for request ${request.id}`
+    );
+  }
+
+  if (inputType === "number") {
+    const match = trimmed.match(/-?\d+(?:\.\d+)?/);
+    if (!match) {
+      throw new Error(
+        `Auto-answer "${trimmed}" is not a valid numeric answer for request ${request.id}`
+      );
+    }
+    return match[0];
+  }
+
+  return trimmed;
+}
+
+function resolveAutoAnswer(options: {
+  loadedScenario: LoadedScenario;
+  scenario: LoadedScenario["scenario"];
+  previousResponse: TurnResponsePayload | null;
+}) {
+  const requestIds = options.previousResponse?.requests?.map((request) => request.id) ?? [];
+  const requestId = requestIds.find((candidate) => candidate in (options.scenario.autoResponse?.answers ?? {}));
+  const request =
+    options.previousResponse?.requests?.find((candidate) => candidate.id === requestId) ??
+    options.previousResponse?.requests?.[0];
+  const answer =
+    (requestId ? options.scenario.autoResponse?.answers[requestId] : undefined) ??
+    options.scenario.autoResponse?.defaultAnswer;
+
+  if (!answer) {
+    throw new Error(
+      `Scenario ${options.scenario.id} could not auto-answer request IDs: ${
+        requestIds.join(", ") || "(none)"
+      }`
+    );
+  }
+
+  return {
+    ...answer,
+    user: coerceAutoAnswerForRequest(answer.user, request),
+  };
 }
 
 function mimeTypeForFile(fileName: string): string {
@@ -105,11 +229,30 @@ export async function runScenario(options: {
   let sessionId: string | null = null;
   let sessionToken: string | null = null;
   let finalSnapshot: SessionSnapshot | null = null;
+  let lastResponsePayload: TurnResponsePayload | null = null;
 
   for (let turnIndex = 0; turnIndex < scenario.turns.length; turnIndex += 1) {
     const turn = scenario.turns[turnIndex]!;
+    if (
+      turn.autoRespond &&
+      lastResponsePayload &&
+      ["resolving", "resolved_followup", "escalated"].includes(lastResponsePayload.phase)
+    ) {
+      break;
+    }
+
+    const autoAnswer = turn.autoRespond
+      ? resolveAutoAnswer({
+          loadedScenario: options.loadedScenario,
+          scenario,
+          previousResponse: lastResponsePayload,
+        })
+      : null;
     const formData = new FormData();
-    formData.set("message", turn.user);
+    formData.set("message", autoAnswer?.user ?? turn.user);
+    if (autoAnswer?.inputSource ?? turn.inputSource) {
+      formData.set("inputSource", autoAnswer?.inputSource ?? turn.inputSource!);
+    }
 
     if (turnIndex === 0) {
       formData.set("userName", "Playbook Test");
@@ -124,14 +267,28 @@ export async function runScenario(options: {
       }
     }
 
-    for (const absolutePath of resolveScenarioFixtures(options.loadedScenario, turn.images)) {
+    for (const absolutePath of resolveScenarioFixtures(options.loadedScenario, autoAnswer?.images ?? turn.images)) {
       await appendImageToForm(formData, absolutePath, path.basename(absolutePath));
     }
 
-    const response = await fetch(`${options.baseUrl}/api/chat`, {
-      method: "POST",
-      body: formData,
-    });
+    let response: Response;
+    try {
+      response = await fetch(`${options.baseUrl}/api/chat`, {
+        method: "POST",
+        headers: {
+          "x-playbook-test-mode": "true",
+        },
+        body: formData,
+        signal: AbortSignal.timeout(TURN_TIMEOUT_MS),
+      });
+    } catch (error) {
+      if (error instanceof Error && error.name === "TimeoutError") {
+        throw new Error(
+          `Scenario ${scenario.id} turn ${turnIndex + 1} timed out after ${TURN_TIMEOUT_MS}ms`
+        );
+      }
+      throw error;
+    }
     const raw = await response.text();
     if (!response.ok) {
       throw new Error(`Scenario ${scenario.id} turn ${turnIndex + 1} failed: ${raw}`);
@@ -147,6 +304,7 @@ export async function runScenario(options: {
     if (!payload) {
       throw new Error(`Scenario ${scenario.id} turn ${turnIndex + 1} produced no message event`);
     }
+    lastResponsePayload = payload;
     sessionId = payload.sessionId;
     sessionToken = payload.sessionToken ?? sessionToken;
 
@@ -171,7 +329,11 @@ export async function runScenario(options: {
     throw new Error(`Scenario ${scenario.id} did not create a session`);
   }
 
-  const finalEvaluation = gradeFinalExpectation(scenario.finalExpect, finalSnapshot);
+  const finalEvaluation = gradeFinalExpectation(
+    scenario.finalExpect,
+    finalSnapshot,
+    lastResponsePayload
+  );
   allFailures.push(...finalEvaluation.failures);
 
   return {
