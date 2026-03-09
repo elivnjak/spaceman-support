@@ -61,14 +61,26 @@ FAMILY_PATTERNS=(
   "generated-cause-resolution-too-runny-3080dfb7-*"
 )
 
-declare -A SEEN=()
-SCENARIOS=()
+declare -a SCENARIOS=()
+scenario_seen() {
+  local needle="$1"
+  local existing
+  if [[ ${#SCENARIOS[@]} -eq 0 ]]; then
+    return 1
+  fi
+  for existing in "${SCENARIOS[@]}"; do
+    if [[ "$existing" == "$needle" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
 for pattern in "${FAMILY_PATTERNS[@]}"; do
   matches=(data/playbook_tests/$pattern)
   for match in "${matches[@]}"; do
     scenario="$(basename "$match")"
-    if [[ -z "${SEEN[$scenario]:-}" ]]; then
-      SEEN[$scenario]=1
+    if ! scenario_seen "$scenario"; then
       SCENARIOS+=("$scenario")
     fi
   done
@@ -183,4 +195,3 @@ echo "Batch summary: $summary_file"
 if [[ ${#FAILURES[@]} -gt 0 ]]; then
   exit 1
 fi
-
