@@ -39,12 +39,12 @@
         "images": []
       },
       "ev_recent_events": {
-        "user": "Unknown",
+        "user": "Refill or low-mix condition",
         "inputSource": "structured",
         "images": []
       },
       "describe_recent_alarm_event": {
-        "user": "Unknown",
+        "user": "Refill or low-mix condition",
         "inputSource": "structured",
         "images": []
       },
@@ -65,12 +65,12 @@
         "imageLabel": "Display alarm/error (unknown)\nSensor/component fault requiring technician.\nPhoto of product or bowl state."
       },
       "ev_mix_level": {
-        "user": "Unknown",
+        "user": "Above minimum line",
         "inputSource": "structured",
         "images": []
       },
       "check_mix_level": {
-        "user": "Unknown",
+        "user": "Above minimum line",
         "inputSource": "structured",
         "images": []
       }

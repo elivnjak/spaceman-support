@@ -535,7 +535,7 @@ function buildStructuredAnswerForEvidence(input: {
     options.length > 0 &&
     (targetSupportRules.length > 0 ||
       targetExcludeRules.length > 0 ||
-      competingSupportRules.length > 1);
+      competingSupportRules.length > 0);
   if (shouldScoreOptions) {
     const scoredOption = chooseBestStructuredOptionAnswer({
       item: input.item,

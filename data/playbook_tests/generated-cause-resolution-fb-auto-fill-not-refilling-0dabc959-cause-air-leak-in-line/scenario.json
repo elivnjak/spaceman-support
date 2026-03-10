@@ -33,12 +33,12 @@
         "images": []
       },
       "ev_product_compatibility": {
-        "user": "Unknown",
+        "user": "Compatible",
         "inputSource": "structured",
         "images": []
       },
       "confirm_auto_fill_product_compatibility": {
-        "user": "Unknown",
+        "user": "Compatible",
         "inputSource": "structured",
         "images": []
       },

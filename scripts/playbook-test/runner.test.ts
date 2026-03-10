@@ -105,3 +105,21 @@ test("coerceAutoAnswerForRequest maps generic unresolved fallback text onto pers
 
   assert.equal(normalized, "Attempted but issue persists");
 });
+
+test("coerceAutoAnswerForRequest maps No onto neither-style enum options", () => {
+  const normalized = coerceAutoAnswerForRequest("No", {
+    id: "confirm_high_volume_serving",
+    type: "question",
+    expectedInput: {
+      type: "enum",
+      options: [
+        "High volume before serve",
+        "Idle for over 30 minutes",
+        "Neither",
+        "Not sure",
+      ],
+    },
+  });
+
+  assert.equal(normalized, "Neither");
+});

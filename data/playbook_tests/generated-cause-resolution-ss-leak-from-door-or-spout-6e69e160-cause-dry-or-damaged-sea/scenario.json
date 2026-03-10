@@ -29,12 +29,12 @@
         "imageLabel": "Leak from dispensing door/spout\nDry, damaged, or worn O-rings/gaskets at draw valve/door.\nPhoto of leak at spout/door."
       },
       "ev_last_clean": {
-        "user": "Unknown",
+        "user": "More than 72 hours ago",
         "inputSource": "structured",
         "images": []
       },
       "confirm_last_full_clean": {
-        "user": "Unknown",
+        "user": "More than 72 hours ago",
         "inputSource": "structured",
         "images": []
       },

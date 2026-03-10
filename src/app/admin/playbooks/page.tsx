@@ -6,147 +6,18 @@ import { useParams, usePathname, useRouter, useSearchParams } from "next/navigat
 import { PageHeader } from "@/components/ui/PageHeader";
 import { LoadingScreen } from "@/components/ui/LoadingScreen";
 import { useAdminRole } from "@/app/admin/AdminSidebarProvider";
-import { TAB_HELP } from "./playbook-help-content";
 import { PlaybookGuideModal } from "./PlaybookGuideModal";
+import { ActionQuickEditModal, LabelQuickEditModal } from "./V2EditorControls";
+import { PlaybookEditorPanel, formatValidationIssueSummary } from "./PlaybookEditorPanel";
+import { PLAYBOOK_TABS, type Action, type PlaybookTab } from "./types";
+import { usePlaybookAdminData } from "./usePlaybookAdminData";
+import { usePlaybookEditorState } from "./usePlaybookEditorState";
 
-type Label = { id: string; displayName: string };
-type Step = {
-  step_id: string;
-  title: string;
-  instruction: string;
-  check?: string;
-};
-type SymptomItem = { id: string; description: string };
-type EvidenceItem = {
-  id: string;
-  description: string;
-  actionId?: string;
-  type: "photo" | "reading" | "observation" | "action" | "confirmation";
-  required: boolean;
-};
-type CauseItem = {
-  id: string;
-  cause: string;
-  likelihood: "high" | "medium" | "low";
-  rulingEvidence: string[];
-};
-type TriggerItem = { trigger: string; reason: string };
-type Action = { id: string; title: string };
-type ProductTypeOption = { id: string; name: string; isOther: boolean };
+const PAGE_SIZE = 20;
 
-type Playbook = {
-  id: string;
-  labelId: string;
-  title: string;
-  enabled: boolean;
-  productTypeIds?: string[];
-  steps: Step[];
-  schemaVersion?: number;
-  symptoms?: SymptomItem[] | null;
-  evidenceChecklist?: EvidenceItem[] | null;
-  candidateCauses?: CauseItem[] | null;
-  escalationTriggers?: TriggerItem[] | null;
-  updatedAt: string;
-};
-
-type PlaybookFormState = {
-  labelId: string;
-  title: string;
-  enabled: boolean;
-  productTypeIds: string[];
-  steps: Step[];
-  symptoms: SymptomItem[];
-  evidenceChecklist: EvidenceItem[];
-  candidateCauses: CauseItem[];
-  escalationTriggers: TriggerItem[];
-};
-
-const EVIDENCE_TYPES: EvidenceItem["type"][] = [
-  "photo",
-  "reading",
-  "observation",
-  "action",
-  "confirmation",
-];
-const LIKELIHOODS: CauseItem["likelihood"][] = ["high", "medium", "low"];
-const TABS = [
-  "overview",
-  "symptoms",
-  "evidence",
-  "causes",
-  "triggers",
-  "steps",
-] as const;
-
-function reorder<T>(arr: T[], from: number, to: number): T[] {
-  const next = [...arr];
-  const [moved] = next.splice(from, 1);
-  next.splice(to, 0, moved);
-  return next;
-}
-
-function toFormState(p: Playbook): PlaybookFormState {
-  return {
-    labelId: p.labelId,
-    title: p.title,
-    enabled: Boolean(p.enabled),
-    productTypeIds: Array.isArray(p.productTypeIds) ? p.productTypeIds : [],
-    steps: Array.isArray(p.steps) ? p.steps : [],
-    symptoms: Array.isArray(p.symptoms) ? p.symptoms : [],
-    evidenceChecklist: Array.isArray(p.evidenceChecklist) ? p.evidenceChecklist : [],
-    candidateCauses: Array.isArray(p.candidateCauses) ? p.candidateCauses : [],
-    escalationTriggers: Array.isArray(p.escalationTriggers) ? p.escalationTriggers : [],
-  };
-}
-
-function parseTabFromParams(searchParams: ReturnType<typeof useSearchParams>): (typeof TABS)[number] {
-  const t = searchParams.get("tab");
-  return t && TABS.includes(t as (typeof TABS)[number]) ? (t as (typeof TABS)[number]) : "overview";
-}
-
-function TabHelpBlock({
-  tab,
-  expanded,
-  onToggle,
-}: {
-  tab: (typeof TABS)[number];
-  expanded: boolean;
-  onToggle: () => void;
-}) {
-  const help = TAB_HELP[tab];
-  if (!help) return null;
-
-  return (
-    <div className="mb-4">
-      <button
-        type="button"
-        onClick={onToggle}
-        className="inline-flex items-center gap-1.5 text-xs font-medium text-primary/80 transition-colors hover:text-primary"
-      >
-        <svg
-          width="14"
-          height="14"
-          viewBox="0 0 14 14"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          aria-hidden="true"
-        >
-          <circle cx="7" cy="7" r="6" />
-          <path d="M5.5 5.5a1.5 1.5 0 1 1 1.5 1.5v.75" />
-          <circle cx="7" cy="10" r="0.4" fill="currentColor" stroke="none" />
-        </svg>
-        {expanded ? "Hide guide" : "Show guide"}
-      </button>
-      {expanded && (
-        <div className="mt-2 rounded-lg border border-primary/20 bg-primary-light px-4 py-3 text-sm text-ink">
-          {help.body}
-        </div>
-      )}
-    </div>
-  );
+function parseTabFromParams(searchParams: ReturnType<typeof useSearchParams>): PlaybookTab {
+  const tab = searchParams.get("tab");
+  return tab && PLAYBOOK_TABS.includes(tab as PlaybookTab) ? (tab as PlaybookTab) : "overview";
 }
 
 export default function AdminPlaybooksPage() {
@@ -156,299 +27,138 @@ export default function AdminPlaybooksPage() {
   const params = useParams<{ id?: string }>();
   const focusPlaybookId = params?.id;
   const dedicatedMode = Boolean(focusPlaybookId);
-  const [labels, setLabels] = useState<Label[]>([]);
-  const [productTypes, setProductTypes] = useState<ProductTypeOption[]>([]);
-  const [actionsList, setActionsList] = useState<Action[]>([]);
-  const [playbooks, setPlaybooks] = useState<Playbook[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [targetMissing, setTargetMissing] = useState(false);
-  const [editing, setEditing] = useState<Playbook | null>(null);
-  const [showForm, setShowForm] = useState(false);
-  const [activeTab, setActiveTab] = useState<(typeof TABS)[number]>(() => parseTabFromParams(searchParams));
-  const [form, setForm] = useState({
-    labelId: "",
-    title: "",
-    enabled: false,
-    productTypeIds: [] as string[],
-    steps: [] as Step[],
-    symptoms: [] as SymptomItem[],
-    evidenceChecklist: [] as EvidenceItem[],
-    candidateCauses: [] as CauseItem[],
-    escalationTriggers: [] as TriggerItem[],
+  const adminRole = useAdminRole();
+  const showSchemaVersion = adminRole === "admin";
+
+  const {
+    labels,
+    productTypes,
+    actionsList,
+    playbooks,
+    loading,
+    error,
+    targetMissing,
+    reload,
+    setPlaybooks,
+    setLabels,
+    setActionsList,
+  } = usePlaybookAdminData(focusPlaybookId);
+
+  const {
+    editing,
+    showForm,
+    form,
+    setForm,
+    saving,
+    saveMsg,
+    setSaveMsg,
+    validationIssues,
+    labelsById,
+    actionsById,
+    getIssuesForPrefix,
+    startNew,
+    startEditing,
+    closeForm,
+    savePlaybook,
+  } = usePlaybookEditorState({
+    actionsList,
+    labels,
+    dedicatedMode,
   });
-  const [saving, setSaving] = useState(false);
+
+  const [activeTab, setActiveTab] = useState<PlaybookTab>(() => parseTabFromParams(searchParams));
+  const [guideOpen, setGuideOpen] = useState(false);
+  const [helpExpanded, setHelpExpanded] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem("playbook-help-expanded") !== "false";
+  });
   const [savedFeedback, setSavedFeedback] = useState(false);
   const savedFeedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [importing, setImporting] = useState(false);
   const [importMsg, setImportMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
-  const [saveMsg, setSaveMsg] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const [page, setPage] = useState(1);
-  const PAGE_SIZE = 20;
-  const adminRole = useAdminRole();
-  const showSchemaVersion = adminRole === "admin";
-
-  const [guideOpen, setGuideOpen] = useState(false);
-  const [helpExpanded, setHelpExpanded] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return localStorage.getItem("playbook-help-expanded") !== "false";
-  });
-  const toggleHelp = () => {
-    setHelpExpanded((prev) => {
-      const next = !prev;
-      localStorage.setItem("playbook-help-expanded", String(next));
-      return next;
-    });
-  };
-
-  const dragSrcEvidence = useRef<number | null>(null);
-  const dragSrcTrigger = useRef<number | null>(null);
-  const dragSrcStep = useRef<number | null>(null);
-  const dragSrcSymptom = useRef<number | null>(null);
-  const dragSrcCause = useRef<number | null>(null);
-  const [dragOverEvidenceIdx, setDragOverEvidenceIdx] = useState<number | null>(null);
-  const [dragOverTriggerIdx, setDragOverTriggerIdx] = useState<number | null>(null);
-  const [dragOverStepIdx, setDragOverStepIdx] = useState<number | null>(null);
-  const [dragOverSymptomIdx, setDragOverSymptomIdx] = useState<number | null>(null);
-  const [dragOverCauseIdx, setDragOverCauseIdx] = useState<number | null>(null);
-
-  useEffect(() => {
-    Promise.all([
-      fetch("/api/admin/labels").then((r) => r.json()),
-      fetch("/api/admin/product-types").then((r) => r.json()),
-      fetch("/api/admin/playbooks").then((r) => r.json()),
-      fetch("/api/admin/actions").then((r) => r.json()),
-    ]).then(([l, pt, p, a]) => {
-      setLabels(l);
-      setProductTypes(pt);
-      setPlaybooks((p as Playbook[]).map((playbook) => ({ ...playbook, enabled: Boolean(playbook.enabled) })));
-      setActionsList(a);
-      if (focusPlaybookId) {
-        const match = (p as Playbook[]).find((item) => item.id === focusPlaybookId);
-        if (match) {
-          setEditing(match);
-          setShowForm(true);
-          setForm(toFormState(match));
-          setTargetMissing(false);
-          setSaveMsg(null);
-        } else {
-          setTargetMissing(true);
-        }
-      }
-      setLoading(false);
-    });
-  }, [focusPlaybookId]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [actionModalMode, setActionModalMode] = useState<"create" | "edit" | null>(null);
+  const [actionModalTargetId, setActionModalTargetId] = useState<string | null>(null);
+  const [actionModalEvidenceIndex, setActionModalEvidenceIndex] = useState<number | null>(null);
+  const [labelModalMode, setLabelModalMode] = useState<"create" | "edit" | null>(null);
+  const [labelModalTargetId, setLabelModalTargetId] = useState<string | null>(null);
 
   useEffect(() => {
     setActiveTab(parseTabFromParams(searchParams));
   }, [searchParams]);
 
-  const setActiveTabWithUrl = (tab: (typeof TABS)[number]) => {
+  useEffect(() => {
+    const maxPage = Math.max(1, Math.ceil(playbooks.length / PAGE_SIZE));
+    setPage((current) => Math.min(current, maxPage));
+  }, [playbooks.length]);
+
+  useEffect(() => {
+    if (!focusPlaybookId) return;
+    const match = playbooks.find((playbook) => playbook.id === focusPlaybookId);
+    if (!match) return;
+    if (!editing || editing.id !== match.id || editing.updatedAt !== match.updatedAt) {
+      startEditing(match);
+    }
+  }, [editing, focusPlaybookId, playbooks, startEditing]);
+
+  useEffect(() => {
+    return () => {
+      if (savedFeedbackTimer.current) clearTimeout(savedFeedbackTimer.current);
+    };
+  }, []);
+
+  const setActiveTabWithUrl = (tab: PlaybookTab) => {
     setActiveTab(tab);
     const next = new URLSearchParams(searchParams.toString());
     next.set("tab", tab);
     router.replace(`${pathname}?${next.toString()}`);
   };
 
-  useEffect(() => {
-    const maxPage = Math.max(1, Math.ceil(playbooks.length / PAGE_SIZE));
-    setPage((prev) => Math.min(prev, maxPage));
-  }, [playbooks.length]);
+  const toggleHelp = () => {
+    setHelpExpanded((previous) => {
+      const next = !previous;
+      localStorage.setItem("playbook-help-expanded", String(next));
+      return next;
+    });
+  };
 
-  const totalPlaybooks = playbooks.length;
-  const totalPages = Math.ceil(totalPlaybooks / PAGE_SIZE);
+  const totalPages = Math.ceil(playbooks.length / PAGE_SIZE);
   const paginatedPlaybooks = useMemo(
     () => playbooks.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
-    [playbooks, page]
+    [page, playbooks]
   );
   const canGoPrev = page > 1;
   const canGoNext = page < totalPages;
 
-  const addStep = () => {
-    setForm((f) => ({
-      ...f,
-      steps: [
-        ...f.steps,
-        {
-          step_id: crypto.randomUUID(),
-          title: "",
-          instruction: "",
-          check: "",
-        },
-      ],
-    }));
-  };
+  const validationSummary = useMemo(
+    () =>
+      validationIssues.slice(0, 12).map((issue) => ({
+        label: formatValidationIssueSummary(issue.path, form),
+        message: issue.message,
+      })),
+    [form, validationIssues]
+  );
 
-  const updateStep = (index: number, field: keyof Step, value: string) => {
-    setForm((f) => ({
-      ...f,
-      steps: f.steps.map((s, i) => (i === index ? { ...s, [field]: value } : s)),
-    }));
-  };
+  const handleSave = async () => {
+    const saved = await savePlaybook();
+    if (!saved) return;
 
-  const removeStep = (index: number) => {
-    setForm((f) => ({ ...f, steps: f.steps.filter((_, i) => i !== index) }));
-  };
-
-  const addSymptom = () => {
-    setForm((f) => ({
-      ...f,
-      symptoms: [...f.symptoms, { id: "", description: "" }],
-    }));
-  };
-  const updateSymptom = (i: number, field: keyof SymptomItem, value: string) => {
-    setForm((f) => ({
-      ...f,
-      symptoms: f.symptoms.map((s, j) => (j === i ? { ...s, [field]: value } : s)),
-    }));
-  };
-  const removeSymptom = (i: number) => {
-    setForm((f) => ({ ...f, symptoms: f.symptoms.filter((_, j) => j !== i) }));
-  };
-
-  const addEvidence = () => {
-    setForm((f) => ({
-      ...f,
-      evidenceChecklist: [
-        ...f.evidenceChecklist,
-        { id: "", description: "", type: "observation", required: false },
-      ],
-    }));
-  };
-  const updateEvidence = (i: number, field: keyof EvidenceItem, value: string | boolean) => {
-    setForm((f) => ({
-      ...f,
-      evidenceChecklist: f.evidenceChecklist.map((e, j) =>
-        j === i ? { ...e, [field]: value } : e
-      ),
-    }));
-  };
-  const removeEvidence = (i: number) => {
-    setForm((f) => ({ ...f, evidenceChecklist: f.evidenceChecklist.filter((_, j) => j !== i) }));
-  };
-
-  const addCause = () => {
-    setForm((f) => ({
-      ...f,
-      candidateCauses: [
-        ...f.candidateCauses,
-        { id: "", cause: "", likelihood: "medium", rulingEvidence: [] },
-      ],
-    }));
-  };
-  const updateCause = (i: number, field: keyof CauseItem, value: string | string[]) => {
-    setForm((f) => ({
-      ...f,
-      candidateCauses: f.candidateCauses.map((c, j) =>
-        j === i ? { ...c, [field]: value } : c
-      ),
-    }));
-  };
-  const removeCause = (i: number) => {
-    setForm((f) => ({ ...f, candidateCauses: f.candidateCauses.filter((_, j) => j !== i) }));
-  };
-
-  const addTrigger = () => {
-    setForm((f) => ({
-      ...f,
-      escalationTriggers: [...f.escalationTriggers, { trigger: "", reason: "" }],
-    }));
-  };
-  const updateTrigger = (i: number, field: keyof TriggerItem, value: string) => {
-    setForm((f) => ({
-      ...f,
-      escalationTriggers: f.escalationTriggers.map((t, j) =>
-        j === i ? { ...t, [field]: value } : t
-      ),
-    }));
-  };
-  const removeTrigger = (i: number) => {
-    setForm((f) => ({ ...f, escalationTriggers: f.escalationTriggers.filter((_, j) => j !== i) }));
-  };
-
-  const savePlaybook = async () => {
-    if (!form.labelId || !form.title.trim()) return;
-    setSaving(true);
-    try {
-      const res = await fetch("/api/admin/playbooks", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: editing?.id,
-          labelId: form.labelId,
-          title: form.title,
-          enabled: form.enabled,
-          productTypeIds: form.productTypeIds,
-          steps: form.steps,
-          symptoms: form.symptoms.length ? form.symptoms : null,
-          evidenceChecklist: form.evidenceChecklist.length
-            ? form.evidenceChecklist.map((e) => ({
-                ...e,
-                actionId: e.actionId?.trim() || undefined,
-              }))
-            : null,
-          candidateCauses: form.candidateCauses.length ? form.candidateCauses : null,
-          escalationTriggers: form.escalationTriggers.length ? form.escalationTriggers : null,
-        }),
-      });
-      const saved = await res.json();
-      if (res.ok) {
-        setPlaybooks((prev) => {
-          const idx = prev.findIndex((p) => p.id === saved.id);
-          if (idx >= 0) {
-            const next = [...prev];
-            next[idx] = saved;
-            return next;
-          }
-          return [...prev, saved];
-        });
-        setSaveMsg("Playbook saved successfully.");
-        if (savedFeedbackTimer.current) clearTimeout(savedFeedbackTimer.current);
-        setSavedFeedback(true);
-        savedFeedbackTimer.current = setTimeout(() => setSavedFeedback(false), 2500);
-        if (dedicatedMode) {
-          setEditing(saved);
-          setForm(toFormState(saved));
-        } else {
-          setEditing(null);
-          setShowForm(false);
-          setForm({
-            labelId: "",
-            title: "",
-            enabled: false,
-            productTypeIds: [],
-            steps: [],
-            symptoms: [],
-            evidenceChecklist: [],
-            candidateCauses: [],
-            escalationTriggers: [],
-          });
-        }
+    setPlaybooks((current) => {
+      const index = current.findIndex((item) => item.id === saved.id);
+      if (index >= 0) {
+        const next = [...current];
+        next[index] = saved;
+        return next;
       }
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const startNew = () => {
-    setSaveMsg(null);
-    setEditing(null);
-    setShowForm(true);
-    setActiveTabWithUrl("overview");
-    setForm({
-      labelId: labels[0]?.id ?? "",
-      title: "",
-      enabled: false,
-      productTypeIds: [],
-      steps: [],
-      symptoms: [],
-      evidenceChecklist: [],
-      candidateCauses: [],
-      escalationTriggers: [],
+      return [...current, saved];
     });
+    if (savedFeedbackTimer.current) clearTimeout(savedFeedbackTimer.current);
+    setSavedFeedback(true);
+    savedFeedbackTimer.current = setTimeout(() => setSavedFeedback(false), 2500);
   };
 
   const handleImport = async (files: FileList) => {
@@ -459,27 +169,27 @@ export default function AdminPlaybooksPage() {
 
     for (const file of Array.from(files)) {
       try {
-        const fd = new FormData();
-        fd.append("file", file);
-        const res = await fetch("/api/admin/playbooks/import", {
+        const data = new FormData();
+        data.append("file", file);
+        const response = await fetch("/api/admin/playbooks/import", {
           method: "POST",
-          body: fd,
+          body: data,
         });
-        const data = await res.json();
-        if (!res.ok) {
-          failed.push({ name: file.name, error: data.error ?? "Import failed" });
+        const payload = await response.json();
+        if (!response.ok) {
+          failed.push({ name: file.name, error: payload.error ?? "Import failed" });
           continue;
         }
-        setPlaybooks((prev) => {
-          const existingIndex = prev.findIndex((item) => item.id === data.id);
-          if (existingIndex >= 0) {
-            const next = [...prev];
-            next[existingIndex] = data;
+        setPlaybooks((current) => {
+          const index = current.findIndex((item) => item.id === payload.id);
+          if (index >= 0) {
+            const next = [...current];
+            next[index] = payload;
             return next;
           }
-          return [...prev, data];
+          return [...current, payload];
         });
-        succeeded.push(data.title || file.name);
+        succeeded.push(payload.title || file.name);
       } catch {
         failed.push({ name: file.name, error: "Failed to upload file." });
       }
@@ -494,11 +204,8 @@ export default function AdminPlaybooksPage() {
       );
     }
     if (failed.length > 0) {
-      parts.push(
-        failed.map((f) => `${f.name}: ${f.error}`).join("\n")
-      );
+      parts.push(failed.map((item) => `${item.name}: ${item.error}`).join("\n"));
     }
-
     setImportMsg({
       type: failed.length > 0 ? "error" : "success",
       text: parts.join("\n\n"),
@@ -507,71 +214,116 @@ export default function AdminPlaybooksPage() {
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  const handleDelete = async (playbook: Playbook) => {
-    if (!confirm(`Delete playbook "${playbook.title}"? This cannot be undone.`)) return;
+  const handleDelete = async (playbookId: string, title: string) => {
+    if (!confirm(`Delete playbook "${title}"? This cannot be undone.`)) return;
     setDeleteError(null);
-    setDeletingId(playbook.id);
+    setDeletingId(playbookId);
     try {
-      const res = await fetch(`/api/admin/playbooks/${playbook.id}`, { method: "DELETE" });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setDeleteError(data.error ?? "Delete failed");
+      const response = await fetch(`/api/admin/playbooks/${playbookId}`, { method: "DELETE" });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setDeleteError(payload.error ?? "Delete failed");
         return;
       }
-      setPlaybooks((prev) => prev.filter((p) => p.id !== playbook.id));
-      if (editing?.id === playbook.id) {
-        setEditing(null);
-        setShowForm(false);
+      setPlaybooks((current) => current.filter((item) => item.id !== playbookId));
+      if (editing?.id === playbookId) {
+        closeForm();
       }
     } finally {
       setDeletingId(null);
     }
   };
 
-  const togglePlaybookEnabled = async (playbook: Playbook) => {
-    setTogglingId(playbook.id);
+  const togglePlaybookEnabled = async (playbookId: string, enabled: boolean) => {
+    setTogglingId(playbookId);
     setSaveMsg(null);
     try {
-      const res = await fetch("/api/admin/playbooks", {
-        method: "POST",
+      const response = await fetch(`/api/admin/playbooks/${playbookId}`, {
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: playbook.id,
-          labelId: playbook.labelId,
-          title: playbook.title,
-          enabled: !playbook.enabled,
-          productTypeIds: playbook.productTypeIds ?? [],
-          steps: Array.isArray(playbook.steps) ? playbook.steps : [],
-          symptoms: Array.isArray(playbook.symptoms) && playbook.symptoms.length > 0 ? playbook.symptoms : null,
-          evidenceChecklist:
-            Array.isArray(playbook.evidenceChecklist) && playbook.evidenceChecklist.length > 0
-              ? playbook.evidenceChecklist
-              : null,
-          candidateCauses:
-            Array.isArray(playbook.candidateCauses) && playbook.candidateCauses.length > 0
-              ? playbook.candidateCauses
-              : null,
-          escalationTriggers:
-            Array.isArray(playbook.escalationTriggers) && playbook.escalationTriggers.length > 0
-              ? playbook.escalationTriggers
-              : null,
-        }),
+        body: JSON.stringify({ enabled: !enabled }),
       });
-      const saved = await res.json();
-      if (!res.ok) return;
-
-      setPlaybooks((prev) => prev.map((item) => (item.id === saved.id ? saved : item)));
-      if (editing?.id === saved.id) {
-        setEditing(saved);
-        setForm(toFormState(saved));
+      const payload = await response.json();
+      if (!response.ok) {
+        setSaveMsg(payload.error ?? "Failed to update playbook status.");
+        return;
       }
-      setSaveMsg(saved.enabled ? "Playbook enabled for diagnosis triage." : "Playbook disabled for diagnosis triage.");
+      setPlaybooks((current) => current.map((item) => (item.id === payload.id ? { ...item, ...payload } : item)));
+      if (editing?.id === payload.id) {
+        startEditing({ ...editing, ...payload });
+      }
+      setSaveMsg(payload.enabled ? "Playbook enabled for diagnosis triage." : "Playbook disabled for diagnosis triage.");
     } finally {
       setTogglingId(null);
     }
   };
 
+  const handleActionSaved = (savedAction: Action) => {
+    setActionsList((current) => {
+      const index = current.findIndex((action) => action.id === savedAction.id);
+      if (index >= 0) {
+        const next = [...current];
+        next[index] = savedAction;
+        return next;
+      }
+      return [...current, savedAction].sort((a, b) => a.title.localeCompare(b.title));
+    });
+    if (actionModalEvidenceIndex !== null) {
+      setForm((current) => ({
+        ...current,
+        evidenceChecklist: current.evidenceChecklist.map((item, index) =>
+          index === actionModalEvidenceIndex ? { ...item, actionId: savedAction.id } : item
+        ),
+      }));
+    }
+  };
+
+  const handleLabelSaved = (savedLabel: { id: string; displayName: string; description?: string | null }) => {
+    setLabels((current) => {
+      const index = current.findIndex((label) => label.id === savedLabel.id);
+      if (index >= 0) {
+        const next = [...current];
+        next[index] = savedLabel;
+        return next;
+      }
+      return [...current, savedLabel].sort((a, b) => a.displayName.localeCompare(b.displayName));
+    });
+    setForm((current) => ({ ...current, labelId: savedLabel.id }));
+  };
+
+  const currentActionTarget =
+    actionModalMode === "edit" && actionModalTargetId ? actionsById.get(actionModalTargetId) ?? null : null;
+  const currentLabelTarget =
+    labelModalMode === "edit" && labelModalTargetId ? labelsById.get(labelModalTargetId) ?? null : null;
+
   if (loading) return <LoadingScreen />;
+
+  if (error) {
+    return (
+      <div>
+        <PageHeader
+          title={dedicatedMode ? "Edit playbook" : "Playbooks"}
+          actions={
+            <div className="flex items-center gap-4">
+              {dedicatedMode ? <Link href="/admin/playbooks" className="text-primary hover:underline">← Back to playbooks</Link> : null}
+              <Link href="/admin" className="text-primary hover:underline">← Dashboard</Link>
+            </div>
+          }
+        />
+        <div className="rounded border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          <p className="font-medium">Failed to load playbook admin data.</p>
+          <p className="mt-1">{error}</p>
+          <button
+            type="button"
+            onClick={reload}
+            className="mt-3 rounded border border-red-300 px-3 py-2 text-sm"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -584,14 +336,9 @@ export default function AdminPlaybooksPage() {
               onClick={() => setGuideOpen(true)}
               className="inline-flex items-center gap-1.5 rounded border border-border px-3 py-1 text-sm text-muted transition-colors hover:border-primary hover:text-primary"
             >
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <circle cx="8" cy="8" r="7" />
-                <path d="M6 6a2 2 0 1 1 2 2v1" />
-                <circle cx="8" cy="12" r="0.5" fill="currentColor" stroke="none" />
-              </svg>
               Playbook Guide
             </button>
-            {editing && (
+            {editing ? (
               <a
                 href={`/api/admin/playbooks/${editing.id}/export`}
                 download
@@ -599,12 +346,12 @@ export default function AdminPlaybooksPage() {
               >
                 Export Excel
               </a>
-            )}
-            {dedicatedMode && (
+            ) : null}
+            {dedicatedMode ? (
               <Link href="/admin/playbooks" className="text-primary hover:underline">
                 ← Back to playbooks
               </Link>
-            )}
+            ) : null}
             <Link href="/admin" className="text-primary hover:underline">
               ← Dashboard
             </Link>
@@ -612,19 +359,12 @@ export default function AdminPlaybooksPage() {
         }
       />
 
-      <PlaybookGuideModal
-        open={guideOpen}
-        onClose={() => setGuideOpen(false)}
-        scrollToTab={activeTab}
-      />
+      <PlaybookGuideModal open={guideOpen} onClose={() => setGuideOpen(false)} scrollToTab={activeTab} />
 
-      {!dedicatedMode && (
+      {!dedicatedMode ? (
         <div className="mb-4">
           <div className="flex flex-wrap items-center gap-2">
-            <button
-              onClick={startNew}
-              className="rounded bg-primary px-4 py-2 text-white hover:bg-primary-hover"
-            >
+            <button onClick={startNew} className="rounded bg-primary px-4 py-2 text-white hover:bg-primary-hover">
               New playbook
             </button>
             <button
@@ -647,954 +387,247 @@ export default function AdminPlaybooksPage() {
               accept=".xlsx"
               multiple
               className="hidden"
-              onChange={(e) => {
-                const files = e.target.files;
+              onChange={(event) => {
+                const files = event.target.files;
                 if (files && files.length > 0) handleImport(files);
               }}
             />
           </div>
           <p className="mt-2 text-xs text-muted">
-            Export an existing playbook to get a prefilled workbook for edits and re-import. Use the workbook path for schema-v2 fields such as support rules, exclude rules, value definitions, and cause outcomes.
-          </p>
-          <p className="mt-1 text-xs text-muted">
-            In the template Overview sheet, use <code>product_type_ids</code> for comma-separated IDs or{" "}
-            <code>product_type_names</code> for comma-separated names from the Reference tab. Leave both blank
-            to apply to all product types. Keep <code>playbook_id</code> populated to update on import.
+            Workbook import/export is the advanced bulk-edit path. The in-app editor is now the primary schema-v2 authoring surface for evidence contracts, causes, and structured rules.
           </p>
         </div>
-      )}
+      ) : null}
 
-      {saveMsg && (
+      {saveMsg ? (
         <div className="mb-4 flex items-center justify-between gap-2 rounded bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
           <span>{saveMsg}</span>
-          <button
-            onClick={() => setSaveMsg(null)}
-            className="shrink-0 text-lg leading-none opacity-60 hover:opacity-100"
-          >
+          <button onClick={() => setSaveMsg(null)} className="shrink-0 text-lg leading-none opacity-60 hover:opacity-100">
             ×
           </button>
         </div>
-      )}
+      ) : null}
 
-      {importMsg && (
+      {validationIssues.length > 0 ? (
+        <div className="mb-4 rounded border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <p className="font-medium">Validation issues</p>
+          <ul className="mt-2 list-disc pl-5">
+            {validationSummary.map((issue) => (
+              <li key={`${issue.label}-${issue.message}`}>
+                <span className="font-medium">{issue.label}</span>: {issue.message}
+              </li>
+            ))}
+          </ul>
+          {validationIssues.length > 12 ? <p className="mt-2 text-xs">Showing the first 12 issues.</p> : null}
+        </div>
+      ) : null}
+
+      {importMsg ? (
         <div
           className={`mb-4 rounded px-4 py-3 text-sm ${
-            importMsg.type === "success"
-              ? "bg-emerald-50 text-emerald-700"
-              : "bg-red-50 text-red-700"
+            importMsg.type === "success" ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"
           }`}
         >
           <div className="flex items-start justify-between gap-2">
             <span className="whitespace-pre-wrap">{importMsg.text}</span>
-            <button
-              onClick={() => setImportMsg(null)}
-              className="shrink-0 text-lg leading-none opacity-60 hover:opacity-100"
-            >
+            <button onClick={() => setImportMsg(null)} className="shrink-0 text-lg leading-none opacity-60 hover:opacity-100">
               ×
             </button>
           </div>
         </div>
-      )}
+      ) : null}
 
-      {deleteError && (
+      {deleteError ? (
         <div className="mb-4 rounded border border-red-200 bg-red-50 p-2 text-sm text-red-700">
           {deleteError}
         </div>
-      )}
+      ) : null}
 
-      {targetMissing && dedicatedMode && (
+      {targetMissing && dedicatedMode ? (
         <div className="rounded border border-accent/30 bg-accent/10 p-3 text-sm text-ink">
           Playbook not found. It may have been deleted.
         </div>
-      )}
+      ) : null}
 
-      {(dedicatedMode ? !!editing : editing || showForm) && (
-        <div className={dedicatedMode ? "xl:max-w-[50%]" : undefined}>
-          <div className="mb-8 rounded-lg border border-border bg-surface p-6">
-          <div className="mb-4 flex flex-col gap-0.5">
-            <div className="flex items-center justify-between">
-              <h2 className="font-medium">
-                {editing ? "Edit playbook" : "Create playbook"}
-              </h2>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={form.enabled}
-              onClick={() => setForm((f) => ({ ...f, enabled: !f.enabled }))}
-              className={`flex items-center gap-2.5 rounded-full border py-1.5 pl-3 pr-1.5 text-sm font-medium transition-colors ${
-                form.enabled
-                  ? "border-green-300 bg-green-50 text-green-800"
-                  : "border-gray-300 bg-gray-50 text-gray-600"
-              }`}
-            >
-              {form.enabled ? "Enabled" : "Disabled"}
-              <span
-                className={`relative inline-flex h-6 w-10 shrink-0 items-center rounded-full transition-colors ${
-                  form.enabled ? "bg-green-500" : "bg-gray-300"
-                }`}
-              >
-                <span
-                  className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${
-                    form.enabled ? "translate-x-[22px]" : "translate-x-[3px]"
-                  }`}
-                />
-              </span>
-            </button>
-            </div>
-            {showSchemaVersion && editing?.schemaVersion != null && (
-              <p className="text-xs text-muted">Schema version: {editing.schemaVersion}</p>
-            )}
-          </div>
-          <div className={`mb-5 flex items-center gap-2 rounded-md px-3 py-2 text-sm ${
-            form.enabled
-              ? "border border-green-200 bg-green-50 text-green-800"
-              : "border border-amber-200 bg-amber-50 text-amber-800"
-          }`}>
-            <span className="font-medium">{form.enabled ? "Enabled" : "Disabled"}</span>
-            <span className="text-xs opacity-75">
-              {form.enabled
-                ? "— this playbook will be used in diagnosis triage"
-                : "— this playbook is excluded from diagnosis triage"}
-            </span>
-          </div>
-
-          <div className="mb-4 flex flex-wrap gap-2 border-b border-border">
-            {TABS.map((t) => (
-              <button
-                key={t}
-                type="button"
-                onClick={() => setActiveTabWithUrl(t)}
-                className={`rounded px-3 py-1.5 text-sm ${
-                  activeTab === t
-                    ? "bg-primary text-white"
-                    : "bg-page"
-                }`}
-              >
-                {t}
-              </button>
-            ))}
-          </div>
-
-          {activeTab === "overview" && (
-            <>
-              <TabHelpBlock tab="overview" expanded={helpExpanded} onToggle={toggleHelp} />
-              <div className="mb-4">
-                <label className="group/tip relative inline-block text-sm font-medium text-muted cursor-help">
-                  Label <span className="text-muted" aria-hidden>ⓘ</span>
-                  <span className="pointer-events-none absolute left-0 top-full z-50 mt-1 hidden max-w-sm rounded bg-gray-800 px-2 py-1.5 text-xs font-normal text-white shadow-lg group-hover/tip:block">
-                    The stable issue taxonomy this playbook belongs to. Triage selects a label first, then loads the matching playbook for the product context. Keep cause logic in the playbook, not in the label itself.
-                  </span>
-                </label>
-                <select
-                  className="mt-1 block w-full rounded border border-border px-3 py-2"
-                  value={form.labelId}
-                  onChange={(e) => setForm((f) => ({ ...f, labelId: e.target.value }))}
-                >
-                  {labels.map((l) => (
-                    <option key={l.id} value={l.id}>
-                      {l.displayName}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="mb-4">
-                <label className="group/tip relative inline-block text-sm font-medium text-muted cursor-help">
-                  Title <span className="text-muted" aria-hidden>ⓘ</span>
-                  <span className="pointer-events-none absolute left-0 top-full z-50 mt-1 hidden max-w-sm rounded bg-gray-800 px-2 py-1.5 text-xs font-normal text-white shadow-lg group-hover/tip:block">
-                    A short, descriptive name for this playbook (e.g. &quot;Fix too runny&quot;, &quot;Fix too thick texture — Spaceman&quot;). Shown in admin and used to identify the guide.
-                  </span>
-                </label>
-                <input
-                  type="text"
-                  className="mt-1 block w-full rounded border border-border px-3 py-2"
-                  value={form.title}
-                  onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-                  placeholder="e.g. Fix too runny"
-                />
-              </div>
-              <div className="mb-4 rounded border border-border p-3">
-                <p className="text-sm font-medium text-ink">
-                  Applicable product types
-                </p>
-                <p className="mt-1 text-xs text-muted">
-                  Leave empty to apply to all product types.
-                </p>
-                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-2">
-                  {productTypes.map((productType) => {
-                    const checked = form.productTypeIds.includes(productType.id);
-                    return (
-                      <label
-                        key={productType.id}
-                        className="flex items-center gap-2 text-sm text-ink"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={(e) => {
-                            setForm((f) => ({
-                              ...f,
-                              productTypeIds: e.target.checked
-                                ? [...f.productTypeIds, productType.id]
-                                : f.productTypeIds.filter((id) => id !== productType.id),
-                            }));
-                          }}
-                        />
-                        {productType.name}
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
-            </>
-          )}
-
-          {activeTab === "symptoms" && (
-            <div>
-              <TabHelpBlock tab="symptoms" expanded={helpExpanded} onToggle={toggleHelp} />
-              <p className="mb-2 text-sm text-muted">
-                Symptom descriptions that may trigger this playbook
-              </p>
-              <p className="mb-3 text-xs text-muted">
-                <span className="group/tip relative inline cursor-help border-b border-dotted border-gray-400">
-                  ⓘ
-                  <span className="pointer-events-none absolute left-0 top-full z-50 mt-1 hidden max-w-sm rounded bg-gray-800 px-2 py-1.5 text-xs font-normal text-white shadow-lg group-hover/tip:block">
-                    Phrases or descriptions the user might say (e.g. &quot;watery&quot;, &quot;won&apos;t hold shape&quot;). Symptoms guide the conversation after selection; they are not the place for deterministic cause rules.
-                  </span>
-                </span>
-              </p>
-              {form.symptoms.map((s, i) => (
-                <div
-                  key={i}
-                  draggable
-                  onDragStart={(ev) => { ev.dataTransfer.effectAllowed = "move"; dragSrcSymptom.current = i; }}
-                  onDragOver={(ev) => { ev.preventDefault(); setDragOverSymptomIdx(i); }}
-                  onDragLeave={() => setDragOverSymptomIdx(null)}
-                  onDrop={(ev) => {
-                    ev.preventDefault();
-                    if (dragSrcSymptom.current !== null && dragSrcSymptom.current !== i) {
-                      setForm((f) => ({ ...f, symptoms: reorder(f.symptoms, dragSrcSymptom.current!, i) }));
-                    }
-                    dragSrcSymptom.current = null;
-                    setDragOverSymptomIdx(null);
-                  }}
-                  onDragEnd={() => { dragSrcSymptom.current = null; setDragOverSymptomIdx(null); }}
-                  className={`mb-3 flex flex-wrap items-end gap-2 rounded border p-2 transition-colors ${dragOverSymptomIdx === i ? "border-primary bg-primary/5" : "border-transparent"}`}
-                >
-                  <span className="cursor-grab self-center select-none text-gray-400" title="Drag to reorder">
-                    <svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor" aria-hidden="true">
-                      <circle cx="2" cy="3" r="1.5"/><circle cx="8" cy="3" r="1.5"/>
-                      <circle cx="2" cy="8" r="1.5"/><circle cx="8" cy="8" r="1.5"/>
-                      <circle cx="2" cy="13" r="1.5"/><circle cx="8" cy="13" r="1.5"/>
-                    </svg>
-                  </span>
-                  <div className="flex flex-col gap-0.5">
-                    <label className="group/tip relative inline-block text-xs font-medium text-muted cursor-help">
-                      ID <span className="text-muted" aria-hidden>ⓘ</span>
-                      <span className="pointer-events-none absolute left-0 top-full z-50 mt-1 hidden max-w-sm rounded bg-gray-800 px-2 py-1.5 text-xs font-normal text-white shadow-lg group-hover/tip:block">
-                        Short unique slug (e.g. watery, melts_fast). Lowercase, underscores OK. Leave blank to auto-generate.
-                      </span>
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. watery"
-                      className="w-40 rounded border px-2 py-1 text-sm"
-                      value={s.id}
-                      onChange={(e) => updateSymptom(i, "id", e.target.value)}
-                    />
-                  </div>
-                  <div className="flex flex-col gap-0.5 flex-1 min-w-[200px]">
-                    <label className="group/tip relative inline-block text-xs font-medium text-muted cursor-help">
-                      Description <span className="text-muted" aria-hidden>ⓘ</span>
-                      <span className="pointer-events-none absolute left-0 top-full z-50 mt-1 hidden max-w-sm rounded bg-gray-800 px-2 py-1.5 text-xs font-normal text-white shadow-lg group-hover/tip:block">
-                        Plain-language symptom (e.g. &quot;Watery texture&quot;, &quot;Product melts too fast&quot;).
-                      </span>
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Watery texture"
-                      className="w-full rounded border px-2 py-1 text-sm"
-                      value={s.description}
-                      onChange={(e) => updateSymptom(i, "description", e.target.value)}
-                    />
-                  </div>
-                  <button type="button" onClick={() => removeSymptom(i)} className="text-red-600 text-sm shrink-0">
-                    Remove
-                  </button>
-                </div>
-              ))}
-              <button type="button" onClick={addSymptom} className="text-sm text-primary hover:underline">
-                Add symptom
-              </button>
-            </div>
-          )}
-
-          {activeTab === "evidence" && (
-            <div>
-              <TabHelpBlock tab="evidence" expanded={helpExpanded} onToggle={toggleHelp} />
-              <p className="mb-2 text-sm text-muted">
-                Evidence to gather (link to Action for instructions)
-              </p>
-              <p className="mb-3 text-xs text-muted">
-                <span className="group/tip relative inline cursor-help border-b border-dotted border-gray-400">
-                  ⓘ
-                  <span className="pointer-events-none absolute left-0 top-full z-50 mt-1 hidden max-w-sm rounded bg-gray-800 px-2 py-1.5 text-xs font-normal text-white shadow-lg group-hover/tip:block">
-                    Each item is something the assistant should try to collect (photo, reading, observation, etc.). Use action-backed exact inputs whenever diagnosis depends on specific values. Required items should represent the minimum trusted evidence needed before a cause can be supported.
-                  </span>
-                </span>
-              </p>
-              {form.evidenceChecklist.map((e, i) => (
-                <div
-                  key={i}
-                  draggable
-                  onDragStart={(ev) => { ev.dataTransfer.effectAllowed = "move"; dragSrcEvidence.current = i; }}
-                  onDragOver={(ev) => { ev.preventDefault(); setDragOverEvidenceIdx(i); }}
-                  onDragLeave={() => setDragOverEvidenceIdx(null)}
-                  onDrop={(ev) => {
-                    ev.preventDefault();
-                    if (dragSrcEvidence.current !== null && dragSrcEvidence.current !== i) {
-                      setForm((f) => ({ ...f, evidenceChecklist: reorder(f.evidenceChecklist, dragSrcEvidence.current!, i) }));
-                    }
-                    dragSrcEvidence.current = null;
-                    setDragOverEvidenceIdx(null);
-                  }}
-                  onDragEnd={() => { dragSrcEvidence.current = null; setDragOverEvidenceIdx(null); }}
-                  className={`mb-3 rounded border p-2 transition-colors ${dragOverEvidenceIdx === i ? "border-primary bg-primary/5" : "border-border"}`}
-                >
-                  <div className="mb-2 flex flex-wrap items-end gap-2">
-                    <span className="cursor-grab self-center select-none text-gray-400 mr-0.5" title="Drag to reorder">
-                      <svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor" aria-hidden="true">
-                        <circle cx="2" cy="3" r="1.5"/><circle cx="8" cy="3" r="1.5"/>
-                        <circle cx="2" cy="8" r="1.5"/><circle cx="8" cy="8" r="1.5"/>
-                        <circle cx="2" cy="13" r="1.5"/><circle cx="8" cy="13" r="1.5"/>
-                      </svg>
-                    </span>
-                    <div className="flex flex-col gap-0.5">
-                      <label className="group/tip relative inline-block text-xs font-medium text-muted cursor-help">
-                        Evidence ID <span className="text-muted" aria-hidden>ⓘ</span>
-                        <span className="pointer-events-none absolute left-0 top-full z-50 mt-1 hidden max-w-sm rounded bg-gray-800 px-2 py-1.5 text-xs font-normal text-white shadow-lg group-hover/tip:block">
-                          Unique slug (e.g. hopper_temp, dispense_photo). Keep it stable because workbook-authored schema-v2 rules, scenario generators, and exports reference this ID directly.
-                        </span>
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="e.g. hopper_temp"
-                        className="w-40 rounded border px-2 py-1 text-sm"
-                        value={e.id}
-                        onChange={(ev) => updateEvidence(i, "id", ev.target.value)}
-                      />
-                    </div>
-                    <div className="flex flex-col gap-0.5">
-                      <label className="group/tip relative inline-block text-xs font-medium text-muted cursor-help">
-                        Type <span className="text-muted" aria-hidden>ⓘ</span>
-                        <span className="pointer-events-none absolute left-0 top-full z-50 mt-1 hidden max-w-sm rounded bg-gray-800 px-2 py-1.5 text-xs font-normal text-white shadow-lg group-hover/tip:block">
-                          photo = user sends image; reading = numeric/value; observation = user describes; action = they perform a task; confirmation = yes/no. Match this to the real input shape you want persisted.
-                        </span>
-                      </label>
-                      <select
-                        className="rounded border px-2 py-1 text-sm"
-                        value={e.type}
-                        onChange={(ev) => updateEvidence(i, "type", ev.target.value as EvidenceItem["type"])}
-                      >
-                        {EVIDENCE_TYPES.map((t) => (
-                          <option key={t} value={t}>{t}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <label className="flex items-center gap-1 text-sm cursor-help" title="Required evidence gates diagnosis. Use this only when the value is truly needed before a cause can be safely supported or excluded.">
-                      <input
-                        type="checkbox"
-                        checked={e.required}
-                        onChange={(ev) => updateEvidence(i, "required", ev.target.checked)}
-                      />
-                      Required
-                    </label>
-                    <button type="button" onClick={() => removeEvidence(i)} className="text-red-600 text-sm shrink-0">
-                      Remove
-                    </button>
-                  </div>
-                  <div className="mb-2 flex flex-col gap-0.5">
-                    <label className="group/tip relative inline-block text-xs font-medium text-muted cursor-help">
-                      Description <span className="text-muted" aria-hidden>ⓘ</span>
-                      <span className="pointer-events-none absolute left-0 top-full z-50 mt-1 hidden max-w-sm rounded bg-gray-800 px-2 py-1.5 text-xs font-normal text-white shadow-lg group-hover/tip:block">
-                        What to ask for in plain language (e.g. &quot;Hopper temperature reading&quot;). Keep the wording user-facing; put deterministic value semantics in the linked action and workbook rules.
-                      </span>
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Hopper temperature reading"
-                      className="w-full rounded border px-2 py-1 text-sm"
-                      value={e.description}
-                      onChange={(ev) => updateEvidence(i, "description", ev.target.value)}
-                    />
-                  </div>
-                  <div className="flex flex-col gap-0.5">
-                    <label className="group/tip relative inline-block text-xs font-medium text-muted cursor-help">
-                      Action (optional) <span className="text-muted" aria-hidden>ⓘ</span>
-                      <span className="pointer-events-none absolute left-0 top-full z-50 mt-1 hidden max-w-sm rounded bg-gray-800 px-2 py-1.5 text-xs font-normal text-white shadow-lg group-hover/tip:block">
-                        Link to an Action to show the user step-by-step instructions and define the exact expected input. Prefer linking actions whenever schema-v2 rules depend on a specific enum, boolean, or number value.
-                      </span>
-                    </label>
-                    <select
-                      className="w-full rounded border px-2 py-1 text-sm"
-                      value={e.actionId ?? ""}
-                      onChange={(ev) => updateEvidence(i, "actionId", ev.target.value || "")}
-                    >
-                      <option value="">No action</option>
-                      {actionsList.map((a) => (
-                        <option key={a.id} value={a.id}>{a.title} ({a.id})</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              ))}
-              <button type="button" onClick={addEvidence} className="text-sm text-primary hover:underline">
-                Add evidence item
-              </button>
-            </div>
-          )}
-
-          {activeTab === "causes" && (
-            <div>
-              <TabHelpBlock tab="causes" expanded={helpExpanded} onToggle={toggleHelp} />
-              <p className="mb-2 text-sm text-muted">Candidate root causes</p>
-              <p className="mb-3 text-xs text-muted">
-                List possible root causes. The assistant narrows these down as the user provides evidence.{" "}
-                <span className="group/tip relative inline cursor-help border-b border-dotted border-gray-400">
-                  ⓘ
-                  <span className="pointer-events-none absolute left-0 top-full z-50 mt-1 hidden max-w-sm rounded bg-gray-800 px-2 py-1.5 text-xs font-normal text-white shadow-lg group-hover/tip:block">
-                    List the possible underlying problems the assistant will choose between. The inline editor manages the core fields; use workbook export/import to maintain full schema-v2 support rules, exclude rules, value definitions, and technician-only outcomes.
-                  </span>
-                </span>
-              </p>
-              {form.candidateCauses.map((c, i) => (
-                <div
-                  key={i}
-                  draggable
-                  onDragStart={(ev) => { ev.dataTransfer.effectAllowed = "move"; dragSrcCause.current = i; }}
-                  onDragOver={(ev) => { ev.preventDefault(); setDragOverCauseIdx(i); }}
-                  onDragLeave={() => setDragOverCauseIdx(null)}
-                  onDrop={(ev) => {
-                    ev.preventDefault();
-                    if (dragSrcCause.current !== null && dragSrcCause.current !== i) {
-                      setForm((f) => ({ ...f, candidateCauses: reorder(f.candidateCauses, dragSrcCause.current!, i) }));
-                    }
-                    dragSrcCause.current = null;
-                    setDragOverCauseIdx(null);
-                  }}
-                  onDragEnd={() => { dragSrcCause.current = null; setDragOverCauseIdx(null); }}
-                  className={`mb-3 rounded border p-2 transition-colors ${dragOverCauseIdx === i ? "border-primary bg-primary/5" : "border-border"}`}
-                >
-                  <div className="mb-2 flex flex-wrap items-end gap-2">
-                    <span className="cursor-grab self-center select-none text-gray-400 mr-0.5" title="Drag to reorder">
-                      <svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor" aria-hidden="true">
-                        <circle cx="2" cy="3" r="1.5"/><circle cx="8" cy="3" r="1.5"/>
-                        <circle cx="2" cy="8" r="1.5"/><circle cx="8" cy="8" r="1.5"/>
-                        <circle cx="2" cy="13" r="1.5"/><circle cx="8" cy="13" r="1.5"/>
-                      </svg>
-                    </span>
-                    <div className="flex flex-col gap-0.5">
-                      <label className="group/tip relative inline-block text-xs font-medium text-muted cursor-help">
-                        Cause ID <span className="text-muted" aria-hidden>ⓘ</span>
-                        <span className="pointer-events-none absolute left-0 top-full z-50 mt-1 hidden max-w-sm rounded bg-gray-800 px-2 py-1.5 text-xs font-normal text-white shadow-lg group-hover/tip:block">
-                          Short unique slug used in the system (e.g. hopper_too_warm). Use lowercase letters and underscores only. No spaces.
-                        </span>
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="e.g. hopper_too_warm"
-                        className="w-40 rounded border px-2 py-1 text-sm"
-                        value={c.id}
-                        onChange={(ev) => updateCause(i, "id", ev.target.value)}
-                      />
-                    </div>
-                    <div className="flex flex-col gap-0.5">
-                      <label className="group/tip relative inline-block text-xs font-medium text-muted cursor-help">
-                        Likelihood <span className="text-muted" aria-hidden>ⓘ</span>
-                        <span className="pointer-events-none absolute left-0 top-full z-50 mt-1 hidden max-w-sm rounded bg-gray-800 px-2 py-1.5 text-xs font-normal text-white shadow-lg group-hover/tip:block">
-                          Starting prior before much evidence is collected. In schema v2, this complements structured cause rules; it should not be the only thing separating sibling causes.
-                        </span>
-                      </label>
-                      <select
-                        className="rounded border px-2 py-1 text-sm"
-                        value={c.likelihood}
-                        onChange={(ev) => updateCause(i, "likelihood", ev.target.value as CauseItem["likelihood"])}
-                      >
-                        {LIKELIHOODS.map((l) => (
-                          <option key={l} value={l}>{l}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <button type="button" onClick={() => removeCause(i)} className="text-red-600 text-sm">
-                      Remove
-                    </button>
-                  </div>
-                  <div className="mb-2 flex flex-col gap-0.5">
-                    <label className="group/tip relative inline-block text-xs font-medium text-muted cursor-help">
-                      Cause description <span className="text-muted" aria-hidden>ⓘ</span>
-                      <span className="pointer-events-none absolute left-0 top-full z-50 mt-1 hidden max-w-sm rounded bg-gray-800 px-2 py-1.5 text-xs font-normal text-white shadow-lg group-hover/tip:block">
-                        Plain-language explanation of this root cause. Keep it readable for users and admins, but maintain deterministic support/exclude semantics in the workbook-backed schema-v2 fields.
-                      </span>
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Hopper temperature too high (product not cold enough to set properly)"
-                      className="w-full rounded border px-2 py-1 text-sm"
-                      value={c.cause}
-                      onChange={(ev) => updateCause(i, "cause", ev.target.value)}
-                    />
-                  </div>
-                  <div className="mt-1">
-                    <label className="group/tip relative inline-block text-xs font-medium text-muted mb-1 cursor-help">
-                      Ruling evidence <span className="text-muted" aria-hidden>ⓘ</span>
-                      <span className="pointer-events-none absolute left-0 top-full z-50 mt-1 hidden max-w-sm rounded bg-gray-800 px-2 py-1.5 text-xs font-normal text-white shadow-lg group-hover/tip:block">
-                        Check the evidence items most relevant to this cause. This inline list is a quick reference and prompt hint. For deterministic schema-v2 diagnosis, maintain the authoritative support and exclude rules in the workbook.
-                      </span>
-                    </label>
-                    <p className="text-xs text-muted mb-1">
-                      Evidence that helps confirm or rule out this cause. Select all that apply.
-                    </p>
-                    {form.evidenceChecklist.length === 0 ? (
-                      <p className="text-sm text-amber-600">
-                        Add evidence items in the Evidence tab first, then assign them here.
-                      </p>
-                    ) : (
-                      <div className="flex flex-wrap gap-x-4 gap-y-1">
-                        {form.evidenceChecklist.map((e) => {
-                          const checked = c.rulingEvidence?.includes(e.id) ?? false;
-                          return (
-                            <label key={e.id} className="flex items-center gap-1.5 text-sm cursor-pointer" title={e.description || undefined}>
-                              <input
-                                type="checkbox"
-                                checked={checked}
-                                onChange={() => {
-                                  const next = checked
-                                    ? (c.rulingEvidence ?? []).filter((id) => id !== e.id)
-                                    : [...(c.rulingEvidence ?? []), e.id];
-                                  updateCause(i, "rulingEvidence", next);
-                                }}
-                                className="rounded border-border"
-                              />
-                              <span>{e.id}</span>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-              <button type="button" onClick={addCause} className="text-sm text-primary hover:underline">
-                Add cause
-              </button>
-            </div>
-          )}
-
-          {activeTab === "triggers" && (
-            <div>
-              <TabHelpBlock tab="triggers" expanded={helpExpanded} onToggle={toggleHelp} />
-              <p className="mb-2 text-sm text-muted">
-                Escalation triggers (if user message contains trigger text)
-              </p>
-              <p className="mb-3 text-xs text-muted">
-                <span className="group/tip relative inline cursor-help border-b border-dotted border-gray-400">
-                  ⓘ
-                  <span className="pointer-events-none absolute left-0 top-full z-50 mt-1 hidden max-w-sm rounded bg-gray-800 px-2 py-1.5 text-xs font-normal text-white shadow-lg group-hover/tip:block">
-                    When the user mentions one of these phrases, the assistant stops diagnosing and escalates to a person. Use phrases customers might actually say (e.g. &quot;smell of burning&quot;, &quot;error code&quot;).
-                  </span>
-                </span>
-              </p>
-              {form.escalationTriggers.map((t, i) => (
-                <div
-                  key={i}
-                  draggable
-                  onDragStart={(ev) => { ev.dataTransfer.effectAllowed = "move"; dragSrcTrigger.current = i; }}
-                  onDragOver={(ev) => { ev.preventDefault(); setDragOverTriggerIdx(i); }}
-                  onDragLeave={() => setDragOverTriggerIdx(null)}
-                  onDrop={(ev) => {
-                    ev.preventDefault();
-                    if (dragSrcTrigger.current !== null && dragSrcTrigger.current !== i) {
-                      setForm((f) => ({ ...f, escalationTriggers: reorder(f.escalationTriggers, dragSrcTrigger.current!, i) }));
-                    }
-                    dragSrcTrigger.current = null;
-                    setDragOverTriggerIdx(null);
-                  }}
-                  onDragEnd={() => { dragSrcTrigger.current = null; setDragOverTriggerIdx(null); }}
-                  className={`mb-3 flex flex-wrap items-end gap-2 rounded border p-2 transition-colors ${dragOverTriggerIdx === i ? "border-primary bg-primary/5" : "border-transparent"}`}
-                >
-                  <span className="cursor-grab self-center select-none text-gray-400" title="Drag to reorder">
-                    <svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor" aria-hidden="true">
-                      <circle cx="2" cy="3" r="1.5"/><circle cx="8" cy="3" r="1.5"/>
-                      <circle cx="2" cy="8" r="1.5"/><circle cx="8" cy="8" r="1.5"/>
-                      <circle cx="2" cy="13" r="1.5"/><circle cx="8" cy="13" r="1.5"/>
-                    </svg>
-                  </span>
-                  <div className="flex flex-col gap-0.5">
-                    <label className="group/tip relative inline-block text-xs font-medium text-muted cursor-help">
-                      Trigger text <span className="text-muted" aria-hidden>ⓘ</span>
-                      <span className="pointer-events-none absolute left-0 top-full z-50 mt-1 hidden max-w-sm rounded bg-gray-800 px-2 py-1.5 text-xs font-normal text-white shadow-lg group-hover/tip:block">
-                        Keyword or phrase that means &quot;escalate&quot; (e.g. electrical smell, refrigerant leak, error code).
-                      </span>
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. electrical smell"
-                      className="w-48 rounded border px-2 py-1 text-sm"
-                      value={t.trigger}
-                      onChange={(ev) => updateTrigger(i, "trigger", ev.target.value)}
-                    />
-                  </div>
-                  <div className="flex flex-col gap-0.5 flex-1 min-w-[200px]">
-                    <label className="group/tip relative inline-block text-xs font-medium text-muted cursor-help">
-                      Reason <span className="text-muted" aria-hidden>ⓘ</span>
-                      <span className="pointer-events-none absolute left-0 top-full z-50 mt-1 hidden max-w-sm rounded bg-gray-800 px-2 py-1.5 text-xs font-normal text-white shadow-lg group-hover/tip:block">
-                        Why we escalate when this trigger is mentioned (e.g. &quot;Potential electrical hazard&quot;). Shown to the user.
-                      </span>
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Potential electrical hazard"
-                      className="w-full rounded border px-2 py-1 text-sm"
-                      value={t.reason}
-                      onChange={(ev) => updateTrigger(i, "reason", ev.target.value)}
-                    />
-                  </div>
-                  <button type="button" onClick={() => removeTrigger(i)} className="text-red-600 text-sm shrink-0">
-                    Remove
-                  </button>
-                </div>
-              ))}
-              <button type="button" onClick={addTrigger} className="text-sm text-primary hover:underline">
-                Add trigger
-              </button>
-            </div>
-          )}
-
-          {activeTab === "steps" && (
-            <div>
-              <TabHelpBlock tab="steps" expanded={helpExpanded} onToggle={toggleHelp} />
-              <p className="mb-2 text-sm text-muted">Resolution steps</p>
-              <p className="mb-3 text-xs text-muted">
-                <span className="group/tip relative inline cursor-help border-b border-dotted border-gray-400">
-                  ⓘ
-                  <span className="pointer-events-none absolute left-0 top-full z-50 mt-1 hidden max-w-sm rounded bg-gray-800 px-2 py-1.5 text-xs font-normal text-white shadow-lg group-hover/tip:block">
-                    The exact actions the user should take once a cause is chosen. Order matters — steps are shown in sequence. The assistant may only suggest steps defined here.
-                  </span>
-                </span>
-              </p>
-              <ul className="mt-2 space-y-4">
-                {form.steps.map((step, index) => (
-                  <li
-                    key={step.step_id}
-                    draggable
-                    onDragStart={(ev) => { ev.dataTransfer.effectAllowed = "move"; dragSrcStep.current = index; }}
-                    onDragOver={(ev) => { ev.preventDefault(); setDragOverStepIdx(index); }}
-                    onDragLeave={() => setDragOverStepIdx(null)}
-                    onDrop={(ev) => {
-                      ev.preventDefault();
-                      if (dragSrcStep.current !== null && dragSrcStep.current !== index) {
-                        setForm((f) => ({ ...f, steps: reorder(f.steps, dragSrcStep.current!, index) }));
-                      }
-                      dragSrcStep.current = null;
-                      setDragOverStepIdx(null);
-                    }}
-                    onDragEnd={() => { dragSrcStep.current = null; setDragOverStepIdx(null); }}
-                    className={`rounded border p-4 transition-colors ${dragOverStepIdx === index ? "border-primary bg-primary/5" : "border-border"}`}
-                  >
-                    <div className="mb-2 flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="cursor-grab select-none text-gray-400" title="Drag to reorder">
-                          <svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor" aria-hidden="true">
-                            <circle cx="2" cy="3" r="1.5"/><circle cx="8" cy="3" r="1.5"/>
-                            <circle cx="2" cy="8" r="1.5"/><circle cx="8" cy="8" r="1.5"/>
-                            <circle cx="2" cy="13" r="1.5"/><circle cx="8" cy="13" r="1.5"/>
-                          </svg>
-                        </span>
-                        <span className="text-sm font-medium">Step {index + 1}</span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => removeStep(index)}
-                        className="text-sm text-red-600 hover:underline"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                    <div className="mb-2 flex flex-col gap-0.5">
-                      <label className="group/tip relative inline-block text-xs font-medium text-muted cursor-help">
-                        Step title <span className="text-muted" aria-hidden>ⓘ</span>
-                        <span className="pointer-events-none absolute left-0 top-full z-50 mt-1 hidden max-w-sm rounded bg-gray-800 px-2 py-1.5 text-xs font-normal text-white shadow-lg group-hover/tip:block">
-                          Short heading for this step (e.g. &quot;Cool hopper to operating range&quot;).
-                        </span>
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="e.g. Cool hopper to operating range"
-                        className="w-full rounded border border-border px-2 py-1 text-sm"
-                        value={step.title}
-                        onChange={(e) => updateStep(index, "title", e.target.value)}
-                      />
-                    </div>
-                    <div className="mb-2 flex flex-col gap-0.5">
-                      <label className="group/tip relative inline-block text-xs font-medium text-muted cursor-help">
-                        Instruction <span className="text-muted" aria-hidden>ⓘ</span>
-                        <span className="pointer-events-none absolute left-0 top-full z-50 mt-1 hidden max-w-sm rounded bg-gray-800 px-2 py-1.5 text-xs font-normal text-white shadow-lg group-hover/tip:block">
-                          What the user should do, in full. This is the main text they will see for this step.
-                        </span>
-                      </label>
-                      <textarea
-                        placeholder="e.g. Allow the machine time to cool. Hopper should be in the -8°C to -4°C range..."
-                        className="w-full rounded border border-border px-2 py-1 text-sm"
-                        rows={2}
-                        value={step.instruction}
-                        onChange={(e) => updateStep(index, "instruction", e.target.value)}
-                      />
-                    </div>
-                    <div className="mb-2 flex flex-col gap-0.5">
-                      <label className="group/tip relative inline-block text-xs font-medium text-muted cursor-help">
-                        How to verify (optional) <span className="text-muted" aria-hidden>ⓘ</span>
-                        <span className="pointer-events-none absolute left-0 top-full z-50 mt-1 hidden max-w-sm rounded bg-gray-800 px-2 py-1.5 text-xs font-normal text-white shadow-lg group-hover/tip:block">
-                          How the user can confirm the step worked (e.g. &quot;Hopper display shows -8°C to -4°C&quot;).
-                        </span>
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="e.g. Hopper display shows temperature within range"
-                        className="w-full rounded border border-border px-2 py-1 text-sm"
-                        value={step.check ?? ""}
-                        onChange={(e) => updateStep(index, "check", e.target.value)}
-                      />
-                    </div>
-                  </li>
-                ))}
-              </ul>
-              <button
-                type="button"
-                onClick={addStep}
-                className="mt-2 text-sm text-primary hover:underline"
-              >
-                Add step
-              </button>
-            </div>
-          )}
-
-          <div className="mt-6 flex flex-wrap items-center gap-3">
-            <button
-              onClick={savePlaybook}
-              disabled={saving}
-              className="rounded bg-primary px-4 py-2 text-white hover:bg-primary-hover disabled:opacity-50"
-            >
-              {saving ? "Saving…" : "Save"}
-            </button>
-            <button
-              onClick={() => {
-                if (dedicatedMode) {
-                  router.push("/admin/playbooks");
-                  return;
-                }
-                setEditing(null);
-                setShowForm(false);
-                setForm({
-                  labelId: "",
-                  title: "",
-                  enabled: false,
-                  productTypeIds: [],
-                  steps: [],
-                  symptoms: [],
-                  evidenceChecklist: [],
-                  candidateCauses: [],
-                  escalationTriggers: [],
-                });
-              }}
-              className="rounded border border-border px-4 py-2"
-            >
-              Cancel
-            </button>
-            <span
-              className={`flex items-center gap-1.5 text-sm font-medium text-emerald-600 transition-opacity duration-300 ${
-                savedFeedback ? "opacity-100" : "opacity-0 pointer-events-none"
-              }`}
-              aria-live="polite"
-            >
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <circle cx="8" cy="8" r="7"/>
-                <polyline points="5,8.5 7,10.5 11,6"/>
-              </svg>
-              Saved
-            </span>
-          </div>
+      {(dedicatedMode ? Boolean(editing) : editing || showForm) ? (
+        <div className={dedicatedMode ? "xl:max-w-[55%]" : undefined}>
+          <PlaybookEditorPanel
+            editing={editing}
+            form={form}
+            setForm={setForm}
+            activeTab={activeTab}
+            setActiveTab={setActiveTabWithUrl}
+            labels={labels}
+            productTypes={productTypes}
+            actionsList={actionsList}
+            actionsById={actionsById}
+            helpExpanded={helpExpanded}
+            toggleHelp={toggleHelp}
+            showSchemaVersion={showSchemaVersion}
+            getIssuesForPrefix={getIssuesForPrefix}
+            onOpenCreateActionModal={(evidenceIndex) => {
+              setActionModalMode("create");
+              setActionModalTargetId(null);
+              setActionModalEvidenceIndex(typeof evidenceIndex === "number" ? evidenceIndex : null);
+            }}
+            onOpenEditActionModal={(actionId, evidenceIndex) => {
+              if (!actionId) return;
+              setActionModalMode("edit");
+              setActionModalTargetId(actionId);
+              setActionModalEvidenceIndex(typeof evidenceIndex === "number" ? evidenceIndex : null);
+            }}
+            onOpenCreateLabelModal={() => {
+              setLabelModalMode("create");
+              setLabelModalTargetId(null);
+            }}
+            onOpenEditLabelModal={(labelId) => {
+              if (!labelId) return;
+              setLabelModalMode("edit");
+              setLabelModalTargetId(labelId);
+            }}
+            onSave={handleSave}
+            onCancel={() => {
+              if (dedicatedMode) {
+                router.push("/admin/playbooks");
+                return;
+              }
+              closeForm();
+            }}
+            saving={saving}
+            savedFeedback={savedFeedback}
+          />
         </div>
-        </div>
-      )}
+      ) : null}
 
-      {!dedicatedMode && (
+      {!dedicatedMode ? (
         <>
-          {totalPlaybooks > 0 && (
+          {playbooks.length > 0 ? (
             <div className="mb-4 text-right text-sm text-muted">
-              {(() => {
-                const from = (page - 1) * PAGE_SIZE + 1;
-                const to = Math.min(page * PAGE_SIZE, totalPlaybooks);
-                return `Showing ${from}-${to} of ${totalPlaybooks} playbook${totalPlaybooks === 1 ? "" : "s"}`;
-              })()}
+              {`${(page - 1) * PAGE_SIZE + 1}-${Math.min(page * PAGE_SIZE, playbooks.length)} of ${playbooks.length} playbook${playbooks.length === 1 ? "" : "s"}`}
             </div>
-          )}
+          ) : null}
 
           <ul className="space-y-2">
-            {paginatedPlaybooks.map((p) => (
+            {paginatedPlaybooks.map((playbook) => (
               <li
-                key={p.id}
+                key={playbook.id}
                 className="flex items-center justify-between rounded border border-border bg-surface p-4"
               >
                 <div>
-                  <Link href={`/admin/playbooks/${p.id}`} className="font-medium text-primary hover:underline">
-                    {p.title}
+                  <Link href={`/admin/playbooks/${playbook.id}`} className="font-medium text-primary hover:underline">
+                    {playbook.title}
                   </Link>
                   <span
                     className={`ml-2 rounded-full px-2 py-0.5 text-xs font-medium ${
-                      p.enabled ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-700"
+                      playbook.enabled ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-700"
                     }`}
                   >
-                    {p.enabled ? "Enabled" : "Disabled"}
+                    {playbook.enabled ? "Enabled" : "Disabled"}
                   </span>
                   <span className="ml-2 text-sm text-gray-500">
-                    ({labels.find((l) => l.id === p.labelId)?.displayName ?? p.labelId})
+                    ({labels.find((item) => item.id === playbook.labelId)?.displayName ?? playbook.labelId})
                   </span>
                   <p className="text-sm text-gray-500">
-                    {Array.isArray(p.steps) ? p.steps.length : 0} steps
-                    {Array.isArray(p.symptoms) && p.symptoms.length > 0 && `, ${p.symptoms.length} symptoms`}
-                    {Array.isArray(p.evidenceChecklist) && p.evidenceChecklist.length > 0 &&
-                      `, ${p.evidenceChecklist.length} evidence`}
+                    {Array.isArray(playbook.steps) ? playbook.steps.length : 0} steps
+                    {Array.isArray(playbook.symptoms) && playbook.symptoms.length > 0 ? `, ${playbook.symptoms.length} symptoms` : ""}
+                    {Array.isArray(playbook.evidenceChecklist) && playbook.evidenceChecklist.length > 0 ? `, ${playbook.evidenceChecklist.length} evidence` : ""}
                   </p>
                 </div>
                 <div className="flex gap-2">
                   <button
-                    onClick={() => togglePlaybookEnabled(p)}
-                    disabled={togglingId === p.id}
+                    onClick={() => togglePlaybookEnabled(playbook.id, playbook.enabled)}
+                    disabled={togglingId === playbook.id}
                     className="rounded border border-border px-3 py-1 text-sm"
                   >
-                    {togglingId === p.id ? "Saving…" : p.enabled ? "Disable" : "Enable"}
+                    {togglingId === playbook.id ? "Saving…" : playbook.enabled ? "Disable" : "Enable"}
                   </button>
                   <a
-                    href={`/api/admin/playbooks/${p.id}/export`}
+                    href={`/api/admin/playbooks/${playbook.id}/export`}
                     download
                     className="rounded border border-border px-3 py-1 text-sm"
                   >
                     Export Excel
                   </a>
-                  <Link
-                    href={`/admin/playbooks/${p.id}`}
-                    className="rounded border border-border px-3 py-1 text-sm"
-                  >
+                  <Link href={`/admin/playbooks/${playbook.id}`} className="rounded border border-border px-3 py-1 text-sm">
                     Edit
                   </Link>
                   <button
-                    onClick={() => handleDelete(p)}
-                    disabled={deletingId === p.id}
+                    onClick={() => handleDelete(playbook.id, playbook.title)}
+                    disabled={deletingId === playbook.id}
                     className="rounded border border-red-300 px-3 py-1 text-sm text-red-600 hover:bg-red-50 disabled:opacity-50"
                   >
-                    {deletingId === p.id ? "Deleting…" : "Delete"}
+                    {deletingId === playbook.id ? "Deleting…" : "Delete"}
                   </button>
                 </div>
               </li>
             ))}
           </ul>
 
-          {totalPlaybooks === 0 && (
-            <p className="py-6 text-center text-sm text-muted">No playbooks yet.</p>
-          )}
+          {playbooks.length === 0 ? <p className="py-6 text-center text-sm text-muted">No playbooks yet.</p> : null}
 
-          {totalPlaybooks > 0 && (
+          {playbooks.length > 0 && totalPages > 1 ? (
             <div className="mt-4 flex flex-col items-center gap-2">
-              {totalPages > 1 && (
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => setPage(1)}
-                    disabled={!canGoPrev}
-                    aria-label="First page"
-                    className="flex h-8 w-8 items-center justify-center rounded-md border border-border bg-surface text-sm text-ink transition-colors hover:bg-page disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    «
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setPage((prev) => Math.max(1, prev - 1))}
-                    disabled={!canGoPrev}
-                    aria-label="Previous page"
-                    className="flex h-8 w-8 items-center justify-center rounded-md border border-border bg-surface text-sm text-ink transition-colors hover:bg-page disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    ‹
-                  </button>
-
-                  {(() => {
-                    const pages: (number | "...")[] = [];
-                    const total = totalPages;
-                    const current = page;
-                    if (total <= 7) {
-                      for (let i = 1; i <= total; i++) pages.push(i);
-                    } else {
-                      pages.push(1);
-                      if (current > 3) pages.push("...");
-                      const start = Math.max(2, current - 1);
-                      const end = Math.min(total - 1, current + 1);
-                      for (let i = start; i <= end; i++) pages.push(i);
-                      if (current < total - 2) pages.push("...");
-                      pages.push(total);
-                    }
-                    return pages.map((p, idx) =>
-                      p === "..." ? (
-                        <span key={`ellipsis-${idx}`} className="flex h-8 w-8 items-center justify-center text-sm text-muted">
-                          ...
-                        </span>
-                      ) : (
-                        <button
-                          key={p}
-                          type="button"
-                          onClick={() => setPage(p as number)}
-                          aria-label={`Page ${p}`}
-                          aria-current={p === current ? "page" : undefined}
-                          className={`flex h-8 min-w-[2rem] items-center justify-center rounded-md border px-2 text-sm transition-colors ${
-                            p === current
-                              ? "border-primary bg-primary text-white"
-                              : "border-border bg-surface text-ink hover:bg-page"
-                          }`}
-                        >
-                          {p}
-                        </button>
-                      )
-                    );
-                  })()}
-
-                  <button
-                    type="button"
-                    onClick={() => setPage((prev) => prev + 1)}
-                    disabled={!canGoNext}
-                    aria-label="Next page"
-                    className="flex h-8 w-8 items-center justify-center rounded-md border border-border bg-surface text-sm text-ink transition-colors hover:bg-page disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    ›
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setPage(totalPages)}
-                    disabled={!canGoNext}
-                    aria-label="Last page"
-                    className="flex h-8 w-8 items-center justify-center rounded-md border border-border bg-surface text-sm text-ink transition-colors hover:bg-page disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    »
-                  </button>
-                </div>
-              )}
-              <p className="text-sm text-muted">
-                {(() => {
-                  const from = (page - 1) * PAGE_SIZE + 1;
-                  const to = Math.min(page * PAGE_SIZE, totalPlaybooks);
-                  return `Showing ${from}-${to} of ${totalPlaybooks} playbook${totalPlaybooks === 1 ? "" : "s"}`;
-                })()}
-              </p>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setPage(1)}
+                  disabled={!canGoPrev}
+                  className="flex h-8 w-8 items-center justify-center rounded-md border border-border bg-surface text-sm text-ink disabled:opacity-40"
+                >
+                  «
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPage((current) => Math.max(1, current - 1))}
+                  disabled={!canGoPrev}
+                  className="flex h-8 w-8 items-center justify-center rounded-md border border-border bg-surface text-sm text-ink disabled:opacity-40"
+                >
+                  ‹
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+                  disabled={!canGoNext}
+                  className="flex h-8 w-8 items-center justify-center rounded-md border border-border bg-surface text-sm text-ink disabled:opacity-40"
+                >
+                  ›
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPage(totalPages)}
+                  disabled={!canGoNext}
+                  className="flex h-8 w-8 items-center justify-center rounded-md border border-border bg-surface text-sm text-ink disabled:opacity-40"
+                >
+                  »
+                </button>
+              </div>
             </div>
-          )}
+          ) : null}
         </>
-      )}
+      ) : null}
+
+      <ActionQuickEditModal
+        open={actionModalMode !== null}
+        mode={actionModalMode ?? "create"}
+        action={currentActionTarget}
+        onClose={() => {
+          setActionModalMode(null);
+          setActionModalTargetId(null);
+          setActionModalEvidenceIndex(null);
+        }}
+        onSaved={handleActionSaved}
+      />
+
+      <LabelQuickEditModal
+        open={labelModalMode !== null}
+        mode={labelModalMode ?? "create"}
+        label={currentLabelTarget}
+        onClose={() => {
+          setLabelModalMode(null);
+          setLabelModalTargetId(null);
+        }}
+        onSaved={handleLabelSaved}
+      />
     </div>
   );
 }

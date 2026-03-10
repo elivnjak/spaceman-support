@@ -37,8 +37,9 @@ export const TAB_HELP: Record<TabKey, { title: string; body: ReactNode }> = {
           <li>
             <strong>Schema version</strong> &mdash; schema v2 playbooks can
             carry structured evidence and cause semantics. The admin workbook
-            import/export flow is the current authoring path for full v2 rule
-            maintenance.
+            import/export flow is now the advanced bulk-edit and backup path,
+            while the in-app editor is the primary authoring surface for v2
+            evidence contracts, causes, and structured rules.
           </li>
         </ul>
       </>
@@ -104,6 +105,11 @@ export const TAB_HELP: Record<TabKey, { title: string; body: ReactNode }> = {
           stable because schema-v2 cause rules and workbook exports reference
           them directly.
         </p>
+        <p className="mt-2 text-sm">
+          In the causes editor, evidence is selected through a searchable
+          click-based chooser rather than typed IDs. New rules intentionally
+          start blank so you can explicitly choose the right evidence item.
+        </p>
       </>
     ),
   },
@@ -129,15 +135,22 @@ export const TAB_HELP: Record<TabKey, { title: string; body: ReactNode }> = {
             the inline editor, but in schema v2 the authoritative cause logic is
             the structured <strong>support rules</strong>,{" "}
             <strong>exclude rules</strong>, and optional{" "}
-            <strong>outcome</strong> metadata maintained through workbook
-            import/export.
+            <strong>outcome</strong> metadata maintained directly in the
+            in-app causes editor.
           </li>
         </ul>
         <p className="mt-2 text-sm">
           <strong>Tip:</strong> Keep sibling causes mutually distinguishable.
           When a cause needs deterministic evaluation or technician escalation,
-          maintain that logic in the workbook-backed schema-v2 fields rather
-          than prose alone.
+          maintain that logic in the schema-v2 fields rather than prose alone.
+          Each cause now has its own accordion card, with separate support and
+          exclude sections, so use those sections to make the boundary between
+          sibling causes obvious.
+        </p>
+        <p className="mt-2 text-sm">
+          New causes open in place, and new rules do not preselect evidence.
+          That is intentional: it makes the authored logic easier to read and
+          avoids accidental carry-over from the first checklist item.
         </p>
       </>
     ),
@@ -224,8 +237,10 @@ export function GuideIntro() {
       </ul>
       <p className="mt-2 text-sm text-ink/80">
         The inline admin form covers the core playbook fields. Full schema-v2
-        rule authoring currently happens through workbook export/import so the
-        structured cause logic stays explicit and versionable.
+        authoring now happens directly in the admin UI for evidence contracts,
+        support rules, exclude rules, and cause outcomes. Workbook
+        export/import remains available as the advanced bulk-edit and backup
+        path.
       </p>
     </section>
   );
@@ -358,8 +373,8 @@ export function GuideHowItWorks() {
         </div>
         <p className="mt-2 text-xs text-muted">
           Actions shape evidence collection, triggers act as safety overrides,
-          and workbook-authored schema-v2 rules are the authoritative path for
-          deterministic cause logic.
+          and schema-v2 rules authored in the admin UI are now the primary path
+          for deterministic cause logic.
         </p>
       </div>
     </section>
@@ -383,9 +398,10 @@ export function GuideTips() {
           instead of ambiguous free text.
         </li>
         <li>
-          <strong>Maintain support and exclude rules in the workbook</strong>
-          whenever sibling causes overlap or a cause should escalate instead of
-          resolve.
+          <strong>Maintain support and exclude rules directly in the Causes
+          tab</strong> whenever sibling causes overlap or a cause should
+          escalate instead of resolve. Use workbook export/import as the
+          advanced backup and bulk-edit path.
         </li>
         <li>
           <strong>Review triggers</strong> from time to time so escalation still

@@ -1,7 +1,7 @@
 {
   "bundleType": "knowledge-base",
   "version": 1,
-  "exportedAt": "2026-03-09T21:39:54.722Z",
+  "exportedAt": "2026-03-10T00:35:07.876Z",
   "scope": "Versionable knowledge-base content plus storage-backed files used by documents and admin content.",
   "excludedTables": [
     "users",

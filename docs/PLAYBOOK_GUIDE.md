@@ -14,7 +14,7 @@ A playbook is a **diagnostic contract** for one type of issue (for example "Text
 - When to escalate immediately to a person
 - What steps to suggest once a cause is supported
 
-You build and maintain this guide through the Admin playbook editor and, for full schema-v2 fields, through workbook export/import. The assistant then follows this guide during a chat with the user.
+You build and maintain this guide primarily through the Admin playbook editor. Workbook export/import still exists, but it is now the advanced bulk-edit and backup path rather than the main way to maintain schema-v2 fields. The assistant then follows this guide during a chat with the user.
 
 ---
 
@@ -38,7 +38,7 @@ In short: labels answer "what category of problem?" and drive playbook selection
 
 **Why it matters:** It identifies _which_ diagnostic guide is in use. The title appears in triage so the right playbook can be selected. The label links the playbook to the issue taxonomy. Product type scoping allows different playbooks for the same label when different products need different diagnostic paths.
 
-**Good to know:** This is the "cover page" of the playbook. Keep it short and descriptive. Schema-v2 structured cause fields are currently authored through workbook export/import rather than the inline editor alone.
+**Good to know:** This is the "cover page" of the playbook. Keep it short and descriptive. Schema-v2 structured cause fields are now maintained directly in the inline editor, with workbook export/import kept for backup and bulk edits.
 
 ---
 
@@ -67,7 +67,7 @@ Each item has a short description, a type (photo, reading, observation, action, 
 
 **Why it matters:** Evidence is _what we need to know_ before we can safely support or exclude a cause. The assistant asks for these one by one. As the user answers, the system fills in the checklist and normalizes the values. Evidence IDs are also used to validate that the assistant only asks for things defined in the playbook, and to match photos, readings, and skipped answers to the right checklist items.
 
-**Good to know:** Order and describe evidence so that the most important or easiest-to-get items come first. Required items should be things you truly need before giving a resolution. If diagnosis depends on exact values, prefer action-backed enum, boolean, or number inputs rather than ambiguous text.
+**Good to know:** Order and describe evidence so that the most important or easiest-to-get items come first. Required items should be things you truly need before giving a resolution. If diagnosis depends on exact values, prefer action-backed enum, boolean, or number inputs rather than ambiguous text. In the current editor, cause rules choose evidence through a searchable click-based selector rather than typed IDs.
 
 ---
 
@@ -80,11 +80,11 @@ For each cause you can set:
 - A short name and description
 - Likelihood (high / medium / low) as a starting point
 - **Ruling evidence** — which evidence items from the checklist help confirm or rule out this cause
-- In schema v2, workbook-authored **support rules**, **exclude rules**, and optional **outcome** values
+- In schema v2, inline-authored **support rules**, **exclude rules**, and optional **outcome** values
 
-**Why it matters:** Causes define _what we're trying to diagnose_. The assistant keeps a list of possible causes and updates confidence levels as evidence comes in. In schema v2, deterministic cause evaluation is driven by the structured rule fields maintained in the workbook, while the inline "ruling evidence" list remains a quick reference and prompt hint.
+**Why it matters:** Causes define _what we're trying to diagnose_. The assistant keeps a list of possible causes and updates confidence levels as evidence comes in. In schema v2, deterministic cause evaluation is driven by the structured rule fields maintained directly in the Causes tab, while the inline "ruling evidence" list remains a quick reference and prompt hint.
 
-**Good to know:** The more clearly you separate sibling causes with structured rules, the more consistent the assistant's conclusions will be. The likelihood field gives the system a starting prior, but it should not be the only thing distinguishing causes. If a cause should escalate instead of resolve, set that in the schema-v2 workbook fields.
+**Good to know:** The more clearly you separate sibling causes with structured rules, the more consistent the assistant's conclusions will be. The likelihood field gives the system a starting prior, but it should not be the only thing distinguishing causes. If a cause should escalate instead of resolve, set that in the schema-v2 cause fields. New rules now start blank intentionally so you explicitly choose the right evidence item instead of inheriting the first checklist entry.
 
 ---
 
@@ -135,7 +135,7 @@ So: **Symptoms** set the scene, **Evidence** is what we gather, **Actions** defi
 
 - **Keep labels stable** and keep business logic out of label names. Labels are taxonomy, not diagnosis rules.
 - **Prefer structured action inputs** when business logic depends on exact values. Avoid vague free text where an enum, boolean, or number would be safer.
-- **Maintain support and exclude rules in the workbook** whenever sibling causes overlap or a cause should escalate instead of resolve.
+- **Maintain support and exclude rules in the Causes tab** whenever sibling causes overlap or a cause should escalate instead of resolve. Use workbook export/import when you need a bulk edit or an external backup.
 - **Review triggers** from time to time so escalation still matches your current policies.
 - **Test with real examples**: run through the generated scenario suite and a few sample chats and check that the right evidence is asked for, the right cause is chosen, and the right steps are shown.
 - **Export after stable updates** so the workbook matches the live DB state and the structured v2 rules are versioned outside the database.
@@ -144,7 +144,7 @@ So: **Symptoms** set the scene, **Evidence** is what we gather, **Actions** defi
 
 ## Where to edit playbooks
 
-Playbooks are edited in the Admin area of the app, under **Playbooks**. Use the inline editor for core fields like label, title, symptoms, evidence order, quick cause references, triggers, and steps. Use workbook export/import for full schema-v2 authoring such as support rules, exclude rules, value definitions, and cause outcomes. For how to use the Admin UI day to day, see the [User Manual](./USER_MANUAL.md).
+Playbooks are edited in the Admin area of the app, under **Playbooks**. Use the inline editor for label, title, symptoms, evidence contracts, action links, support rules, exclude rules, cause outcomes, triggers, and steps. Use workbook export/import when you need an external backup or a bulk offline edit. For how to use the Admin UI day to day, see the [User Manual](./USER_MANUAL.md).
 
 For a detailed technical reference of how each field is consumed in the LLM prompts and business logic, see [PLAYBOOK_REFERENCE.md](./PLAYBOOK_REFERENCE.md).
 

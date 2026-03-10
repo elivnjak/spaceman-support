@@ -55,12 +55,12 @@
         "images": []
       },
       "ev_high_volume": {
-        "user": "Yes",
+        "user": "No",
         "inputSource": "structured",
         "images": []
       },
       "confirm_high_volume_serving": {
-        "user": "Yes",
+        "user": "No",
         "inputSource": "structured",
         "images": []
       },
@@ -95,12 +95,12 @@
         "images": []
       },
       "ev_mix_prechilled": {
-        "user": "No",
+        "user": "Yes",
         "inputSource": "structured",
         "images": []
       },
       "confirm_prechilled_mix": {
-        "user": "No",
+        "user": "Yes",
         "inputSource": "structured",
         "images": []
       },

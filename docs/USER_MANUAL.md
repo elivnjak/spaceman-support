@@ -101,21 +101,20 @@ Seeding creates four default labels: `good_texture`, `too_runny`, `too_icy`, `to
    - symptoms
    - evidence order and descriptions
    - action links
-   - quick cause references
+   - evidence value contracts
+   - support rules and exclude rules
+   - cause outcomes
    - escalation triggers
    - authored resolution steps
-3. Use **Export Excel** when you need to edit full schema-v2 cause logic such as:
-   - `supportRules`
-   - `excludeRules`
-   - evidence `valueDefinition`
-   - cause `outcome` (for example, escalate instead of resolve)
-4. Re-import the workbook to update the live playbook.
+3. Use **Export Excel** when you need a bulk offline edit or an external backup of the current schema-v2 playbook.
+4. Re-import the workbook when you want to apply those bulk changes back into the live playbook.
 5. Keep step IDs stable. The assistant will only return steps that match these step IDs.
 
 **Tips:**
 
 - One label can have multiple playbooks if different product types need different diagnostic paths.
 - Prefer linking evidence to actions with enum, boolean, or number inputs when diagnosis depends on exact values.
+- New cause rules start blank intentionally, so always pick the evidence item explicitly instead of assuming a default.
 - The authored step text remains the canonical resolution text shown to the user if generated wording drifts.
 
 ### Actions — /admin/actions

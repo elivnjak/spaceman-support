@@ -26,35 +26,48 @@ function normalizeActionId(id: string): string {
 }
 
 function normalizeExpectedInput(expectedInput: ActionPayload["expectedInput"]) {
-  if (!expectedInput?.type) return null;
+  if (!expectedInput?.type) {
+    return { expectedInput: null, error: null as string | null };
+  }
   const expectedType = expectedInput.type.toLowerCase();
-  if (expectedType === "photo") return { type: "photo" as const };
+  if (expectedType === "photo") return { expectedInput: { type: "photo" as const }, error: null as string | null };
   if (expectedType === "number") {
     const min = expectedInput.range?.min;
     const max = expectedInput.range?.max;
-    const hasRange = Number.isFinite(min) || Number.isFinite(max);
+    const hasMin = Number.isFinite(min);
+    const hasMax = Number.isFinite(max);
+    if (hasMin !== hasMax) {
+      return {
+        expectedInput: null,
+        error: "Number expectedInput range requires both min and max.",
+      };
+    }
     return {
-      type: "number" as const,
-      unit: expectedInput.unit?.trim() || undefined,
-      range: hasRange
-        ? { min: Number.isFinite(min) ? min : 0, max: Number.isFinite(max) ? max : 100 }
-        : undefined,
+      expectedInput: {
+        type: "number" as const,
+        unit: expectedInput.unit?.trim() || undefined,
+        range: hasMin && hasMax ? { min: Number(min), max: Number(max) } : undefined,
+      },
+      error: null as string | null,
     };
   }
   if (expectedType === "boolean" || expectedType === "bool") {
     return {
-      type: "boolean" as const,
-      options:
-        expectedInput.options?.map((o) => o.trim()).filter(Boolean).length
-          ? expectedInput.options.map((o) => o.trim()).filter(Boolean)
-          : ["Yes", "No"],
+      expectedInput: {
+        type: "boolean" as const,
+        options:
+          expectedInput.options?.map((o) => o.trim()).filter(Boolean).length
+            ? expectedInput.options.map((o) => o.trim()).filter(Boolean)
+            : ["Yes", "No"],
+      },
+      error: null as string | null,
     };
   }
   if (expectedType === "enum") {
     const options = expectedInput.options?.map((o) => o.trim()).filter(Boolean) ?? [];
-    return { type: "enum" as const, options };
+    return { expectedInput: { type: "enum" as const, options }, error: null as string | null };
   }
-  return { type: "text" as const };
+  return { expectedInput: { type: "text" as const }, error: null as string | null };
 }
 
 async function GETHandler(request: Request) {
@@ -140,7 +153,10 @@ async function POSTHandler(request: Request) {
   const safety = ["safe", "caution", "technician_only"].includes(safetyLevel)
     ? safetyLevel
     : "safe";
-  const normalizedExpectedInput = normalizeExpectedInput(expectedInput);
+  const { expectedInput: normalizedExpectedInput, error } = normalizeExpectedInput(expectedInput);
+  if (error) {
+    return NextResponse.json({ error }, { status: 400 });
+  }
   if (normalizedExpectedInput?.type === "enum" && (normalizedExpectedInput.options?.length ?? 0) < 2) {
     return NextResponse.json(
       { error: "Enum expectedInput requires at least 2 options" },

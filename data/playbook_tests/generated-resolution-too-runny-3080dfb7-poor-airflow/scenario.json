@@ -54,12 +54,12 @@
         "images": []
       },
       "last_clean": {
-        "user": "Unknown",
+        "user": "Within last 72 hours",
         "inputSource": "structured",
         "images": []
       },
       "report_last_clean": {
-        "user": "Unknown",
+        "user": "Within last 72 hours",
         "inputSource": "structured",
         "images": []
       },

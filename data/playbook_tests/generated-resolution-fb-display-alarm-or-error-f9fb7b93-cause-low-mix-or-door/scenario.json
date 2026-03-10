@@ -39,12 +39,12 @@
         "images": []
       },
       "ev_recent_events": {
-        "user": "Unknown",
+        "user": "Refill or low-mix condition",
         "inputSource": "structured",
         "images": []
       },
       "describe_recent_alarm_event": {
-        "user": "Unknown",
+        "user": "Refill or low-mix condition",
         "inputSource": "structured",
         "images": []
       },

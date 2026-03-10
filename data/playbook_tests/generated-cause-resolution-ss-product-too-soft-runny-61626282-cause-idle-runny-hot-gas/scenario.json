@@ -95,12 +95,12 @@
         "images": []
       },
       "ev_mix_prechilled": {
-        "user": "No",
+        "user": "Yes",
         "inputSource": "structured",
         "images": []
       },
       "confirm_prechilled_mix": {
-        "user": "No",
+        "user": "Yes",
         "inputSource": "structured",
         "images": []
       },
@@ -115,12 +115,12 @@
         "images": []
       },
       "ev_air_system_condition": {
-        "user": "Unsure",
+        "user": "Clear and correctly assembled",
         "inputSource": "structured",
         "images": []
       },
       "inspect_air_system_condition": {
-        "user": "Unsure",
+        "user": "Clear and correctly assembled",
         "inputSource": "structured",
         "images": []
       }

@@ -55,12 +55,12 @@
         "images": []
       },
       "ev_brix_comparison": {
-        "user": "Unable to confirm",
+        "user": "Both sides match",
         "inputSource": "structured",
         "images": []
       },
       "compare_brix_or_recipe_between_sides": {
-        "user": "Unable to confirm",
+        "user": "Both sides match",
         "inputSource": "structured",
         "images": []
       },

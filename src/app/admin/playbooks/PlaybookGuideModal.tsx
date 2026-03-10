@@ -99,8 +99,9 @@ export function PlaybookGuideModal({ open, onClose, scrollToTab }: PlaybookGuide
               the playbook to the issue taxonomy. <strong>Product type</strong>{" "}
               scoping allows different playbooks for the same label when
               different products need different diagnostic paths. Full schema-v2
-              rule authoring is currently maintained through workbook export and
-              re-import.
+              playbook maintenance now happens directly in the admin editor,
+              while workbook export/import remains the advanced bulk-edit and
+              backup path.
             </p>
           </GuideSectionDetail>
 
@@ -133,6 +134,13 @@ export function PlaybookGuideModal({ open, onClose, scrollToTab }: PlaybookGuide
               support or exclude a cause. The assistant asks for these one by
               one. Required items should represent the minimum trustworthy
               evidence needed before structured diagnosis can continue.
+            </p>
+            <p className="mt-2">
+              In the current editor, action-linked evidence shows its synced
+              value contract read-only, and cause rules use a searchable
+              evidence selector instead of typed IDs. New rules start with no
+              evidence selected so authors must choose the correct checklist
+              item explicitly.
             </p>
             <div className="mt-3 overflow-x-auto">
               <table className="w-full text-left text-xs">
@@ -182,10 +190,15 @@ export function PlaybookGuideModal({ open, onClose, scrollToTab }: PlaybookGuide
             </p>
             <p className="mt-2">
               <strong>Ruling evidence</strong> is the quick inline cross-reference.
-              In schema v2, the authoritative cause semantics are workbook-backed{" "}
+              In schema v2, the authoritative cause semantics are the in-app{" "}
               <strong>support rules</strong>, <strong>exclude rules</strong>, and
-              optional <strong>outcome</strong> fields. Use the workbook path when
-              sibling causes need deterministic separation.
+              optional <strong>outcome</strong> fields.
+            </p>
+            <p className="mt-2">
+              The Causes tab now uses one cause card at a time, with a dedicated
+              expand/collapse row and separate support and exclude sections. Use
+              those sections to make the difference between sibling causes
+              obvious at a glance.
             </p>
           </GuideSectionDetail>
 

@@ -29,12 +29,12 @@
         "imageLabel": "Leak from dispensing door/spout\nWear parts overdue for replacement (typical 3-month interval).\nPhoto of leak at spout/door."
       },
       "ev_last_clean": {
-        "user": "Unknown",
+        "user": "More than 72 hours ago",
         "inputSource": "structured",
         "images": []
       },
       "confirm_last_full_clean": {
-        "user": "Unknown",
+        "user": "More than 72 hours ago",
         "inputSource": "structured",
         "images": []
       },

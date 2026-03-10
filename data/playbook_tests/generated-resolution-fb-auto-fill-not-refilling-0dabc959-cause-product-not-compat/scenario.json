@@ -53,12 +53,12 @@
         "images": []
       },
       "ev_line_bubbles": {
-        "user": "Unable to tell",
+        "user": "No bubbles visible",
         "inputSource": "structured",
         "images": []
       },
       "inspect_feed_line_bubbles": {
-        "user": "Unable to tell",
+        "user": "No bubbles visible",
         "inputSource": "structured",
         "images": []
       },

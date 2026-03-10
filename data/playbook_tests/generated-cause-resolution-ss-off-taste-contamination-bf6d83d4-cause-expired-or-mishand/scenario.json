@@ -59,12 +59,12 @@
         "images": []
       },
       "ev_hopper_foam_solids": {
-        "user": "Unknown",
+        "user": "Normal",
         "inputSource": "structured",
         "images": []
       },
       "inspect_hopper_residue_condition": {
-        "user": "Unknown",
+        "user": "Normal",
         "inputSource": "structured",
         "images": []
       }

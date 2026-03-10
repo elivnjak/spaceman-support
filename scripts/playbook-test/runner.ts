@@ -114,6 +114,45 @@ function findSemanticFallbackOption(
   return null;
 }
 
+function findBooleanEnumFallbackOption(
+  answer: string,
+  options: string[]
+): string | null {
+  const normalizedAnswer = normalizeAnswerToken(answer);
+  const normalizedOptions = options.map((option) => ({
+    original: option,
+    normalized: normalizeAnswerToken(option),
+  }));
+
+  const pickFirst = (patterns: RegExp[]): string | null => {
+    for (const pattern of patterns) {
+      const matched = normalizedOptions.find((option) => pattern.test(option.normalized));
+      if (matched) return matched.original;
+    }
+    return null;
+  };
+
+  if (["no", "n", "false"].includes(normalizedAnswer)) {
+    return pickFirst([
+      /^neither$/,
+      /^none$/,
+      /^no$/,
+      /none of the above/,
+      /not applicable/,
+    ]);
+  }
+
+  if (["not sure", "unsure", "unknown"].includes(normalizedAnswer)) {
+    return pickFirst([
+      /^not sure$/,
+      /^unsure$/,
+      /^unknown$/,
+    ]);
+  }
+
+  return null;
+}
+
 function mapNumericValueToEnumOption(
   numericValue: number,
   options: string[]
@@ -165,14 +204,21 @@ export function coerceAutoAnswerForRequest(
     const exact = options.find((option: string) => normalizeAnswerToken(option) === normalized);
     if (exact) return exact;
 
-    const loose = options.find((option: string) => {
-      const normalizedOption = normalizeAnswerToken(option);
-      return normalizedOption.includes(normalized) || normalized.includes(normalizedOption);
-    });
-    if (loose) return loose;
+    if (normalized.length >= 3) {
+      const loose = options.find((option: string) => {
+        const normalizedOption = normalizeAnswerToken(option);
+        return (
+          normalizedOption.includes(normalized) || normalized.includes(normalizedOption)
+        );
+      });
+      if (loose) return loose;
+    }
 
     const semanticFallback = findSemanticFallbackOption(trimmed, options);
     if (semanticFallback) return semanticFallback;
+
+    const booleanEnumFallback = findBooleanEnumFallbackOption(trimmed, options);
+    if (booleanEnumFallback) return booleanEnumFallback;
 
     throw new Error(
       `Auto-answer "${trimmed}" does not match allowed options for request ${request.id}: ${options.join(", ")}`

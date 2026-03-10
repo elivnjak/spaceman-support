@@ -65,12 +65,12 @@
         "imageLabel": "Display alarm/error (unknown)\nPower fluctuation causing control reset/alarm.\nPhoto of product or bowl state."
       },
       "ev_mix_level": {
-        "user": "Unknown",
+        "user": "Above minimum line",
         "inputSource": "structured",
         "images": []
       },
       "check_mix_level": {
-        "user": "Unknown",
+        "user": "Above minimum line",
         "inputSource": "structured",
         "images": []
       }

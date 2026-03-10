@@ -1038,7 +1038,7 @@ test("structured rules generate neutral answers for competing-only evidence", ()
 
   assert.ok(blueprint);
   assert.equal(blueprint?.answers.ev_cleaning_done?.user, "More than 72 hours ago");
-  assert.equal(blueprint?.answers.ev_leak_started_after_cleaning?.user, "Unknown");
+  assert.equal(blueprint?.answers.ev_leak_started_after_cleaning?.user, "No");
 });
 
 test("competing numeric between rules stay inside allowed range when generating neutral answers", () => {
@@ -1204,4 +1204,91 @@ test("structured option scoring prefers the target-supported enum over a competi
 
   assert.ok(blueprint);
   assert.equal(blueprint?.answers.ev_prechilled?.user, "Yes");
+});
+
+test("structured option scoring neutralizes a single competing cause when the target has no direct rule", () => {
+  const blueprint = buildFallbackResolutionBlueprintForCause(
+    {
+      id: "pb-side-mix-1",
+      labelId: "fb_inconsistent_texture_between_sides",
+      title: "Inconsistent texture between sides/bowls",
+      enabled: true,
+      schemaVersion: 2,
+      symptoms: [{ id: "sym1", description: "One side is runnier than the other." }],
+      evidenceChecklist: [
+        {
+          id: "ev_mix_level_comparison",
+          type: "observation",
+          required: true,
+          description: "Comparison of hopper mix levels between sides.",
+          valueDefinition: {
+            kind: "enum",
+            options: [
+              "Both sides above minimum and similar",
+              "One side lower or near low-mix",
+              "One side below minimum line",
+              "Unknown",
+            ],
+            unknownValues: ["Unknown"],
+          },
+        },
+        {
+          id: "ev_brix_comparison",
+          type: "observation",
+          required: true,
+          description: "Whether recipe or brix matches between both sides.",
+          valueDefinition: {
+            kind: "enum",
+            options: ["Both sides match", "Sides differ", "Unable to confirm"],
+            unknownValues: ["Unable to confirm"],
+          },
+        },
+      ],
+      candidateCauses: [
+        {
+          id: "cause_side_specific_mix_issue",
+          cause: "Recipe or brix differs between sides.",
+          likelihood: "high",
+          rulingEvidence: ["ev_brix_comparison"],
+          supportMode: "all",
+          supportRules: [
+            { evidenceId: "ev_brix_comparison", operator: "equals", values: ["Sides differ"] },
+          ],
+        },
+        {
+          id: "cause_side_specific_sensor_or_low_mix",
+          cause: "Low-mix level or side-specific sensor difference.",
+          likelihood: "medium",
+          rulingEvidence: ["ev_mix_level_comparison"],
+          supportMode: "all",
+          supportRules: [
+            {
+              evidenceId: "ev_mix_level_comparison",
+              operator: "in",
+              values: ["One side lower or near low-mix", "One side below minimum line"],
+            },
+          ],
+        },
+      ],
+      escalationTriggers: [],
+      steps: [],
+      updatedAt: new Date(),
+    },
+    {
+      id: "cause_side_specific_mix_issue",
+      cause: "Recipe or brix differs between sides.",
+      likelihood: "high",
+      rulingEvidence: ["ev_brix_comparison"],
+      supportMode: "all",
+      supportRules: [
+        { evidenceId: "ev_brix_comparison", operator: "equals", values: ["Sides differ"] },
+      ],
+    }
+  );
+
+  assert.ok(blueprint);
+  assert.equal(
+    blueprint?.answers.ev_mix_level_comparison?.user,
+    "Both sides above minimum and similar"
+  );
 });

@@ -1,17 +1,19 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { playbookProductTypes, playbooks } from "@/lib/db/schema";
+import { actions, playbookProductTypes, playbooks } from "@/lib/db/schema";
 import { eq, inArray } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { z } from "zod";
 import { withApiRouteErrorLogging } from "@/lib/error-logs";
+import type { ExpectedInput } from "@/lib/types/actions";
+import { requireAdminUiAuth } from "@/lib/auth";
 import {
   CauseItemSchema,
   EvidenceItemSchema,
   StepSchema,
   TriggerItemSchema,
-  playbookUsesStructuredSemantics,
 } from "@/lib/playbooks/schema";
+import { validateAndNormalizePlaybookV2 } from "@/lib/playbooks/editor";
 
 type Step = z.infer<typeof StepSchema>;
 
@@ -25,7 +27,7 @@ function ensureStepIds(steps: Step[]): Step[] {
   }));
 }
 
-async function GETHandler() {
+async function listPlaybooks() {
   const list = await db.select().from(playbooks).orderBy(playbooks.updatedAt);
   if (list.length === 0) {
     return NextResponse.json([]);
@@ -90,6 +92,9 @@ const PlaybookSchema = z.object({
 });
 
 async function POSTHandler(request: Request) {
+  const authError = await requireAdminUiAuth(request);
+  if (authError) return authError;
+
   const body = await request.json();
   const parsed = PlaybookSchema.safeParse(body);
   if (!parsed.success) {
@@ -113,14 +118,49 @@ async function POSTHandler(request: Request) {
   } = parsed.data;
   const stepsWithIds = ensureStepIds(steps || []);
   const nextProductTypeIds = Array.isArray(productTypeIds) ? productTypeIds : [];
-  const normalizedSchemaVersion =
-    schemaVersion ??
-    (playbookUsesStructuredSemantics({
-      evidenceChecklist: evidenceChecklist ?? [],
-      candidateCauses: candidateCauses ?? [],
-    })
-      ? 2
-      : 1);
+  const evidenceList = evidenceChecklist ?? [];
+  const causeList = candidateCauses ?? [];
+  const referencedActionIds = Array.from(
+    new Set(
+      evidenceList
+        .map((item) => item.actionId?.trim())
+        .filter((value): value is string => Boolean(value))
+    )
+  );
+  const actionRows =
+    referencedActionIds.length > 0
+      ? await db
+          .select({
+            id: actions.id,
+            title: actions.title,
+            expectedInput: actions.expectedInput,
+          })
+          .from(actions)
+          .where(inArray(actions.id, referencedActionIds))
+      : [];
+  const validation = validateAndNormalizePlaybookV2({
+    evidenceChecklist: evidenceList,
+    candidateCauses: causeList,
+    actionsById: new Map(
+      actionRows.map((action) => [
+        action.id,
+        {
+          ...action,
+          expectedInput: (action.expectedInput as ExpectedInput | null | undefined) ?? null,
+        },
+      ])
+    ),
+    schemaVersion,
+  });
+  if (validation.issues.length > 0) {
+    return NextResponse.json(
+      {
+        error: "Invalid playbook payload",
+        details: validation.issues,
+      },
+      { status: 400 }
+    );
+  }
 
   const payload = {
     labelId,
@@ -128,10 +168,10 @@ async function POSTHandler(request: Request) {
     enabled,
     steps: stepsWithIds,
     updatedAt: new Date(),
-    schemaVersion: normalizedSchemaVersion,
+    schemaVersion: validation.schemaVersion,
     ...(symptoms != null && { symptoms }),
-    ...(evidenceChecklist != null && { evidenceChecklist }),
-    ...(candidateCauses != null && { candidateCauses }),
+    ...(evidenceChecklist != null && { evidenceChecklist: validation.normalizedEvidenceChecklist }),
+    ...(candidateCauses != null && { candidateCauses: validation.normalizedCandidateCauses }),
     ...(escalationTriggers != null && { escalationTriggers }),
   };
 
@@ -167,17 +207,17 @@ async function POSTHandler(request: Request) {
   const created = await db.transaction(async (tx) => {
     const [createdPlaybook] = await tx
       .insert(playbooks)
-      .values({
-        labelId,
-        title,
-        enabled,
-        steps: stepsWithIds,
-        schemaVersion: normalizedSchemaVersion,
-        ...(symptoms != null && { symptoms }),
-        ...(evidenceChecklist != null && { evidenceChecklist }),
-        ...(candidateCauses != null && { candidateCauses }),
-        ...(escalationTriggers != null && { escalationTriggers }),
-      })
+        .values({
+          labelId,
+          title,
+          enabled,
+          steps: stepsWithIds,
+          schemaVersion: validation.schemaVersion,
+          ...(symptoms != null && { symptoms }),
+          ...(evidenceChecklist != null && { evidenceChecklist: validation.normalizedEvidenceChecklist }),
+          ...(candidateCauses != null && { candidateCauses: validation.normalizedCandidateCauses }),
+          ...(escalationTriggers != null && { escalationTriggers }),
+        })
       .returning();
 
     if (nextProductTypeIds.length > 0) {
@@ -195,6 +235,12 @@ async function POSTHandler(request: Request) {
     };
   });
   return NextResponse.json(created);
+}
+
+async function GETHandler(request: Request) {
+  const authError = await requireAdminUiAuth(request);
+  if (authError) return authError;
+  return listPlaybooks();
 }
 
 export const GET = withApiRouteErrorLogging("/api/admin/playbooks", GETHandler);

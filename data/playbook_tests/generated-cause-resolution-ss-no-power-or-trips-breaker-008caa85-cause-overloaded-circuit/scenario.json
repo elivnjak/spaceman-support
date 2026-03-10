@@ -33,12 +33,12 @@
         "images": []
       },
       "ev_power_cycle": {
-        "user": "Unable to perform safely",
+        "user": "Completed",
         "inputSource": "structured",
         "images": []
       },
       "power_cycle_off_on": {
-        "user": "Unable to perform safely",
+        "user": "Completed",
         "inputSource": "structured",
         "images": []
       },

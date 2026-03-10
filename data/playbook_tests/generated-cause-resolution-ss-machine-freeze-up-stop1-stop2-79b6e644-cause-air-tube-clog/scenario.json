@@ -49,12 +49,12 @@
         "images": []
       },
       "ev_foam_solids": {
-        "user": "Unsure",
+        "user": "Surface looks smooth with no foam/solids",
         "inputSource": "structured",
         "images": []
       },
       "inspect_hopper_surface_condition": {
-        "user": "Unsure",
+        "user": "Surface looks smooth with no foam/solids",
         "inputSource": "structured",
         "images": []
       },

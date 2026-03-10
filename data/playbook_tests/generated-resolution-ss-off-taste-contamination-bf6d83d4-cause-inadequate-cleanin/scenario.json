@@ -49,12 +49,12 @@
         "images": []
       },
       "ev_mix_expiry": {
-        "user": "Unknown",
+        "user": "In date and stored correctly",
         "inputSource": "structured",
         "images": []
       },
       "check_mix_storage_condition": {
-        "user": "Unknown",
+        "user": "In date and stored correctly",
         "inputSource": "structured",
         "images": []
       },

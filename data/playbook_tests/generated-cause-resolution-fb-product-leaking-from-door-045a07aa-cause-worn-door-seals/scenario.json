@@ -59,12 +59,12 @@
         "images": []
       },
       "ev_cleaning_done": {
-        "user": "Unknown",
+        "user": "More than 72 hours ago",
         "inputSource": "structured",
         "images": []
       },
       "confirm_last_full_clean": {
-        "user": "Unknown",
+        "user": "More than 72 hours ago",
         "inputSource": "structured",
         "images": []
       }
