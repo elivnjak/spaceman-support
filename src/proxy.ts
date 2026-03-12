@@ -8,6 +8,49 @@ const PUBLIC_ADMIN_PATHS = new Set([
   "/admin/reset-password",
 ]);
 
+const BLOCKED_BOT_PATTERNS = [
+  "googlebot",
+  "adsbot-google",
+  "bingbot",
+  "duckduckbot",
+  "baiduspider",
+  "yandexbot",
+  "slurp",
+  "applebot",
+  "facebookexternalhit",
+  "twitterbot",
+  "linkedinbot",
+  "slackbot",
+  "petalbot",
+  "semrushbot",
+  "ahrefsbot",
+  "mj12bot",
+  "dotbot",
+  "ccbot",
+  "amazonbot",
+  "bytespider",
+  "gptbot",
+  "chatgpt-user",
+  "oai-searchbot",
+  "claudebot",
+  "anthropic-ai",
+  "cohere-ai",
+  "perplexitybot",
+  "youbot",
+  "diffbot",
+  "imagesiftbot",
+  "omgili",
+];
+
+function isBlockedBot(request: NextRequest): boolean {
+  const userAgent = request.headers.get("user-agent")?.toLowerCase() ?? "";
+  if (!userAgent) {
+    return false;
+  }
+
+  return BLOCKED_BOT_PATTERNS.some((pattern) => userAgent.includes(pattern));
+}
+
 function getClientIp(request: NextRequest): string {
   return (
     request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
@@ -65,6 +108,16 @@ export async function proxy(request: NextRequest) {
     request.cookies.get("__Host-session_token")?.value?.trim() ??
     request.cookies.get("session_token")?.value?.trim() ??
     "";
+
+  if (isBlockedBot(request)) {
+    return new NextResponse("Forbidden", {
+      status: 403,
+      headers: {
+        "X-Robots-Tag":
+          "noindex, nofollow, noarchive, nosnippet, noimageindex, notranslate, noai, noimageai",
+      },
+    });
+  }
 
   // Allow public admin auth pages to render when unauthenticated.
   if (PUBLIC_ADMIN_PATHS.has(pathname)) {
@@ -147,5 +200,7 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/admin/:path*", "/api/admin/:path*", "/api/chat/:path*"],
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|manifest.json|sw.js).*)",
+  ],
 };
