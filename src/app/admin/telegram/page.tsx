@@ -11,6 +11,8 @@ import { LoadingScreen } from "@/components/ui/LoadingScreen";
 type TelegramConfigPayload = {
   enabled: boolean;
   botToken: string;
+  hasBotToken?: boolean;
+  botTokenPreview?: string;
   chatId: string;
   chatIds: string[];
 };
@@ -39,6 +41,8 @@ export default function AdminTelegramPage() {
   const [testingEmailFallback, setTestingEmailFallback] = useState(false);
   const [enabled, setEnabled] = useState(false);
   const [botToken, setBotToken] = useState("");
+  const [hasSavedBotToken, setHasSavedBotToken] = useState(false);
+  const [botTokenPreview, setBotTokenPreview] = useState("");
   const [chatIds, setChatIds] = useState<string[]>([]);
   const [saveMessage, setSaveMessage] = useState<"success" | "error" | null>(null);
   const [saveDetail, setSaveDetail] = useState<string | null>(null);
@@ -52,8 +56,17 @@ export default function AdminTelegramPage() {
     const res = await fetch("/api/admin/telegram-config");
     const data = (await res.json()) as TelegramConfigPayload;
     setEnabled(data.enabled);
-    setBotToken(data.botToken);
+    setBotToken(data.botTokenPreview ?? data.botToken ?? "");
+    setHasSavedBotToken(Boolean(data.hasBotToken));
+    setBotTokenPreview(data.botTokenPreview ?? "");
     setChatIds(data.chatIds ?? (data.chatId ? [data.chatId] : []));
+  }
+
+  function handleBotTokenFocus() {
+    if (!hasSavedBotToken) return;
+    if (botTokenPreview && botToken === botTokenPreview) {
+      setBotToken("");
+    }
   }
 
   useEffect(() => {
@@ -294,8 +307,14 @@ export default function AdminTelegramPage() {
             type="password"
             value={botToken}
             onChange={(e) => setBotToken(e.target.value)}
-            placeholder="123456789:AA..."
+            onFocus={handleBotTokenFocus}
+            placeholder={botTokenPreview || "123456789:AA..."}
           />
+          {hasSavedBotToken && (
+            <p className="mt-2 text-xs text-muted">
+              Saved token on file in <code>.env</code>. The value is shown masked for security; start typing to replace it.
+            </p>
+          )}
         </div>
       </Card>
 
@@ -308,7 +327,7 @@ export default function AdminTelegramPage() {
         <Button
           variant="secondary"
           onClick={fetchChatIds}
-          disabled={fetching || !botToken.trim()}
+          disabled={fetching || (!botToken.trim() && !hasSavedBotToken)}
         >
           {fetching ? "Fetching..." : "Fetch Chat IDs"}
         </Button>

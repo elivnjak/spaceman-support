@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { telegramConfig } from "@/lib/db/schema";
 import { logErrorEvent, withApiRouteErrorLogging } from "@/lib/error-logs";
+import { getTelegramJson } from "@/lib/telegram";
 
 type TelegramChat = {
   id: string;
@@ -15,7 +16,7 @@ type TelegramChat = {
 async function GETHandler() {
   const [config] = await db.select().from(telegramConfig).limit(1);
   const token =
-    config?.botToken?.trim() || process.env.TELEGRAM_BOT_TOKEN?.trim() || "";
+    process.env.TELEGRAM_BOT_TOKEN?.trim() || config?.botToken?.trim() || "";
   if (!token) {
     return NextResponse.json(
       { error: "Save your bot token first, then fetch chat IDs." },
@@ -23,28 +24,29 @@ async function GETHandler() {
     );
   }
 
-  const apiUrl = `https://api.telegram.org/bot${encodeURIComponent(token)}/getUpdates?limit=100`;
-  let res: Response;
-  try {
-    res = await fetch(apiUrl);
-  } catch (err) {
-    console.error("[telegram] getUpdates request failed:", err);
-    await logErrorEvent({
-      level: "error",
-      route: "/api/admin/telegram-config/fetch-chat-ids",
-      sessionId: null,
-      message: "Telegram getUpdates request failed.",
-      error: err,
-    }).catch(() => {});
-    return NextResponse.json(
-      { error: "Could not reach Telegram. Check your connection." },
-      { status: 502 }
-    );
-  }
+  const res = await getTelegramJson(token, "getUpdates", { limit: 100 });
 
   if (!res.ok) {
-    const text = await res.text();
-    console.error("[telegram] getUpdates failed:", res.status, text);
+    const detail = res.error ?? res.body ?? "";
+    if (res.status === undefined) {
+      console.error("[telegram] getUpdates request failed:", detail);
+      await logErrorEvent({
+        level: "error",
+        route: "/api/admin/telegram-config/fetch-chat-ids",
+        sessionId: null,
+        message: "Telegram getUpdates request failed.",
+        context: {
+          detail: detail.slice(0, 1000),
+          transport: res.transport ?? "unknown",
+        },
+      }).catch(() => {});
+      return NextResponse.json(
+        { error: "Could not reach Telegram. Check your connection and try again." },
+        { status: 502 }
+      );
+    }
+
+    console.error("[telegram] getUpdates failed:", res.status, detail);
     await logErrorEvent({
       level: "error",
       route: "/api/admin/telegram-config/fetch-chat-ids",
@@ -52,7 +54,8 @@ async function GETHandler() {
       message: `Telegram getUpdates failed with status ${res.status}.`,
       context: {
         status: res.status,
-        body: text.slice(0, 1000),
+        body: detail.slice(0, 1000),
+        transport: res.transport ?? "unknown",
       },
     }).catch(() => {});
     return NextResponse.json(
@@ -61,7 +64,7 @@ async function GETHandler() {
     );
   }
 
-  const data = (await res.json()) as {
+  let data: {
     ok?: boolean;
     result?: Array<{
       message?: {
@@ -76,6 +79,26 @@ async function GETHandler() {
       };
     }>;
   };
+  try {
+    data = JSON.parse(res.body || "{}") as typeof data;
+  } catch (err) {
+    console.error("[telegram] getUpdates returned invalid JSON:", res.body);
+    await logErrorEvent({
+      level: "error",
+      route: "/api/admin/telegram-config/fetch-chat-ids",
+      sessionId: null,
+      message: "Telegram getUpdates returned invalid JSON.",
+      error: err,
+      context: {
+        body: (res.body || "").slice(0, 1000),
+        transport: res.transport ?? "unknown",
+      },
+    }).catch(() => {});
+    return NextResponse.json(
+      { error: "Telegram returned an unexpected response. Please try again." },
+      { status: 502 }
+    );
+  }
 
   const result = data.result ?? [];
   const seen = new Set<string>();

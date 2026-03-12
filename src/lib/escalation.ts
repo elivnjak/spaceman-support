@@ -336,7 +336,7 @@ export async function sendEscalationEmailFallback(
 
 export async function sendEscalationTelegram(handoff: EscalationHandoff): Promise<boolean> {
   const [storedConfig] = await db.select().from(telegramConfig).limit(1);
-  const token = storedConfig?.botToken?.trim() || process.env.TELEGRAM_BOT_TOKEN?.trim() || "";
+  const token = process.env.TELEGRAM_BOT_TOKEN?.trim() || storedConfig?.botToken?.trim() || "";
   const chatIds = getTelegramChatIds(storedConfig);
   const envChatId = process.env.TELEGRAM_CHAT_ID?.trim();
   const allChatIds = chatIds.length > 0 ? chatIds : envChatId ? [envChatId] : [];

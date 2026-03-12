@@ -21,27 +21,32 @@ function toErrorMessage(err: unknown): string {
   return String(err);
 }
 
-function postJsonViaHttpsIpv4(
-  url: string,
-  payload: unknown,
-  timeoutMs: number
-): Promise<TelegramApiResult> {
+function requestViaHttpsIpv4(opts: {
+  url: string;
+  method: "GET" | "POST";
+  payload?: unknown;
+  timeoutMs: number;
+}): Promise<TelegramApiResult> {
+  const { url, method, payload, timeoutMs } = opts;
   return new Promise((resolve) => {
     const parsed = new URL(url);
-    const body = JSON.stringify(payload);
+    const body = payload === undefined ? undefined : JSON.stringify(payload);
     const req = https.request(
       {
         protocol: parsed.protocol,
         hostname: parsed.hostname,
         port: parsed.port ? Number(parsed.port) : 443,
         path: `${parsed.pathname}${parsed.search}`,
-        method: "POST",
+        method,
         family: 4,
         timeout: timeoutMs,
-        headers: {
-          "Content-Type": "application/json",
-          "Content-Length": Buffer.byteLength(body),
-        },
+        headers:
+          body === undefined
+            ? undefined
+            : {
+                "Content-Type": "application/json",
+                "Content-Length": Buffer.byteLength(body),
+              },
       },
       (res) => {
         let text = "";
@@ -70,9 +75,19 @@ function postJsonViaHttpsIpv4(
         transport: "https_ipv4",
       });
     });
-    req.write(body);
+    if (body !== undefined) {
+      req.write(body);
+    }
     req.end();
   });
+}
+
+function postJsonViaHttpsIpv4(
+  url: string,
+  payload: unknown,
+  timeoutMs: number
+): Promise<TelegramApiResult> {
+  return requestViaHttpsIpv4({ url, method: "POST", payload, timeoutMs });
 }
 
 export async function postTelegramJson(
@@ -100,6 +115,52 @@ export async function postTelegramJson(
     };
   } catch (err) {
     const fallback = await postJsonViaHttpsIpv4(url, payload, timeoutMs);
+    if (fallback.ok) return fallback;
+    return {
+      ok: false,
+      error: `${toErrorMessage(err)}${fallback.error ? ` | fallback: ${fallback.error}` : ""}`,
+      transport: fallback.transport ?? "fetch",
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export async function getTelegramJson(
+  token: string,
+  method: string,
+  searchParams?: Record<string, string | number | boolean | undefined>,
+  timeoutMs = 12000
+): Promise<TelegramApiResult> {
+  const url = new URL(`https://api.telegram.org/bot${encodeURIComponent(token)}/${method}`);
+  if (searchParams) {
+    for (const [key, value] of Object.entries(searchParams)) {
+      if (value === undefined) continue;
+      url.searchParams.set(key, String(value));
+    }
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, {
+      method: "GET",
+      signal: controller.signal,
+      cache: "no-store",
+    });
+    const text = await res.text();
+    return {
+      ok: res.ok,
+      status: res.status,
+      body: text,
+      transport: "fetch",
+    };
+  } catch (err) {
+    const fallback = await requestViaHttpsIpv4({
+      url: url.toString(),
+      method: "GET",
+      timeoutMs,
+    });
     if (fallback.ok) return fallback;
     return {
       ok: false,

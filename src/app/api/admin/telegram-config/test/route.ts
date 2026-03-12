@@ -65,7 +65,7 @@ async function sendTelegramTextMessage(opts: {
 async function POSTHandler() {
   const [config] = await db.select().from(telegramConfig).limit(1);
   const token =
-    config?.botToken?.trim() || process.env.TELEGRAM_BOT_TOKEN?.trim() || "";
+    process.env.TELEGRAM_BOT_TOKEN?.trim() || config?.botToken?.trim() || "";
   const chatIdsFromConfig = normalizeChatIds(config?.chatIds);
   const legacyChatId = config?.chatId?.trim() ?? "";
   const chatIds =

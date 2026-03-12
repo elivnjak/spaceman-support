@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { telegramConfig } from "@/lib/db/schema";
+import { upsertEnvValue } from "@/lib/env-file";
 import { logErrorEvent, withApiRouteErrorLogging } from "@/lib/error-logs";
 import { postTelegramJson } from "@/lib/telegram";
 
@@ -71,6 +72,8 @@ function maskSecret(secret: string): string {
 
 async function GETHandler() {
   const [config] = await db.select().from(telegramConfig).limit(1);
+  const storedBotToken =
+    process.env.TELEGRAM_BOT_TOKEN?.trim() || config?.botToken?.trim() || "";
   const chatIds = normalizeChatIds(config?.chatIds);
   const legacyChatId = config?.chatId?.trim() ?? "";
   const chatIdsList =
@@ -78,8 +81,8 @@ async function GETHandler() {
   return NextResponse.json({
     enabled: config?.enabled ?? false,
     botToken: "",
-    hasBotToken: Boolean(config?.botToken?.trim()),
-    botTokenPreview: maskSecret(config?.botToken ?? ""),
+    hasBotToken: Boolean(storedBotToken),
+    botTokenPreview: maskSecret(storedBotToken),
     chatId: legacyChatId,
     chatIds: chatIdsList,
   });
@@ -100,6 +103,9 @@ async function PUTHandler(request: Request) {
     Array.isArray(body.chatIds) ? normalizeChatIds(body.chatIds) : undefined;
 
   const [existing] = await db.select().from(telegramConfig).limit(1);
+  const existingDbToken = existing?.botToken?.trim() ?? "";
+  const existingEnvToken = process.env.TELEGRAM_BOT_TOKEN?.trim() ?? "";
+  const nextBotToken = botToken ?? (existingEnvToken || existingDbToken);
   const existingChatIds = normalizeChatIds(existing?.chatIds);
   const legacyChatId = existing?.chatId?.trim() ?? "";
   const existingEffectiveChatIds =
@@ -115,8 +121,12 @@ async function PUTHandler(request: Request) {
     updatedAt: Date;
   } = { updatedAt: new Date() };
   if (enabled !== undefined) updates.enabled = enabled;
-  if (botToken !== undefined) updates.botToken = botToken;
+  if (botToken !== undefined || (nextBotToken && existingDbToken)) updates.botToken = "";
   if (chatIds !== undefined) updates.chatIds = chatIds;
+
+  if (botToken !== undefined || (!existingEnvToken && existingDbToken)) {
+    await upsertEnvValue("TELEGRAM_BOT_TOKEN", nextBotToken);
+  }
 
   if (existing) {
     await db
@@ -134,8 +144,8 @@ async function PUTHandler(request: Request) {
   }
 
   const finalToken =
-    (botToken ?? existing?.botToken ?? "").trim() ||
     process.env.TELEGRAM_BOT_TOKEN?.trim() ||
+    nextBotToken ||
     "";
   const finalChatIds = chatIds ?? existingEffectiveChatIds;
   const addedChatIds = finalChatIds.filter((id) => !existingEffectiveChatIds.includes(id));
