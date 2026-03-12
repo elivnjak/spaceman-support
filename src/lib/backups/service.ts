@@ -96,6 +96,24 @@ type OperationResult = {
   message: string;
 };
 
+function normalizeImportArchiveError(error: unknown): Error {
+  if (error instanceof Error) {
+    const message = error.message.toLowerCase();
+    if (
+      message.includes("unexpected end of file") ||
+      message.includes("unexpected eof") ||
+      message.includes("zlib:")
+    ) {
+      return new Error(
+        "The uploaded backup archive was incomplete or corrupted before it reached the server. If you are running locally, restart the app so the latest upload size limit is active, then upload the backup again."
+      );
+    }
+    return error;
+  }
+
+  return new Error("Backup import failed.");
+}
+
 function getBaseUrl(): string | null {
   return process.env.NEXT_PUBLIC_BASE_URL?.trim() || null;
 }
@@ -479,7 +497,7 @@ async function performArchiveImport(fileName: string, buffer: Buffer): Promise<B
   } catch (error) {
     await unlink(archivePath).catch(() => {});
     await unlink(getBackupMetadataPath(backupId)).catch(() => {});
-    throw error;
+    throw normalizeImportArchiveError(error);
   }
 }
 

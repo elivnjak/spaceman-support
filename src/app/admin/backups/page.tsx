@@ -180,11 +180,14 @@ export default function AdminBackupsPage() {
     setError(null);
     setDismissedError(null);
     try {
-      const formData = new FormData();
-      formData.set("file", uploadFile);
+      const fileBuffer = await uploadFile.arrayBuffer();
       const response = await fetch("/api/admin/backups/import", {
         method: "POST",
-        body: formData,
+        headers: {
+          "Content-Type": uploadFile.type || "application/gzip",
+          "X-Backup-Filename": encodeURIComponent(uploadFile.name),
+        },
+        body: fileBuffer,
       });
       if (!response.ok) {
         const payload = (await response.json().catch(() => ({}))) as { error?: string };
