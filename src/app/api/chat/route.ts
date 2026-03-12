@@ -72,6 +72,7 @@ import {
   issueChatSessionToken,
   verifyChatSessionToken,
 } from "@/lib/chat-session-token";
+import { buildRestoreLockChatResponse } from "@/lib/backups/restore-lock";
 
 const STAGE_MESSAGES: Record<string, string> = {
   requesting_nameplate: "Collecting machine details…",
@@ -738,6 +739,11 @@ async function escalateOnTechnicalFailure(opts: {
 }
 
 export async function POST(request: Request) {
+  const restoreLockResponse = await buildRestoreLockChatResponse();
+  if (restoreLockResponse) {
+    return restoreLockResponse;
+  }
+
   const formData = await request.formData();
   const isPlaybookTestMode =
     process.env.NODE_ENV !== "production" &&

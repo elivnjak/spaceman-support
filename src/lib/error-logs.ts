@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import {
   requireAdminUiAuth,
 } from "@/lib/auth";
+import { buildRestoreLockApiResponse } from "@/lib/backups/restore-lock";
 
 export type ErrorLogLevel = "error" | "warn" | "info";
 
@@ -381,6 +382,10 @@ export function withApiRouteErrorLogging<
           const authError = await requireAdminUiAuth(request);
           if (authError) {
             return authError;
+          }
+          const restoreLockError = await buildRestoreLockApiResponse(routeName, request.method);
+          if (restoreLockError) {
+            return restoreLockError;
           }
         }
       }

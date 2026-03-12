@@ -56,6 +56,7 @@ const navGroups: NavGroup[] = [
       { href: "/admin/users", label: "Users", adminOnly: true },
       { href: "/admin/telegram", label: "Telegram notifications" },
       { href: "/admin/maintenance", label: "Maintenance mode" },
+      { href: "/admin/backups", label: "Backups", adminOnly: true },
     ],
   },
   {

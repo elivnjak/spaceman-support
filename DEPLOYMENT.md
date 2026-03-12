@@ -33,6 +33,10 @@ You need:
    - In the app service → **Settings** → **Volumes** → add a volume and mount it at `/app/storage` (or another path).
    - Add variable: `STORAGE_PATH=/app/storage` (or the path you chose).
    - Error logs are persisted automatically at `STORAGE_PATH/logs`. Optional override: `ERROR_LOGS_PATH=/app/storage/logs`.
+   - Admin UI backups are stored on that same persistent volume under `STORAGE_PATH/__backups`. This is required if you want backup archives to survive deploys and restarts.
+   - Backup creation uses temporary working files in the container temp directory, but the final backup archives and metadata stay on the mounted volume.
+   - A restore replaces the app database and storage contents from the selected backup, but preserves the stored backup library itself and excludes error logs from backup/restore payloads.
+   - Because full restore includes users and sessions, restoring a Railway instance may immediately log out the current admin and replace credentials with the ones from the restored backup.
 
 6. **Migrations run automatically on Railway deploy**
    - This repo uses Railway’s **pre-deploy command** in `railway.json`: `npm run db:setup` runs before each deploy (pgvector + migrations + seed). The **start command** is `npm start` so the app starts quickly and is not killed by startup timeouts.
