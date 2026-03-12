@@ -82,6 +82,9 @@ function sourceLabel(value: BackupStoredSource): string {
   return "Manual";
 }
 
+const SESSION_INVALIDATED_MESSAGE =
+  "Your admin session is no longer valid. This can happen after a restore because users and sessions are replaced. Sign in again with the restored instance credentials to continue.";
+
 export default function AdminBackupsPage() {
   const [loading, setLoading] = useState(true);
   const [refreshTick, setRefreshTick] = useState(0);
@@ -98,31 +101,42 @@ export default function AdminBackupsPage() {
   const [actingBackupId, setActingBackupId] = useState<string | null>(null);
   const [dismissedOperationKey, setDismissedOperationKey] = useState<string | null>(null);
   const [dismissedError, setDismissedError] = useState<string | null>(null);
+  const [sessionInvalidated, setSessionInvalidated] = useState(false);
 
   async function refreshBackups() {
     const response = await fetch("/api/admin/backups", { cache: "no-store" });
+    if (response.status === 401) {
+      setSessionInvalidated(true);
+      throw new Error(SESSION_INVALIDATED_MESSAGE);
+    }
     if (!response.ok) {
       throw new Error("Failed to load backups.");
     }
     const payload = (await response.json()) as BackupsResponse;
+    setSessionInvalidated(false);
     setData(payload);
   }
 
   useEffect(() => {
     refreshBackups()
       .catch((err: unknown) => {
-        setError(err instanceof Error ? err.message : "Failed to load backups.");
+        const message = err instanceof Error ? err.message : "Failed to load backups.";
+        if (message === SESSION_INVALIDATED_MESSAGE) {
+          setError(null);
+          return;
+        }
+        setError(message);
       })
       .finally(() => setLoading(false));
   }, [refreshTick]);
 
   useEffect(() => {
-    if (data.operation?.status !== "running" && !data.restoreLock) return;
+    if (sessionInvalidated || (data.operation?.status !== "running" && !data.restoreLock)) return;
     const interval = window.setInterval(() => {
       setRefreshTick((value) => value + 1);
     }, 4000);
     return () => window.clearInterval(interval);
-  }, [data.operation?.status, data.restoreLock]);
+  }, [data.operation?.status, data.restoreLock, sessionInvalidated]);
 
   useEffect(() => {
     if (!data.operation) {
@@ -269,6 +283,25 @@ export default function AdminBackupsPage() {
       {data.restoreLock && (
         <div className="rounded-card border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
           Restore in progress for <strong>{data.restoreLock.backupName}</strong>. Chat and admin writes are temporarily blocked until the restore completes.
+        </div>
+      )}
+
+      {sessionInvalidated && (
+        <div className="rounded-card border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="font-semibold">Session changed during restore</p>
+              <p className="mt-1">
+                Your current admin session is no longer valid because the restored backup replaced users and sessions. Sign in again with the restored instance credentials to continue.
+              </p>
+            </div>
+            <a
+              href="/admin/login"
+              className="inline-flex min-h-[44px] items-center justify-center rounded-lg border border-amber-400 px-3 py-2 text-sm font-medium text-amber-900 transition-colors hover:bg-amber-100"
+            >
+              Sign in again
+            </a>
+          </div>
         </div>
       )}
 

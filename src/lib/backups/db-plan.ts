@@ -139,16 +139,46 @@ function parseJsonLines(content: string): Record<string, unknown>[] {
     .map((line) => JSON.parse(line) as Record<string, unknown>);
 }
 
+function getDateColumnKeys(table: Record<string, unknown>): string[] {
+  return Object.entries(table)
+    .filter(([key, value]) => {
+      if (key === "enableRLS") return false;
+      if (!value || typeof value !== "object") return false;
+      return "dataType" in value && (value as { dataType?: unknown }).dataType === "date";
+    })
+    .map(([key]) => key);
+}
+
+function reviveDateColumns(
+  row: Record<string, unknown>,
+  dateColumnKeys: string[]
+): Record<string, unknown> {
+  if (dateColumnKeys.length === 0) return row;
+
+  const revived = { ...row };
+  for (const key of dateColumnKeys) {
+    const value = revived[key];
+    if (typeof value !== "string") continue;
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) continue;
+    revived[key] = parsed;
+  }
+
+  return revived;
+}
+
 async function insertRows(managedTable: ManagedTable, rows: Record<string, unknown>[]): Promise<void> {
   if (rows.length === 0) return;
+  const dateColumnKeys = getDateColumnKeys(managedTable.table as Record<string, unknown>);
+  const normalizedRows = rows.map((row) => reviveDateColumns(row, dateColumnKeys));
 
   if (managedTable.selfReferential) {
-    await db.insert(managedTable.table).values(rows as never);
+    await db.insert(managedTable.table).values(normalizedRows as never);
     return;
   }
 
-  for (let index = 0; index < rows.length; index += INSERT_CHUNK_SIZE) {
-    const chunk = rows.slice(index, index + INSERT_CHUNK_SIZE);
+  for (let index = 0; index < normalizedRows.length; index += INSERT_CHUNK_SIZE) {
+    const chunk = normalizedRows.slice(index, index + INSERT_CHUNK_SIZE);
     await db.insert(managedTable.table).values(chunk as never);
   }
 }
