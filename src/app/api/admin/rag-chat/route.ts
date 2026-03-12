@@ -10,7 +10,12 @@ const UUID_PATTERN =
 const MAX_QUESTION_LENGTH = 4000;
 const MAX_MODEL_LENGTH = 120;
 const MAX_RECENT_MESSAGES = 12;
-const DEFAULT_IMAGE_ONLY_QUESTION = "Please analyze the attached image(s) for this model.";
+
+function getDefaultImageOnlyQuestion(modelNumber?: string): string {
+  return modelNumber
+    ? `Please analyze the attached image(s) for model ${modelNumber}.`
+    : "Please analyze the attached image(s).";
+}
 
 type CitationPayload = {
   chunkId: string;
@@ -135,20 +140,23 @@ async function POSTHandler(request: Request) {
   let question =
     typeof bodyQuestion === "string" ? bodyQuestion.trim().slice(0, MAX_QUESTION_LENGTH) : "";
 
-  if (!modelNumber) {
-    return NextResponse.json({ error: "Model number is required." }, { status: 400 });
-  }
   if (!question && imageBuffers.length === 0) {
     return NextResponse.json({ error: "Question or image is required." }, { status: 400 });
   }
 
   if (!question) {
-    question = DEFAULT_IMAGE_ONLY_QUESTION;
+    question = getDefaultImageOnlyQuestion(modelNumber || undefined);
   }
 
   const recentMessages = normalizeRecentMessages(bodyMessages);
   const queryEmbedding = await openaiTextEmbedder.embed(question);
-  const chunks = await searchDocChunks(queryEmbedding, undefined, modelNumber, undefined, question);
+  const chunks = await searchDocChunks(
+    queryEmbedding,
+    undefined,
+    modelNumber || undefined,
+    undefined,
+    question
+  );
   const chunkPayload = chunks.map((c) => ({
     id: c.id,
     content: c.content,
@@ -161,7 +169,7 @@ async function POSTHandler(request: Request) {
     docChunks: chunkPayload,
     lastUserMessage: question,
     resolution: undefined,
-    machineModel: modelNumber,
+    machineModel: modelNumber || undefined,
     imageBuffers: imageBuffers.length > 0 ? imageBuffers : undefined,
   });
 

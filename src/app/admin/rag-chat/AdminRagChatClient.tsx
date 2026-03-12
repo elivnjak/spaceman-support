@@ -59,15 +59,15 @@ export function AdminRagChatClient() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const canSend = useMemo(
-    () => modelNumber.trim().length > 0 && (question.trim().length > 0 || files.length > 0) && !loading,
-    [modelNumber, question, files.length, loading]
+    () => (question.trim().length > 0 || files.length > 0) && !loading,
+    [question, files.length, loading]
   );
 
   async function sendQuestion(e: React.FormEvent) {
     e.preventDefault();
     const trimmedQuestion = question.trim();
     const trimmedModel = modelNumber.trim();
-    if (!trimmedModel || (!trimmedQuestion && files.length === 0) || loading) return;
+    if ((!trimmedQuestion && files.length === 0) || loading) return;
     const userFiles = [...files];
 
     const historyForApi = messages.slice(-10).map((m) => ({
@@ -86,7 +86,7 @@ export function AdminRagChatClient() {
 
     try {
       const formData = new FormData();
-      formData.set("modelNumber", trimmedModel);
+      if (trimmedModel) formData.set("modelNumber", trimmedModel);
       if (trimmedQuestion) formData.set("question", trimmedQuestion);
       formData.set("messages", JSON.stringify(historyForApi));
       userFiles.forEach((file) => formData.append("images", file));
@@ -144,7 +144,7 @@ export function AdminRagChatClient() {
       <section className="rounded-card border border-border bg-surface p-4 shadow-card">
         <div className="grid gap-3 md:grid-cols-[1fr_auto]">
           <div>
-            <label className="mb-1 block text-sm font-medium text-ink">Model number</label>
+            <label className="mb-1 block text-sm font-medium text-ink">Model number (optional)</label>
             <input
               type="text"
               value={modelNumber}
@@ -186,7 +186,7 @@ export function AdminRagChatClient() {
         <div className="max-h-[55vh] space-y-3 overflow-y-auto rounded-lg border border-border bg-page p-3">
           {messages.length === 0 ? (
             <p className="text-sm text-muted">
-              Set a model number and ask a question to begin.
+              Optionally set a model number, then ask a question to begin.
             </p>
           ) : (
             messages.map((msg, index) => (
@@ -288,7 +288,7 @@ export function AdminRagChatClient() {
             rows={2}
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
-            placeholder="Ask a question about this model..."
+            placeholder={modelNumber.trim() ? "Ask a question about this model..." : "Ask a question about the docs..."}
             className="min-h-[44px] flex-1 resize-y rounded-lg border border-border bg-page px-3 py-2.5 text-sm text-ink focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
