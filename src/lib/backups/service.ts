@@ -4,6 +4,7 @@ import * as tar from "tar";
 import { getStorageRoot } from "@/lib/storage";
 import {
   computeSchemaSignature,
+  computeSchemaSignatureVariants,
   exportDatabaseToDirectory,
   getManagedTableNames,
   restoreDatabaseFromDirectory,
@@ -57,6 +58,17 @@ export type BackupManifest = {
   };
 };
 
+export type BackupCompatibility = {
+  state: "compatible" | "mismatch";
+  summary: string;
+  details: string[];
+  currentSchemaSignature: string;
+  acceptedCurrentSchemaSignatures: string[];
+  backupSchemaSignature: string;
+  currentManagedTables: string[];
+  backupManagedTables: string[];
+};
+
 export type BackupSummary = {
   id: string;
   name: string;
@@ -67,6 +79,7 @@ export type BackupSummary = {
   sizeBytes: number;
   schemaSignature: string;
   schemaMatchesCurrent: boolean;
+  compatibility: BackupCompatibility;
   sourceAppName: string;
   rowCount: number;
   storageFiles: number;
@@ -95,6 +108,79 @@ type OperationResult = {
   backupName?: string;
   message: string;
 };
+
+function buildSignatureSourceHint(): string {
+  return "Schema signatures are generated from src/lib/db/schema.ts plus every SQL migration in src/lib/db/migrations.";
+}
+
+function findFirstTableMismatch(expected: string[], actual: string[]): string | null {
+  const maxLength = Math.max(expected.length, actual.length);
+  for (let index = 0; index < maxLength; index += 1) {
+    if (expected[index] !== actual[index]) {
+      const expectedName = expected[index] ?? "(none)";
+      const actualName = actual[index] ?? "(none)";
+      return `Managed table mismatch at position ${index + 1}: expected "${expectedName}" but backup has "${actualName}".`;
+    }
+  }
+  return null;
+}
+
+function buildBackupCompatibility(
+  manifest: BackupManifest,
+  currentSchemaSignatures: {
+    normalized: string;
+    legacy: string;
+  }
+): BackupCompatibility {
+  const currentManagedTables = getManagedTableNames();
+  const backupManagedTables = manifest.tables;
+  const details: string[] = [];
+  const tableMismatch = findFirstTableMismatch(currentManagedTables, backupManagedTables);
+  const formatMismatch = manifest.formatVersion !== BACKUP_FORMAT_VERSION;
+  const acceptedCurrentSchemaSignatures = Array.from(
+    new Set([currentSchemaSignatures.normalized, currentSchemaSignatures.legacy])
+  );
+  const signatureMismatch = !acceptedCurrentSchemaSignatures.includes(manifest.schemaSignature);
+  let summary = "Ready to restore on this instance.";
+
+  if (formatMismatch) {
+    summary = `Backup format version ${manifest.formatVersion} does not match this instance's expected version ${BACKUP_FORMAT_VERSION}.`;
+    details.push(`Backup format version: ${manifest.formatVersion}`);
+    details.push(`Expected format version: ${BACKUP_FORMAT_VERSION}`);
+  }
+
+  if (tableMismatch) {
+    if (!formatMismatch) {
+      summary = "The backup's managed table layout does not match this instance.";
+    }
+    details.push(tableMismatch);
+    details.push(`Backup managed tables: ${backupManagedTables.length}`);
+    details.push(`Current managed tables: ${currentManagedTables.length}`);
+  }
+
+  if (signatureMismatch) {
+    if (!formatMismatch && !tableMismatch) {
+      summary = "The backup was created from a different database schema than this instance.";
+    }
+    details.push(`Backup schema signature: ${manifest.schemaSignature}`);
+    details.push(`Current schema signature: ${currentSchemaSignatures.normalized}`);
+    if (currentSchemaSignatures.legacy !== currentSchemaSignatures.normalized) {
+      details.push(`Legacy local schema signature: ${currentSchemaSignatures.legacy}`);
+    }
+    details.push(buildSignatureSourceHint());
+  }
+
+  return {
+    state: formatMismatch || tableMismatch || signatureMismatch ? "mismatch" : "compatible",
+    summary,
+    details,
+    currentSchemaSignature: currentSchemaSignatures.normalized,
+    acceptedCurrentSchemaSignatures,
+    backupSchemaSignature: manifest.schemaSignature,
+    currentManagedTables,
+    backupManagedTables,
+  };
+}
 
 function normalizeImportArchiveError(error: unknown): Error {
   if (error instanceof Error) {
@@ -416,11 +502,15 @@ function validateManifestStructure(manifest: BackupManifest): void {
 
 function validateManifestAgainstCurrentSchema(
   manifest: BackupManifest,
-  currentSchemaSignature: string
+  currentSchemaSignatures: {
+    normalized: string;
+    legacy: string;
+  }
 ): void {
   validateManifestStructure(manifest);
-  if (manifest.schemaSignature !== currentSchemaSignature) {
-    throw new Error("Backup schema signature does not match this instance.");
+  const compatibility = buildBackupCompatibility(manifest, currentSchemaSignatures);
+  if (compatibility.state === "mismatch") {
+    throw new Error([compatibility.summary, ...compatibility.details].join(" "));
   }
 }
 
@@ -430,7 +520,8 @@ async function createArchiveMetadata(
   storedSource: BackupStoredSource
 ): Promise<BackupRecord> {
   const archiveStat = await stat(archivePath);
-  const currentSchemaSignature = await computeSchemaSignature();
+  const currentSchemaSignatures = await computeSchemaSignatureVariants();
+  const compatibility = buildBackupCompatibility(manifest, currentSchemaSignatures);
   const summary: BackupRecord = {
     id: manifest.backupId,
     name: manifest.backupName,
@@ -440,7 +531,8 @@ async function createArchiveMetadata(
     storedSource,
     sizeBytes: archiveStat.size,
     schemaSignature: manifest.schemaSignature,
-    schemaMatchesCurrent: manifest.schemaSignature === currentSchemaSignature,
+    schemaMatchesCurrent: compatibility.state === "compatible",
+    compatibility,
     sourceAppName: manifest.app.name,
     rowCount: Object.values(manifest.rowCounts).reduce((sum, count) => sum + count, 0),
     storageFiles: manifest.storage.files,
@@ -504,7 +596,7 @@ async function performArchiveImport(fileName: string, buffer: Buffer): Promise<B
 async function listBackupRecords(): Promise<BackupSummary[]> {
   await ensureBackupDirectories();
   const entries = await readdir(getBackupMetadataRoot(), { withFileTypes: true }).catch(() => []);
-  const currentSchemaSignature = await computeSchemaSignature();
+  const currentSchemaSignatures = await computeSchemaSignatureVariants();
   const records: BackupSummary[] = [];
 
   for (const entry of entries) {
@@ -512,10 +604,12 @@ async function listBackupRecords(): Promise<BackupSummary[]> {
     const record = await readJsonFile<BackupRecord>(path.join(getBackupMetadataRoot(), entry.name));
     if (!record) continue;
     const archiveStat = await stat(path.join(getBackupArchivesRoot(), record.archiveFileName)).catch(() => null);
+    const compatibility = buildBackupCompatibility(record.manifest, currentSchemaSignatures);
     records.push({
       ...record,
       sizeBytes: archiveStat?.size ?? record.sizeBytes,
-      schemaMatchesCurrent: record.schemaSignature === currentSchemaSignature,
+      schemaMatchesCurrent: compatibility.state === "compatible",
+      compatibility,
     });
   }
 
@@ -527,7 +621,12 @@ async function loadBackupRecord(backupId: string): Promise<BackupRecord> {
   if (!record) {
     throw new Error("Backup not found.");
   }
-  record.schemaMatchesCurrent = record.schemaSignature === (await computeSchemaSignature());
+  const compatibility = buildBackupCompatibility(
+    record.manifest,
+    await computeSchemaSignatureVariants()
+  );
+  record.schemaMatchesCurrent = compatibility.state === "compatible";
+  record.compatibility = compatibility;
   return record;
 }
 
@@ -603,6 +702,9 @@ export async function startBackupImport(fileName: string, buffer: Buffer): Promi
 
 export async function startBackupRestore(backupId: string): Promise<BackupOperationState> {
   const record = await loadBackupRecord(backupId);
+  if (!record.schemaMatchesCurrent) {
+    throw new Error(record.compatibility.summary);
+  }
   const operation = await reserveOperation("restore", record.id, record.name);
   await runOperation(operation, async (runningOperation) => {
     const restoreLock: RestoreLockState = {
@@ -630,7 +732,7 @@ export async function startBackupRestore(backupId: string): Promise<BackupOperat
         await validateArchiveEntries(archivePath);
         await tar.x({ cwd: tempDir, file: archivePath, gzip: true, strict: true });
         const manifest = JSON.parse(await readFile(path.join(tempDir, "manifest.json"), "utf8")) as BackupManifest;
-        validateManifestAgainstCurrentSchema(manifest, await computeSchemaSignature());
+        validateManifestAgainstCurrentSchema(manifest, await computeSchemaSignatureVariants());
 
         await updateOperation(runningOperation, {
           message: `Restoring database from ${record.name}`,

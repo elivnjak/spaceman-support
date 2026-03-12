@@ -10,6 +10,15 @@ import { formatDateTimeAu } from "@/lib/date-format";
 type BackupStoredSource = "manual" | "imported" | "safety";
 type BackupOperationStatus = "running" | "completed" | "failed";
 type BackupOperationType = "create" | "import" | "restore";
+type BackupCompatibility = {
+  state: "compatible" | "mismatch";
+  summary: string;
+  details: string[];
+  currentSchemaSignature: string;
+  backupSchemaSignature: string;
+  currentManagedTables: string[];
+  backupManagedTables: string[];
+};
 
 type BackupSummary = {
   id: string;
@@ -21,6 +30,7 @@ type BackupSummary = {
   sizeBytes: number;
   schemaSignature: string;
   schemaMatchesCurrent: boolean;
+  compatibility: BackupCompatibility;
   sourceAppName: string;
   rowCount: number;
   storageFiles: number;
@@ -412,15 +422,32 @@ export default function AdminBackupsPage() {
                         <p className="text-xs">{backup.storageFiles} storage files</p>
                       </td>
                       <td className="px-4 py-3">
-                        {backup.schemaMatchesCurrent ? (
-                          <span className="rounded bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800">
-                            Ready to restore
-                          </span>
-                        ) : (
-                          <span className="rounded bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800">
-                            Schema mismatch
-                          </span>
-                        )}
+                        <div className="max-w-sm">
+                          {backup.schemaMatchesCurrent ? (
+                            <span className="rounded bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800">
+                              Ready to restore
+                            </span>
+                          ) : (
+                            <>
+                              <span className="rounded bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800">
+                                Schema mismatch
+                              </span>
+                              <p className="mt-2 text-xs text-red-800">
+                                {backup.compatibility.summary}
+                              </p>
+                              <details className="mt-2 text-xs text-muted">
+                                <summary className="cursor-pointer select-none font-medium text-red-800">
+                                  View compatibility details
+                                </summary>
+                                <div className="mt-2 space-y-1 rounded-lg border border-border bg-page p-3">
+                                  {backup.compatibility.details.map((detail, index) => (
+                                    <p key={`${backup.id}-compatibility-${index}`}>{detail}</p>
+                                  ))}
+                                </div>
+                              </details>
+                            </>
+                          )}
+                        </div>
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex justify-end gap-2">
@@ -434,6 +461,11 @@ export default function AdminBackupsPage() {
                             variant="secondary"
                             onClick={() => handleRestore(backup)}
                             disabled={restoreDisabled}
+                            title={
+                              restoreDisabled && !backup.schemaMatchesCurrent
+                                ? backup.compatibility.summary
+                                : undefined
+                            }
                           >
                             Restore
                           </Button>

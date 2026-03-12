@@ -1,8 +1,8 @@
-import { createHash } from "crypto";
 import { mkdir, readFile, readdir, rm, writeFile } from "fs/promises";
 import path from "path";
 import { sql } from "drizzle-orm";
 import { db } from "@/lib/db";
+import { buildSchemaSignature } from "./schema-signature";
 import {
   actions,
   auditLogs,
@@ -73,24 +73,40 @@ export function getManagedTableNames(): string[] {
   return MANAGED_BACKUP_TABLES.map((table) => table.name);
 }
 
-export async function computeSchemaSignature(): Promise<string> {
-  const hash = createHash("sha256");
+export async function computeSchemaSignatureVariants(): Promise<{
+  normalized: string;
+  legacy: string;
+}> {
   const schemaPath = path.resolve(process.cwd(), "src/lib/db/schema.ts");
-  hash.update(await readFile(schemaPath));
+  const schemaContent = await readFile(schemaPath);
 
   const migrationsRoot = path.resolve(process.cwd(), "src/lib/db/migrations");
   const entries = await readdir(migrationsRoot, { withFileTypes: true });
-  const migrationFiles = entries
-    .filter((entry) => entry.isFile() && entry.name.endsWith(".sql"))
-    .map((entry) => entry.name)
-    .sort((a, b) => a.localeCompare(b));
+  const migrationEntries = await Promise.all(
+    entries
+      .filter((entry) => entry.isFile() && entry.name.endsWith(".sql"))
+      .map(async (entry) => ({
+        fileName: entry.name,
+        content: await readFile(path.join(migrationsRoot, entry.name)),
+      }))
+  );
 
-  for (const fileName of migrationFiles) {
-    hash.update(fileName);
-    hash.update(await readFile(path.join(migrationsRoot, fileName)));
-  }
+  return {
+    normalized: buildSchemaSignature({
+      schemaContent,
+      migrationEntries,
+      normalizeLineEndings: true,
+    }),
+    legacy: buildSchemaSignature({
+      schemaContent,
+      migrationEntries,
+      normalizeLineEndings: false,
+    }),
+  };
+}
 
-  return hash.digest("hex");
+export async function computeSchemaSignature(): Promise<string> {
+  return (await computeSchemaSignatureVariants()).normalized;
 }
 
 export async function exportDatabaseToDirectory(
