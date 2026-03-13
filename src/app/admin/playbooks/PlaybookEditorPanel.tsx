@@ -301,6 +301,139 @@ function buildIssueDictionary(messages: string[]) {
   return messages.length > 0 ? messages : undefined;
 }
 
+function getEvidenceSummary(evidence: EvidenceItem): string {
+  const firstLine = evidence.description.split("\n")[0]?.trim();
+  if (firstLine) return firstLine;
+  if (evidence.id.trim()) return evidence.id.trim();
+  return "New evidence";
+}
+
+function getEvidenceValueBadgeLabel(evidence: EvidenceItem): string {
+  return evidence.valueDefinition?.kind
+    ? `${evidence.valueDefinition.kind} value`
+    : "No value schema";
+}
+
+function getEvidenceValueBadgeVariant(evidence: EvidenceItem): "default" | "info" {
+  return evidence.valueDefinition?.kind ? "info" : "default";
+}
+
+function EvidenceAccordionCard({
+  evidence,
+  index,
+  actionLabel,
+  isExpanded,
+  onToggleExpand,
+  onMove,
+  onRemove,
+  canMoveUp,
+  canMoveDown,
+  children,
+  containerRef,
+}: {
+  evidence: EvidenceItem;
+  index: number;
+  actionLabel?: string;
+  isExpanded: boolean;
+  onToggleExpand: () => void;
+  onMove: (direction: -1 | 1) => void;
+  onRemove: () => void;
+  canMoveUp: boolean;
+  canMoveDown: boolean;
+  children: ReactNode;
+  containerRef?: Ref<HTMLDivElement>;
+}) {
+  return (
+    <div
+      ref={containerRef}
+      className="overflow-hidden rounded-2xl border-2 border-border bg-surface shadow-sm transition-shadow hover:shadow-md"
+    >
+      <div className={isExpanded ? "border-b border-border bg-page/90" : "bg-primary-light/60"}>
+        <div className="px-4 py-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm font-semibold text-ink">
+                  {evidence.id || `Evidence ${index + 1}`}
+                </span>
+                <Badge variant="info">{evidence.type}</Badge>
+                <Badge variant={evidence.required ? "warning" : "default"}>
+                  {evidence.required ? "required" : "optional"}
+                </Badge>
+                <Badge variant={actionLabel ? "success" : "default"}>
+                  {actionLabel ? "action linked" : "no action"}
+                </Badge>
+              </div>
+              <p className="mt-2 text-sm text-ink">{getEvidenceSummary(evidence)}</p>
+              <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                <Badge variant={getEvidenceValueBadgeVariant(evidence)}>
+                  {getEvidenceValueBadgeLabel(evidence)}
+                </Badge>
+                <Badge variant="default">
+                  {(evidence.guideImageIds ?? []).length} guide image
+                  {(evidence.guideImageIds ?? []).length === 1 ? "" : "s"}
+                </Badge>
+                {actionLabel ? <Badge variant="success">{actionLabel}</Badge> : null}
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <IconButton
+                label={`Move ${evidence.id || `evidence ${index + 1}`} up`}
+                onClick={() => onMove(-1)}
+                disabled={!canMoveUp}
+              >
+                <ArrowIcon direction="up" />
+              </IconButton>
+              <IconButton
+                label={`Move ${evidence.id || `evidence ${index + 1}`} down`}
+                onClick={() => onMove(1)}
+                disabled={!canMoveDown}
+              >
+                <ArrowIcon direction="down" />
+              </IconButton>
+              <IconButton
+                label={`Remove ${evidence.id || `evidence ${index + 1}`}`}
+                onClick={onRemove}
+                tone="danger"
+              >
+                <TrashIcon />
+              </IconButton>
+            </div>
+          </div>
+          <div className="mt-4 rounded-xl border border-primary/20 bg-primary-light p-1.5">
+            <button
+              type="button"
+              onClick={onToggleExpand}
+              aria-expanded={isExpanded}
+              aria-controls={`evidence-panel-${index}`}
+              className="flex w-full items-center justify-between gap-3 rounded-lg border border-primary/20 bg-surface px-3 py-3 text-left transition-colors hover:bg-white"
+            >
+              <div className="flex min-w-0 items-center gap-3">
+                <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary text-white shadow-sm">
+                  <ChevronIcon direction={isExpanded ? "up" : "down"} />
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-sm font-semibold text-primary">
+                    {isExpanded ? "Collapse evidence details" : "Expand evidence details"}
+                  </span>
+                  <span className="block text-xs text-muted">
+                    Open this card to edit linked actions, value rules, and guide images.
+                  </span>
+                </span>
+              </div>
+            </button>
+          </div>
+        </div>
+      </div>
+      {isExpanded ? (
+        <div id={`evidence-panel-${index}`} className="bg-surface px-4 py-4">
+          {children}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function getCauseSummary(cause: CauseItem): string {
   const firstLine = cause.cause.split("\n")[0]?.trim();
   if (firstLine) return firstLine;
@@ -332,8 +465,11 @@ function CauseAccordionCard({
   containerRef?: Ref<HTMLDivElement>;
 }) {
   return (
-    <div ref={containerRef} className="overflow-hidden rounded-2xl border-2 border-border bg-surface shadow-sm">
-      <div className={isExpanded ? "border-b border-border bg-page/90" : "bg-page/70"}>
+    <div
+      ref={containerRef}
+      className="overflow-hidden rounded-2xl border-2 border-border bg-surface shadow-sm transition-shadow hover:shadow-md"
+    >
+      <div className={isExpanded ? "border-b border-border bg-page/90" : "bg-primary-light/60"}>
         <div className="px-4 py-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
@@ -378,16 +514,27 @@ function CauseAccordionCard({
               </IconButton>
             </div>
           </div>
-          <div className="mt-4 border-t border-border pt-3">
+          <div className="mt-4 rounded-xl border border-primary/20 bg-primary-light p-1.5">
             <button
               type="button"
               onClick={onToggleExpand}
               aria-expanded={isExpanded}
               aria-controls={`cause-panel-${index}`}
-              className="flex w-full items-center justify-between rounded-lg border border-border bg-surface px-3 py-2 text-left text-sm font-medium text-ink hover:bg-aqua/30"
+              className="flex w-full items-center justify-between gap-3 rounded-lg border border-primary/20 bg-surface px-3 py-3 text-left transition-colors hover:bg-white"
             >
-              <span>{isExpanded ? "Collapse cause details" : "Expand cause details"}</span>
-              <ChevronIcon direction={isExpanded ? "up" : "down"} />
+              <div className="flex min-w-0 items-center gap-3">
+                <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary text-white shadow-sm">
+                  <ChevronIcon direction={isExpanded ? "up" : "down"} />
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-sm font-semibold text-primary">
+                    {isExpanded ? "Collapse cause details" : "Expand cause details"}
+                  </span>
+                  <span className="block text-xs text-muted">
+                    Open this card to edit evidence rules, likelihood, and outcomes.
+                  </span>
+                </span>
+              </div>
             </button>
           </div>
         </div>
@@ -486,6 +633,10 @@ export function PlaybookEditorPanel({
     [actionsList]
   );
   const [evidenceGuideImages, setEvidenceGuideImages] = useState<EvidenceGuideImage[]>([]);
+  const [expandedEvidenceIndex, setExpandedEvidenceIndex] = useState<number | null>(
+    form.evidenceChecklist.length > 0 ? 0 : null
+  );
+  const evidenceCardRefs = useRef<Array<HTMLDivElement | null>>([]);
   const [expandedCauseIndex, setExpandedCauseIndex] = useState<number | null>(
     form.candidateCauses.length > 0 ? 0 : null
   );
@@ -575,6 +726,27 @@ export function PlaybookEditorPanel({
     }));
     await reloadEvidenceGuideImages();
   };
+
+  useEffect(() => {
+    if (activeTab !== "evidence") return;
+    if (form.evidenceChecklist.length === 0) {
+      setExpandedEvidenceIndex(null);
+      return;
+    }
+    setExpandedEvidenceIndex((current) => {
+      if (current == null || current >= form.evidenceChecklist.length) {
+        return form.evidenceChecklist.length - 1;
+      }
+      return current;
+    });
+  }, [activeTab, form.evidenceChecklist.length]);
+
+  useEffect(() => {
+    if (activeTab !== "evidence" || expandedEvidenceIndex == null) return;
+    const target = evidenceCardRefs.current[expandedEvidenceIndex];
+    if (!target) return;
+    target.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [activeTab, expandedEvidenceIndex]);
 
   useEffect(() => {
     if (activeTab !== "causes") return;
@@ -845,21 +1017,23 @@ export function PlaybookEditorPanel({
             actions={
               <button
                 type="button"
-                onClick={() =>
-                    setForm((current) => ({
-                      ...current,
-                      evidenceChecklist: [
-                        ...current.evidenceChecklist,
-                        {
-                          id: "",
-                          description: "",
-                          type: "observation",
-                          required: false,
-                          guideImageIds: [],
-                        },
-                      ],
-                    }))
-                  }
+                onClick={() => {
+                  const nextIndex = form.evidenceChecklist.length;
+                  setExpandedEvidenceIndex(nextIndex);
+                  setForm((current) => ({
+                    ...current,
+                    evidenceChecklist: [
+                      ...current.evidenceChecklist,
+                      {
+                        id: "",
+                        description: "",
+                        type: "observation",
+                        required: false,
+                        guideImageIds: [],
+                      },
+                    ],
+                  }));
+                }}
                 className="text-sm text-primary"
               >
                 Add evidence
@@ -869,9 +1043,43 @@ export function PlaybookEditorPanel({
             <div className="space-y-4">
               {form.evidenceChecklist.map((item, index) => {
                 const actionId = item.actionId ?? "";
+                const actionLabel = item.actionId
+                  ? actionsById.get(item.actionId)?.title ?? item.actionId
+                  : undefined;
                 const itemPrefix = `evidenceChecklist.${index}`;
                 return (
-                  <div key={`${item.id}-${index}`} className="rounded border border-border p-3">
+                  <EvidenceAccordionCard
+                    key={`${item.id}-${index}`}
+                    evidence={item}
+                    index={index}
+                    actionLabel={actionLabel}
+                    containerRef={(node) => {
+                      evidenceCardRefs.current[index] = node;
+                    }}
+                    isExpanded={expandedEvidenceIndex === index}
+                    onToggleExpand={() =>
+                      setExpandedEvidenceIndex((current) => (current === index ? null : index))
+                    }
+                    onMove={(direction) => {
+                      setExpandedEvidenceIndex(index + direction);
+                      setForm((current) => ({
+                        ...current,
+                        evidenceChecklist: moveItem(current.evidenceChecklist, index, direction),
+                      }));
+                    }}
+                    onRemove={() => {
+                      const nextLength = form.evidenceChecklist.length - 1;
+                      setExpandedEvidenceIndex(
+                        nextLength <= 0 ? null : Math.max(0, Math.min(index, nextLength - 1))
+                      );
+                      setForm((current) => ({
+                        ...current,
+                        evidenceChecklist: current.evidenceChecklist.filter((_, itemIndex) => itemIndex !== index),
+                      }));
+                    }}
+                    canMoveUp={index > 0}
+                    canMoveDown={index < form.evidenceChecklist.length - 1}
+                  >
                     <div className="mb-3 grid gap-3 md:grid-cols-[1fr_1fr_auto]">
                       <div>
                         <label className="text-xs font-medium text-muted">Evidence ID</label>
@@ -912,7 +1120,7 @@ export function PlaybookEditorPanel({
                           ))}
                         </select>
                       </div>
-                      <div className="flex items-end gap-2">
+                      <div className="flex items-end">
                         <label className="flex items-center gap-2 text-sm text-ink">
                           <input
                             type="checkbox"
@@ -928,44 +1136,6 @@ export function PlaybookEditorPanel({
                           />
                           Required
                         </label>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setForm((current) => ({
-                              ...current,
-                              evidenceChecklist: moveItem(current.evidenceChecklist, index, -1),
-                            }))
-                          }
-                          disabled={index === 0}
-                          className="rounded border border-border px-3 py-2 text-xs disabled:opacity-50"
-                        >
-                          Up
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setForm((current) => ({
-                              ...current,
-                              evidenceChecklist: moveItem(current.evidenceChecklist, index, 1),
-                            }))
-                          }
-                          disabled={index === form.evidenceChecklist.length - 1}
-                          className="rounded border border-border px-3 py-2 text-xs disabled:opacity-50"
-                        >
-                          Down
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setForm((current) => ({
-                              ...current,
-                              evidenceChecklist: current.evidenceChecklist.filter((_, itemIndex) => itemIndex !== index),
-                            }))
-                          }
-                          className="text-sm text-red-600"
-                        >
-                          Remove
-                        </button>
                       </div>
                     </div>
                     <div className="mb-3">
@@ -1044,7 +1214,7 @@ export function PlaybookEditorPanel({
                       onDetachGuideImage={(id) => detachEvidenceGuideImage(index, id)}
                       onDeleteGuideImage={deleteEvidenceGuideImage}
                     />
-                  </div>
+                  </EvidenceAccordionCard>
                 );
               })}
               {form.evidenceChecklist.length === 0 ? <p className="text-sm text-muted">No evidence yet.</p> : null}
