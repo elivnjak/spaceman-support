@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { documents } from "@/lib/db/schema";
 import { withApiRouteErrorLogging } from "@/lib/error-logs";
+import { resolveStoredFilePath } from "@/lib/storage";
 
 function guessContentType(filePath: string): string {
   const ext = path.extname(filePath).toLowerCase();
@@ -50,11 +51,12 @@ async function GETHandler(
   }
 
   try {
-    const buffer = await readFile(doc.filePath);
+    const filePath = resolveStoredFilePath(doc.filePath);
+    const buffer = await readFile(filePath);
     return new NextResponse(buffer, {
       headers: {
-        "Content-Type": guessContentType(doc.filePath),
-        "Content-Disposition": `inline; filename="${path.basename(doc.filePath)}"`,
+        "Content-Type": guessContentType(filePath),
+        "Content-Disposition": `inline; filename="${path.basename(filePath)}"`,
       },
     });
   } catch {
