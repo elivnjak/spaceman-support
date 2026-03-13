@@ -168,13 +168,14 @@ async function GETHandler() {
   addSheet(
     wb,
     "Evidence",
-    'Evidence to gather. "action_id" is optional and must exist in Admin -> Actions. Required is yes/no.',
+    'Evidence to gather. "action_id" is optional and must exist in Admin -> Actions. Required is yes/no. guide_image_ids can list uploaded evidence image UUIDs separated by commas.',
     [
       { header: "id", key: "id", width: 25 },
       { header: "description", key: "description", width: 50 },
       { header: "action_id", key: "action_id", width: 30 },
       { header: "type", key: "type", width: 18 },
       { header: "required", key: "required", width: 12 },
+      { header: "guide_image_ids", key: "guide_image_ids", width: 42 },
     ],
     {
       id: "hopper_temp",
@@ -182,6 +183,7 @@ async function GETHandler() {
       action_id: "read_hopper_temp",
       type: "reading",
       required: "yes",
+      guide_image_ids: "",
     },
     {
       type: EVIDENCE_TYPES,

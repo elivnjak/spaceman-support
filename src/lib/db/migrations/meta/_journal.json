@@ -148,6 +148,13 @@
       "when": 1772810000000,
       "tag": "0021_auth_password_flows",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1772822400000,
+      "tag": "0022_evidence_guide_images",
+      "breakpoints": true
     }
   ]
 }

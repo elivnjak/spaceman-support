@@ -205,6 +205,14 @@ export const clearanceGuideImages = pgTable("clearance_guide_images", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });
 
+export const evidenceGuideImages = pgTable("evidence_guide_images", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  filePath: text("file_path").notNull(),
+  fileHash: text("file_hash"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
+
 export const maintenanceConfig = pgTable("maintenance_config", {
   id: uuid("id").primaryKey().defaultRandom(),
   enabled: boolean("enabled").notNull().default(false),
@@ -361,6 +369,8 @@ export type ClearanceConfig = typeof clearanceConfig.$inferSelect;
 export type NewClearanceConfig = typeof clearanceConfig.$inferInsert;
 export type ClearanceGuideImage = typeof clearanceGuideImages.$inferSelect;
 export type NewClearanceGuideImage = typeof clearanceGuideImages.$inferInsert;
+export type EvidenceGuideImage = typeof evidenceGuideImages.$inferSelect;
+export type NewEvidenceGuideImage = typeof evidenceGuideImages.$inferInsert;
 export type MaintenanceConfig = typeof maintenanceConfig.$inferSelect;
 export type NewMaintenanceConfig = typeof maintenanceConfig.$inferInsert;
 export type DiagnosisModeConfig = typeof diagnosisModeConfig.$inferSelect;

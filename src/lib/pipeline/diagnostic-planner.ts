@@ -63,6 +63,7 @@ export type ChatMessage = {
   content: string;
   content_html?: string;
   images?: string[];
+  guideImages?: string[];
   timestamp?: string;
 };
 
@@ -85,6 +86,7 @@ export type PlannerOutput = {
   message_html?: string;
   phase: "triaging" | "gathering_info" | "diagnosing" | "resolving" | "resolved_followup" | "escalated";
   requests: PlannerRequest[];
+  guideImages?: string[];
   hypotheses_update: {
     causeId: string;
     confidence: number;

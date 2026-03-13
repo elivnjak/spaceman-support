@@ -2,6 +2,7 @@ import { mkdir, readFile, readdir, rm, writeFile } from "fs/promises";
 import path from "path";
 import { sql } from "drizzle-orm";
 import { db } from "@/lib/db";
+import { resolveStoredFilePath } from "@/lib/storage";
 import { buildSchemaSignature } from "./schema-signature";
 import {
   actions,
@@ -13,6 +14,7 @@ import {
   diagnosticSessions,
   docChunks,
   documents,
+  evidenceGuideImages,
   intentManifest,
   labels,
   machineSpecs,
@@ -56,6 +58,7 @@ export const MANAGED_BACKUP_TABLES: ManagedTable[] = [
   { name: "nameplate_guide_images", table: nameplateGuideImages },
   { name: "clearance_config", table: clearanceConfig },
   { name: "clearance_guide_images", table: clearanceGuideImages },
+  { name: "evidence_guide_images", table: evidenceGuideImages },
   { name: "maintenance_config", table: maintenanceConfig },
   { name: "diagnosis_mode_config", table: diagnosisModeConfig },
   { name: "telegram_config", table: telegramConfig },
@@ -167,10 +170,23 @@ function reviveDateColumns(
   return revived;
 }
 
+function reviveStoragePathColumns(row: Record<string, unknown>): Record<string, unknown> {
+  if (typeof row.filePath !== "string" || row.filePath.startsWith("_")) {
+    return row;
+  }
+
+  return {
+    ...row,
+    filePath: resolveStoredFilePath(row.filePath),
+  };
+}
+
 async function insertRows(managedTable: ManagedTable, rows: Record<string, unknown>[]): Promise<void> {
   if (rows.length === 0) return;
   const dateColumnKeys = getDateColumnKeys(managedTable.table as Record<string, unknown>);
-  const normalizedRows = rows.map((row) => reviveDateColumns(row, dateColumnKeys));
+  const normalizedRows = rows.map((row) =>
+    reviveStoragePathColumns(reviveDateColumns(row, dateColumnKeys))
+  );
 
   if (managedTable.selfReferential) {
     await db.insert(managedTable.table).values(normalizedRows as never);

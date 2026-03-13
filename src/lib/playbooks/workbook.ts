@@ -283,13 +283,14 @@ export async function buildPlaybookWorkbookBuffer(
   addSheet(
     wb,
     "Evidence",
-    'Evidence to gather. "action_id" is optional and must exist in Admin -> Actions. Required is yes/no. Optional v2 fields: value_kind, value_options, value_unit, unknown_values.',
+    'Evidence to gather. "action_id" is optional and must exist in Admin -> Actions. Required is yes/no. Optional v2 fields: guide_image_ids, value_kind, value_options, value_unit, unknown_values.',
     [
       { header: "id", key: "id", width: 25 },
       { header: "description", key: "description", width: 50 },
       { header: "action_id", key: "action_id", width: 30 },
       { header: "type", key: "type", width: 18 },
       { header: "required", key: "required", width: 12 },
+      { header: "guide_image_ids", key: "guide_image_ids", width: 42 },
       { header: "value_kind", key: "value_kind", width: 18 },
       { header: "value_options", key: "value_options", width: 34 },
       { header: "value_unit", key: "value_unit", width: 16 },
@@ -301,6 +302,7 @@ export async function buildPlaybookWorkbookBuffer(
       action_id: item.actionId ?? "",
       type: item.type ?? "",
       required: item.required ? "yes" : "no",
+      guide_image_ids: serializeStringArrayForWorkbook(item.guideImageIds),
       value_kind: item.valueDefinition?.kind ?? "",
       value_options: serializeStringArrayForWorkbook(item.valueDefinition?.options),
       value_unit: item.valueDefinition?.unit ?? "",
@@ -515,6 +517,7 @@ export async function parsePlaybookWorkbookBuffer(
       ...(row.action_id ? { actionId: row.action_id } : {}),
       type: (type || "observation") as EvidenceItem["type"],
       required: ["yes", "true", "1"].includes((row.required ?? "").toLowerCase()),
+      ...(row.guide_image_ids ? { guideImageIds: parseStringArrayCell(row.guide_image_ids) } : {}),
       ...(valueDefinition ? { valueDefinition } : {}),
     };
     const parsed = EvidenceItemSchema.safeParse(candidate);

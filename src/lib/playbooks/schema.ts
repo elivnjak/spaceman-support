@@ -41,6 +41,7 @@ export type EvidenceItem = {
   actionId?: string;
   type: (typeof EVIDENCE_TYPES)[number];
   required: boolean;
+  guideImageIds?: string[];
   valueDefinition?: EvidenceValueDefinition;
 };
 
@@ -98,6 +99,7 @@ export const EvidenceItemSchema = z.object({
   actionId: z.string().optional(),
   type: z.enum(EVIDENCE_TYPES),
   required: z.boolean(),
+  guideImageIds: z.array(z.string().uuid()).optional(),
   valueDefinition: EvidenceValueDefinitionSchema.optional(),
 });
 

@@ -2,7 +2,7 @@ import { readFile } from "fs/promises";
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { nameplateGuideImages } from "@/lib/db/schema";
+import { evidenceGuideImages } from "@/lib/db/schema";
 import { withApiRouteErrorLogging } from "@/lib/error-logs";
 import { resolveStoredFilePath } from "@/lib/storage";
 
@@ -11,8 +11,8 @@ async function GETHandler(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const row = await db.query.nameplateGuideImages.findFirst({
-    where: eq(nameplateGuideImages.id, id),
+  const row = await db.query.evidenceGuideImages.findFirst({
+    where: eq(evidenceGuideImages.id, id),
   });
   if (!row) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
@@ -34,4 +34,4 @@ async function GETHandler(
   }
 }
 
-export const GET = withApiRouteErrorLogging("/api/nameplate-guide-image/[id]", GETHandler);
+export const GET = withApiRouteErrorLogging("/api/evidence-guide-image/[id]", GETHandler);

@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { clearanceGuideImages } from "@/lib/db/schema";
 import { withApiRouteErrorLogging } from "@/lib/error-logs";
+import { resolveStoredFilePath } from "@/lib/storage";
 
 async function GETHandler(
   _request: Request,
@@ -16,8 +17,9 @@ async function GETHandler(
   if (!row) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   try {
-    const buffer = await readFile(row.filePath);
-    const ext = row.filePath.split(".").pop()?.toLowerCase() || "jpg";
+    const filePath = resolveStoredFilePath(row.filePath);
+    const buffer = await readFile(filePath);
+    const ext = filePath.split(".").pop()?.toLowerCase() || "jpg";
     const contentType =
       ext === "png"
         ? "image/png"

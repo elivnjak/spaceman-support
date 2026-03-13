@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { referenceImages } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { withApiRouteErrorLogging } from "@/lib/error-logs";
+import { resolveStoredFilePath } from "@/lib/storage";
 
 async function GETHandler(
   _request: Request,
@@ -16,7 +17,7 @@ async function GETHandler(
   if (!row) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
-  const path = row.filePath;
+  const path = resolveStoredFilePath(row.filePath);
   try {
     const buffer = await readFile(path);
     const ext = path.split(".").pop()?.toLowerCase() || "jpg";

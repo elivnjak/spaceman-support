@@ -14,6 +14,7 @@ import {
 import { EVIDENCE_TYPES, type CauseItem, type EvidenceItem } from "@/lib/playbooks/schema";
 import type {
   Action,
+  EvidenceGuideImage,
   Playbook,
   PlaybookFormState,
   PlaybookTab,
@@ -162,6 +163,136 @@ function PanelCard({
         {actions}
       </div>
       {children}
+    </div>
+  );
+}
+
+function EvidenceGuideImageManager({
+  evidenceItem,
+  guideImages,
+  onAttachGuideImages,
+  onDetachGuideImage,
+  onDeleteGuideImage,
+}: {
+  evidenceItem: EvidenceItem;
+  guideImages: EvidenceGuideImage[];
+  onAttachGuideImages: (ids: string[]) => Promise<void>;
+  onDetachGuideImage: (id: string) => void;
+  onDeleteGuideImage: (id: string) => Promise<void>;
+}) {
+  const [files, setFiles] = useState<File[]>([]);
+  const [notes, setNotes] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  async function uploadImages() {
+    if (files.length === 0) return;
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      files.forEach((file) => formData.append("files", file));
+      if (notes.trim()) {
+        formData.set("notes", notes.trim());
+      }
+      const response = await fetch("/api/admin/evidence-guide-images", {
+        method: "POST",
+        body: formData,
+      });
+      if (!response.ok) {
+        throw new Error("Failed to upload evidence images.");
+      }
+      const payload = (await response.json()) as { id: string }[];
+      await onAttachGuideImages(payload.map((item) => item.id));
+      setFiles([]);
+      setNotes("");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function handleDeleteGuideImage(id: string) {
+    setDeletingId(id);
+    try {
+      await onDeleteGuideImage(id);
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  const attachedImages = (evidenceItem.guideImageIds ?? [])
+    .map((id) => guideImages.find((image) => image.id === id))
+    .filter((image): image is EvidenceGuideImage => Boolean(image));
+
+  return (
+    <div className="mt-3 rounded border border-dashed border-border p-3">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
+        <div className="flex-1">
+          <label className="text-xs font-medium text-muted">Reference images</label>
+          <input
+            type="file"
+            accept="image/*"
+            multiple
+            onChange={(event) => setFiles(Array.from(event.target.files ?? []))}
+            className="mt-1 block w-full text-sm"
+          />
+        </div>
+        <div className="flex-1">
+          <label className="text-xs font-medium text-muted">Notes</label>
+          <input
+            className="mt-1 block w-full rounded border border-border px-3 py-2 text-sm"
+            value={notes}
+            onChange={(event) => setNotes(event.target.value)}
+            placeholder="Optional notes for admins"
+          />
+        </div>
+        <button
+          type="button"
+          onClick={uploadImages}
+          disabled={uploading || files.length === 0}
+          className="rounded border border-primary px-3 py-2 text-sm text-primary disabled:opacity-50"
+        >
+          {uploading ? "Uploading..." : "Upload image(s)"}
+        </button>
+      </div>
+
+      {attachedImages.length > 0 ? (
+        <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {attachedImages.map((image) => (
+            <div key={image.id} className="rounded border border-border bg-surface p-2">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={image.url}
+                alt={image.notes || evidenceItem.description || evidenceItem.id}
+                className="h-32 w-full rounded object-cover"
+              />
+              <p className="mt-2 truncate text-xs text-muted">
+                {image.notes || image.id}
+              </p>
+              <div className="mt-2 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => onDetachGuideImage(image.id)}
+                  className="rounded border border-border px-2 py-1 text-xs text-ink"
+                >
+                  Remove from evidence
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleDeleteGuideImage(image.id)}
+                  disabled={deletingId === image.id}
+                  className="rounded border border-red-300 px-2 py-1 text-xs text-red-600 disabled:opacity-50"
+                >
+                  {deletingId === image.id ? "Deleting..." : "Delete file"}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="mt-3 text-sm text-muted">
+          No reference images attached to this evidence yet.
+        </p>
+      )}
     </div>
   );
 }
@@ -354,10 +485,96 @@ export function PlaybookEditorPanel({
       })),
     [actionsList]
   );
+  const [evidenceGuideImages, setEvidenceGuideImages] = useState<EvidenceGuideImage[]>([]);
   const [expandedCauseIndex, setExpandedCauseIndex] = useState<number | null>(
     form.candidateCauses.length > 0 ? 0 : null
   );
   const causeCardRefs = useRef<Array<HTMLDivElement | null>>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    fetch("/api/admin/evidence-guide-images")
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error("Failed to load evidence guide images.");
+        }
+        return response.json() as Promise<EvidenceGuideImage[]>;
+      })
+      .then((payload) => {
+        if (!cancelled) {
+          setEvidenceGuideImages(payload);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setEvidenceGuideImages([]);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const reloadEvidenceGuideImages = async () => {
+    const response = await fetch("/api/admin/evidence-guide-images");
+    if (!response.ok) {
+      throw new Error("Failed to load evidence guide images.");
+    }
+    const payload = (await response.json()) as EvidenceGuideImage[];
+    setEvidenceGuideImages(payload);
+  };
+
+  const attachEvidenceGuideImages = async (evidenceIndex: number, imageIds: string[]) => {
+    setForm((current) => ({
+      ...current,
+      evidenceChecklist: current.evidenceChecklist.map((entry, itemIndex) =>
+        itemIndex === evidenceIndex
+          ? {
+              ...entry,
+              guideImageIds: Array.from(
+                new Set([...(entry.guideImageIds ?? []), ...imageIds])
+              ),
+            }
+          : entry
+      ),
+    }));
+    await reloadEvidenceGuideImages();
+  };
+
+  const detachEvidenceGuideImage = (evidenceIndex: number, imageId: string) => {
+    setForm((current) => ({
+      ...current,
+      evidenceChecklist: current.evidenceChecklist.map((entry, itemIndex) =>
+        itemIndex === evidenceIndex
+          ? {
+              ...entry,
+              guideImageIds: (entry.guideImageIds ?? []).filter((id) => id !== imageId),
+            }
+          : entry
+      ),
+    }));
+  };
+
+  const deleteEvidenceGuideImage = async (imageId: string) => {
+    const response = await fetch("/api/admin/evidence-guide-images", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: imageId }),
+    });
+    if (!response.ok) {
+      throw new Error("Failed to delete evidence image.");
+    }
+    setForm((current) => ({
+      ...current,
+      evidenceChecklist: current.evidenceChecklist.map((entry) => ({
+        ...entry,
+        guideImageIds: (entry.guideImageIds ?? []).filter((id) => id !== imageId),
+      })),
+    }));
+    await reloadEvidenceGuideImages();
+  };
 
   useEffect(() => {
     if (activeTab !== "causes") return;
@@ -629,14 +846,20 @@ export function PlaybookEditorPanel({
               <button
                 type="button"
                 onClick={() =>
-                  setForm((current) => ({
-                    ...current,
-                    evidenceChecklist: [
-                      ...current.evidenceChecklist,
-                      { id: "", description: "", type: "observation", required: false },
-                    ],
-                  }))
-                }
+                    setForm((current) => ({
+                      ...current,
+                      evidenceChecklist: [
+                        ...current.evidenceChecklist,
+                        {
+                          id: "",
+                          description: "",
+                          type: "observation",
+                          required: false,
+                          guideImageIds: [],
+                        },
+                      ],
+                    }))
+                  }
                 className="text-sm text-primary"
               >
                 Add evidence
@@ -814,6 +1037,13 @@ export function PlaybookEditorPanel({
                         }
                       />
                     </div>
+                    <EvidenceGuideImageManager
+                      evidenceItem={item}
+                      guideImages={evidenceGuideImages}
+                      onAttachGuideImages={(ids) => attachEvidenceGuideImages(index, ids)}
+                      onDetachGuideImage={(id) => detachEvidenceGuideImage(index, id)}
+                      onDeleteGuideImage={deleteEvidenceGuideImage}
+                    />
                   </div>
                 );
               })}

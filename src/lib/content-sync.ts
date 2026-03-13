@@ -10,6 +10,7 @@ import {
   diagnosisModeConfig,
   docChunks,
   documents,
+  evidenceGuideImages,
   intentManifest,
   labels,
   machineSpecs,
@@ -28,6 +29,7 @@ import {
   type DiagnosisModeConfig,
   type DocChunk,
   type Document,
+  type EvidenceGuideImage,
   type IntentManifestRow,
   type Label,
   type MachineSpec,
@@ -43,6 +45,7 @@ import {
 import {
   CLEARANCE_GUIDE_IMAGES_DIR,
   DIAGNOSTIC_SESSIONS_DIR,
+  EVIDENCE_GUIDE_IMAGES_DIR,
   MAINTENANCE_ICON_DIR,
   NAMEPLATE_GUIDE_IMAGES_DIR,
   REFERENCE_IMAGES_DIR,
@@ -90,6 +93,7 @@ const SYNC_TABLE_NAMES = [
   "reference_images",
   "nameplate_guide_images",
   "clearance_guide_images",
+  "evidence_guide_images",
   "nameplate_config",
   "clearance_config",
   "maintenance_config",
@@ -110,6 +114,7 @@ type KnowledgeBaseSyncPayload = {
   referenceImages: ReferenceImage[];
   nameplateGuideImages: NameplateGuideImage[];
   clearanceGuideImages: ClearanceGuideImage[];
+  evidenceGuideImages: EvidenceGuideImage[];
   nameplateConfig: NameplateConfig[];
   clearanceConfig: ClearanceConfig[];
   maintenanceConfig: MaintenanceConfig[];
@@ -328,6 +333,7 @@ function getTableCounts(payload: KnowledgeBaseSyncPayload): Record<keyof Knowled
     referenceImages: payload.referenceImages.length,
     nameplateGuideImages: payload.nameplateGuideImages.length,
     clearanceGuideImages: payload.clearanceGuideImages.length,
+    evidenceGuideImages: payload.evidenceGuideImages.length,
     nameplateConfig: payload.nameplateConfig.length,
     clearanceConfig: payload.clearanceConfig.length,
     maintenanceConfig: payload.maintenanceConfig.length,
@@ -360,6 +366,7 @@ export async function exportKnowledgeBaseSyncBundle(
     rawReferenceImages,
     rawNameplateGuideImages,
     rawClearanceGuideImages,
+    rawEvidenceGuideImages,
     rawNameplateConfig,
     rawClearanceConfig,
     rawMaintenanceConfig,
@@ -383,6 +390,9 @@ export async function exportKnowledgeBaseSyncBundle(
     ),
     selectIfTableExists(existingTables, "clearance_guide_images", () =>
       db.select().from(clearanceGuideImages)
+    ),
+    selectIfTableExists(existingTables, "evidence_guide_images", () =>
+      db.select().from(evidenceGuideImages)
     ),
     selectIfTableExists(existingTables, "nameplate_config", () => db.select().from(nameplateConfig)),
     selectIfTableExists(existingTables, "clearance_config", () => db.select().from(clearanceConfig)),
@@ -408,6 +418,7 @@ export async function exportKnowledgeBaseSyncBundle(
     referenceImages: sortRows(rawReferenceImages.map(normalizeImageRow), ["labelId", "id"]),
     nameplateGuideImages: sortRows(rawNameplateGuideImages.map(normalizeImageRow), ["id"]),
     clearanceGuideImages: sortRows(rawClearanceGuideImages.map(normalizeImageRow), ["id"]),
+    evidenceGuideImages: sortRows(rawEvidenceGuideImages.map(normalizeImageRow), ["id"]),
     nameplateConfig: sortRows(rawNameplateConfig, ["id"]),
     clearanceConfig: sortRows(rawClearanceConfig, ["id"]),
     maintenanceConfig: sortRows(rawMaintenanceConfig.map(normalizeMaintenanceConfigRow), ["id"]),
@@ -428,6 +439,9 @@ export async function exportKnowledgeBaseSyncBundle(
     await collectStorageFile(filesDir, fileRecords, row.filePath);
   }
   for (const row of payload.clearanceGuideImages) {
+    await collectStorageFile(filesDir, fileRecords, row.filePath);
+  }
+  for (const row of payload.evidenceGuideImages) {
     await collectStorageFile(filesDir, fileRecords, row.filePath);
   }
   for (const row of payload.maintenanceConfig) {
@@ -464,7 +478,27 @@ async function readManifest(inputDir: string): Promise<KnowledgeBaseSyncManifest
 async function readPayload(inputDir: string): Promise<KnowledgeBaseSyncPayload> {
   const dataPath = path.join(inputDir, DATA_FILE_NAME);
   const raw = await readFile(dataPath, "utf8");
-  return JSON.parse(raw) as KnowledgeBaseSyncPayload;
+  const parsed = JSON.parse(raw) as Partial<KnowledgeBaseSyncPayload>;
+  return {
+    labels: parsed.labels ?? [],
+    supportedModels: parsed.supportedModels ?? [],
+    productTypes: parsed.productTypes ?? [],
+    actions: parsed.actions ?? [],
+    documents: parsed.documents ?? [],
+    docChunks: parsed.docChunks ?? [],
+    playbooks: parsed.playbooks ?? [],
+    playbookProductTypes: parsed.playbookProductTypes ?? [],
+    referenceImages: parsed.referenceImages ?? [],
+    nameplateGuideImages: parsed.nameplateGuideImages ?? [],
+    clearanceGuideImages: parsed.clearanceGuideImages ?? [],
+    evidenceGuideImages: parsed.evidenceGuideImages ?? [],
+    nameplateConfig: parsed.nameplateConfig ?? [],
+    clearanceConfig: parsed.clearanceConfig ?? [],
+    maintenanceConfig: parsed.maintenanceConfig ?? [],
+    diagnosisModeConfig: parsed.diagnosisModeConfig ?? [],
+    intentManifest: parsed.intentManifest ?? [],
+    machineSpecs: parsed.machineSpecs ?? [],
+  };
 }
 
 async function validateBundleFiles(inputDir: string, manifest: KnowledgeBaseSyncManifest): Promise<void> {
@@ -483,6 +517,7 @@ async function restoreBundleFiles(inputDir: string, manifest: KnowledgeBaseSyncM
   await deleteStorageDirectory(REFERENCE_IMAGES_DIR);
   await deleteStorageDirectory(NAMEPLATE_GUIDE_IMAGES_DIR);
   await deleteStorageDirectory(CLEARANCE_GUIDE_IMAGES_DIR);
+  await deleteStorageDirectory(EVIDENCE_GUIDE_IMAGES_DIR);
   await deleteStorageDirectory(MAINTENANCE_ICON_DIR);
   await deleteStorageDirectory(DIAGNOSTIC_SESSIONS_DIR);
 
@@ -563,6 +598,16 @@ export async function importKnowledgeBaseSyncBundle(
     )
   );
 
+  const importedEvidenceGuideImages = payload.evidenceGuideImages.map((row) =>
+    hydrateDateFields(
+      {
+        ...row,
+        filePath: restoreStoredFilePath(row.filePath),
+      },
+      ["createdAt"]
+    )
+  );
+
   const importedMaintenanceConfig = payload.maintenanceConfig.map((row) =>
     hydrateDateFields(
       {
@@ -620,6 +665,7 @@ export async function importKnowledgeBaseSyncBundle(
     await deleteIfTableExists(existingTables, tx, "playbooks", playbooks);
     await deleteIfTableExists(existingTables, tx, "nameplate_guide_images", nameplateGuideImages);
     await deleteIfTableExists(existingTables, tx, "clearance_guide_images", clearanceGuideImages);
+    await deleteIfTableExists(existingTables, tx, "evidence_guide_images", evidenceGuideImages);
     await deleteIfTableExists(existingTables, tx, "maintenance_config", maintenanceConfig);
     await deleteIfTableExists(existingTables, tx, "diagnosis_mode_config", diagnosisModeConfig);
     await deleteIfTableExists(existingTables, tx, "intent_manifest", intentManifest);
@@ -673,6 +719,14 @@ export async function importKnowledgeBaseSyncBundle(
       "clearance_guide_images",
       clearanceGuideImages,
       importedClearanceGuideImages,
+      100
+    );
+    await insertIfTableExists(
+      existingTables,
+      tx,
+      "evidence_guide_images",
+      evidenceGuideImages,
+      importedEvidenceGuideImages,
       100
     );
     await insertIfTableExists(existingTables, tx, "nameplate_config", nameplateConfig, importedNameplateConfig, 20);

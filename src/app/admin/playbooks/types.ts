@@ -34,6 +34,14 @@ export type ProductTypeOption = {
   isOther: boolean;
 };
 
+export type EvidenceGuideImage = {
+  id: string;
+  filePath: string;
+  notes: string | null;
+  createdAt: string | null;
+  url: string;
+};
+
 export type Playbook = {
   id: string;
   labelId: string;
@@ -80,7 +88,12 @@ export function toFormState(playbook: Playbook): PlaybookFormState {
     productTypeIds: Array.isArray(playbook.productTypeIds) ? playbook.productTypeIds : [],
     steps: Array.isArray(playbook.steps) ? playbook.steps : [],
     symptoms: Array.isArray(playbook.symptoms) ? playbook.symptoms : [],
-    evidenceChecklist: Array.isArray(playbook.evidenceChecklist) ? playbook.evidenceChecklist : [],
+    evidenceChecklist: Array.isArray(playbook.evidenceChecklist)
+      ? playbook.evidenceChecklist.map((item) => ({
+          ...item,
+          guideImageIds: Array.isArray(item.guideImageIds) ? item.guideImageIds : [],
+        }))
+      : [],
     candidateCauses: Array.isArray(playbook.candidateCauses) ? playbook.candidateCauses : [],
     escalationTriggers: Array.isArray(playbook.escalationTriggers) ? playbook.escalationTriggers : [],
   };

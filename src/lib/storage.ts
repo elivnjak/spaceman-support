@@ -65,12 +65,30 @@ export function normalizeStorageRelativePath(filePath: string): string {
   if (!path.isAbsolute(filePath)) {
     return filePath.replace(/\\/g, "/").replace(/^\/+/, "");
   }
+
+  const root = path.resolve(STORAGE_ROOT).replace(/\\/g, "/");
+  const resolved = path.resolve(filePath).replace(/\\/g, "/");
+  if (resolved === root || resolved.startsWith(`${root}/`)) {
+    return path.relative(root, resolved).replace(/\\/g, "/");
+  }
+
+  const normalizedInput = filePath.replace(/\\/g, "/");
+  const storageSegment = normalizedInput.match(/(?:^|\/)storage\/(.+)$/i);
+  if (storageSegment?.[1]) {
+    return storageSegment[1].replace(/^\/+/, "");
+  }
+
   return getStorageRelativePath(filePath).replace(/\\/g, "/");
+}
+
+export function resolveStoredFilePath(filePath: string): string {
+  return resolveStoragePath(normalizeStorageRelativePath(filePath));
 }
 
 export const REFERENCE_IMAGES_DIR = "reference_images";
 export const NAMEPLATE_GUIDE_IMAGES_DIR = "nameplate_guide_images";
 export const CLEARANCE_GUIDE_IMAGES_DIR = "clearance_guide_images";
+export const EVIDENCE_GUIDE_IMAGES_DIR = "evidence_guide_images";
 export const MAINTENANCE_ICON_DIR = "maintenance_icon";
 export const UPLOADED_DOCS_DIR = "documents";
 
@@ -84,6 +102,10 @@ export function nameplateGuideImagePath(filename: string): string {
 
 export function clearanceGuideImagePath(filename: string): string {
   return path.join(CLEARANCE_GUIDE_IMAGES_DIR, filename);
+}
+
+export function evidenceGuideImagePath(filename: string): string {
+  return path.join(EVIDENCE_GUIDE_IMAGES_DIR, filename);
 }
 
 export function maintenanceIconPath(filename: string): string {

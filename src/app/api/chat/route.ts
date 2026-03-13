@@ -15,6 +15,7 @@ import {
   nameplateGuideImages,
   clearanceConfig,
   clearanceGuideImages,
+  evidenceGuideImages,
   diagnosisModeConfig,
 } from "@/lib/db/schema";
 import { and, asc, eq, inArray } from "drizzle-orm";
@@ -596,6 +597,45 @@ async function getClearancePrompt(): Promise<{ instructionText: string; guideIma
     .filter((id) => rowIds.has(id))
     .map((id) => `/api/clearance-guide-image/${id}`);
   return { instructionText, guideImages };
+}
+
+async function getEvidenceGuideImagesForRequests(
+  playbook: DiagnosticPlaybook,
+  requests: PlannerOutput["requests"] | undefined
+): Promise<string[]> {
+  if (!requests?.length || !playbook.evidenceChecklist?.length) {
+    return [];
+  }
+
+  const evidenceByRequestId = new Map<string, NonNullable<DiagnosticPlaybook["evidenceChecklist"]>[number]>();
+  for (const item of playbook.evidenceChecklist) {
+    evidenceByRequestId.set(item.id, item);
+    if (item.actionId) {
+      evidenceByRequestId.set(item.actionId, item);
+    }
+  }
+  const requestedGuideImageIds = Array.from(
+    new Set(
+      requests.flatMap((request) => {
+        const evidence = evidenceByRequestId.get(request.id);
+        return Array.isArray(evidence?.guideImageIds) ? evidence.guideImageIds : [];
+      })
+    )
+  );
+
+  if (requestedGuideImageIds.length === 0) {
+    return [];
+  }
+
+  const rows = await db
+    .select({ id: evidenceGuideImages.id })
+    .from(evidenceGuideImages)
+    .where(inArray(evidenceGuideImages.id, requestedGuideImageIds));
+  const validIds = new Set(rows.map((row) => row.id));
+
+  return requestedGuideImageIds
+    .filter((id) => validIds.has(id))
+    .map((id) => `/api/evidence-guide-image/${id}`);
 }
 
 async function getProductTypeOptions(): Promise<{ name: string; isOther: boolean }[]> {
@@ -3894,6 +3934,22 @@ export async function POST(request: Request) {
           (lastMsg as { content: string }).content = sanitizedMessage;
         }
 
+        const responseGuideImages = await getEvidenceGuideImagesForRequests(
+          playbook,
+          responseToSend.requests
+        );
+        responseToSend = {
+          ...responseToSend,
+          guideImages: responseGuideImages.length > 0 ? responseGuideImages : undefined,
+        };
+        if (lastMsg && lastMsg.role === "assistant") {
+          if (responseGuideImages.length > 0) {
+            (lastMsg as ChatMessage & { guideImages?: string[] }).guideImages = responseGuideImages;
+          } else if ("guideImages" in lastMsg) {
+            delete (lastMsg as ChatMessage & { guideImages?: string[] }).guideImages;
+          }
+        }
+
         const citations = isAdmin ? buildCitations(responseToSend.message, chunksForTurn) : [];
 
         const responsePayload = {
@@ -3904,6 +3960,7 @@ export async function POST(request: Request) {
           requests: responseToSend.requests,
           resolution: responseToSend.resolution,
           escalation_reason: responseToSend.escalation_reason,
+          guideImages: responseToSend.guideImages,
           citations: isAdmin && citations.length > 0 ? citations : undefined,
         };
         audit.logSessionState("after", {

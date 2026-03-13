@@ -214,7 +214,7 @@ export function usePlaybookEditorState({
       ...current,
       evidenceChecklist: [
         ...current.evidenceChecklist,
-        { id: "", description: "", type: "observation", required: false },
+        { id: "", description: "", type: "observation", required: false, guideImageIds: [] },
       ],
     }));
 

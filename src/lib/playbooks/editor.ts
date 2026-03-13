@@ -98,6 +98,13 @@ export function normalizeEvidenceChecklistWithActions(
     return {
       ...item,
       actionId: item.actionId?.trim() || undefined,
+      ...(item.guideImageIds?.length
+        ? {
+            guideImageIds: Array.from(
+              new Set(item.guideImageIds.map((id) => id.trim()).filter(Boolean))
+            ),
+          }
+        : {}),
       ...(actionValueDefinition
         ? { valueDefinition: actionValueDefinition }
         : item.valueDefinition
